@@ -252,28 +252,48 @@ with tab1:
 
 with tab2:
     st.header("📱 WhatsApp Self Check-in Links")
+    st.info("Each participant gets their own personal link!")
     
     date_str = selected_date.strftime("%Y%m%d")
-    base_url = "https://wrnz6-cardiodrum.hf.space"
+    base_url = "https://wrnz6-cardiodrum.hf.space"  # Make sure no trailing space!
     
-    col1, col2, col3 = st.columns([1, 1, 2])
+    col1, col2 = st.columns([1, 2])
     with col1:
-        if st.button("🔄 Generate Links", type="primary"):
+        if st.button("🔄 Generate Today's Links", type="primary"):
             with st.spinner("Generating..."):
                 links_data = []
                 for p in st.session_state.participants:
                     if p.get('active', True):
+                        # Generate secure link
                         token = generate_token(p['id'], date_str)
                         personal_link = f"{base_url}/?mode=checkin&pid={p['id']}&date={date_str}&tk={token}"
+                        
+                        # Format phone number
                         phone = p['contact'].replace(" ", "").replace("-", "")
                         if not phone.startswith("+"):
                             phone = "+65" + phone
                         
-                        # Individual message
-                        wa_message = f"Hello *{p['name']}*! 👋 Cardio Drumming {selected_date.strftime('%d %b')}: {personal_link}"
+                        # Create WhatsApp message with full link
+                        # Use line breaks and emojis for clarity
+                        wa_message = f"""Hello *{p['name']}*! 👋
+
+Cardio Drumming - {selected_date.strftime('%d %B %Y')}
+
+Please confirm your attendance:
+{personal_link}
+
+Tap the link above ☝️ and click the green button to confirm.
+
+📍 Location: Block 622 Woodlands Drive 52 #01-22
+⏰ Session 1: 7:00-8:00 PM
+⏰ Session 2: 8:00-9:00 PM
+
+Thank you!"""
                         
+                        # Properly encode for WhatsApp URL
                         import urllib.parse
-                        wa_url = f"https://wa.me/{phone}?text={urllib.parse.quote(wa_message)}"
+                        encoded_message = urllib.parse.quote(wa_message)
+                        wa_url = f"https://wa.me/{phone}?text={encoded_message}"
                         
                         links_data.append({
                             'name': p['name'],
@@ -287,134 +307,49 @@ with tab2:
                 st.success(f"Generated {len(links_data)} links!")
     
     with col2:
-        st.info("💡 **Bulk Send:** Save time by sending to all 28 at once!")
+        st.markdown("""
+        **How it works:**
+        1. Click Generate
+        2. Click "Open WhatsApp" for each person
+        3. Send the message
+        4. They tap link → See ONLY their name → Confirm
+        """)
     
-    st.divider()
-    
-    # BULK SEND SECTION
     if st.session_state.whatsapp_links:
-        st.subheader("🚀 Bulk Send Options (Choose One)")
-        
-        # Option 1: Auto-Open All (JavaScript)
-        with st.expander("⚡ Option 1: Auto-Open All WhatsApp (Fastest)", expanded=True):
-            st.warning("⚠️ Disable popup blocker for this site first!")
-            st.markdown("Opens all 28 WhatsApp chats in sequence (5 seconds apart)")
-            
-            delay_seconds = st.slider("Delay between opens (seconds)", 3, 10, 5)
-            
-            if st.button("🚀 OPEN ALL 28 WHATSAPP CHATS", type="primary", use_container_width=True):
-                # Generate JavaScript to open all URLs with delays
-                urls_js = ", ".join([f"'{item['whatsapp']}'" for item in st.session_state.whatsapp_links])
-                
-                js_code = f"""
-                <script>
-                    var urls = [{urls_js}];
-                    var current = 0;
-                    
-                    function openNext() {{
-                        if (current < urls.length) {{
-                            window.open(urls[current], '_blank');
-                            current++;
-                            setTimeout(openNext, {delay_seconds * 1000});
-                        }}
-                    }}
-                    
-                    openNext();
-                </script>
-                <p style='color: green; font-weight: bold;'>Opening {len(st.session_state.whatsapp_links)} WhatsApp tabs... Please wait!</p>
-                """
-                
-                st.components.v1.html(js_code, height=100)
-                st.success(f"Opening {len(st.session_state.whatsapp_links)} chats! Wait {delay_seconds}s between each.")
-        
-        # Option 2: Copy-All for WhatsApp Broadcast
-        with st.expander("📋 Option 2: Copy for WhatsApp Broadcast List"):
-            st.markdown("""
-            **How to send to all 28 at once via WhatsApp Broadcast:**
-            1. Save all contacts to your phone first (use VCF download below)
-            2. In WhatsApp, create a **Broadcast List** (Menu → New Broadcast)
-            3. Select all 28 contacts
-            4. Send one message to everyone individually
-            """)
-            
-            # Generate one message template for broadcast
-            broadcast_message = f"""Hello everyone! 👋
-
-Cardio Drumming on *{selected_date.strftime('%d %B %Y')}*
-
-Please confirm your attendance using your personal link below:
-
-👇 INDIVIDUAL LINKS 👇
-
-"""
-            # Add just first 5 as preview
-            for item in st.session_state.whatsapp_links[:5]:
-                broadcast_message += f"\n{item['name']}: {item['link']}"
-            
-            broadcast_message += f"\n\n... and {len(st.session_state.whatsapp_links) - 5} more links"
-            broadcast_message += "\n\n📍 Location: Block 622 Woodlands Drive 52 #01-22"
-            
-            st.text_area("Broadcast Message Template", broadcast_message, height=300)
-            
-            if st.button("📋 Copy Full Message for Broadcast"):
-                st.write("Copied to clipboard!")
-        
-        # Option 3: Download VCF for Contact Import
-        with st.expander("📱 Option 3: Import All Contacts (For Broadcast List)"):
-            st.markdown("Download this VCF file and import to your phone. Then create WhatsApp Broadcast List.")
-            
-            # Generate VCF content
-            vcf_content = ""
-            for item in st.session_state.whatsapp_links:
-                vcf_content += f"""BEGIN:VCARD
-VERSION:3.0
-FN:Cardio_{item['name'].replace(' ', '_')}
-TEL:{item['phone']}
-NOTE:Cardio Drumming Participant
-END:VCARD
-"""
-            
-            st.download_button(
-                "📥 Download All Contacts (.vcf)",
-                vcf_content,
-                f"cardio_participants_{date_str}.vcf",
-                "text/vcard",
-                use_container_width=True
-            )
-            
-            st.info("Import: Open file on phone → Add to contacts → Then create WhatsApp Broadcast List")
-        
-        # Individual Links (Original)
         st.divider()
-        st.subheader("👤 Individual Links (If bulk doesn't work)")
+        st.subheader(f"Send Links ({len(st.session_state.whatsapp_links)} participants)")
         
-        # Search
-        search_term = st.text_input("🔍 Find participant", placeholder="Type name...")
-        display_links = [l for l in st.session_state.whatsapp_links if search_term.lower() in l['name'].lower()] if search_term else st.session_state.whatsapp_links[:30]  # Show first 10 by default
+        # Add search for large lists
+        if len(st.session_state.whatsapp_links) > 10:
+            search_term = st.text_input("🔍 Search participant", placeholder="Type name...")
+            display_links = [l for l in st.session_state.whatsapp_links if search_term.lower() in l['name'].lower()] if search_term else st.session_state.whatsapp_links
+        else:
+            display_links = st.session_state.whatsapp_links
         
+        # Show links in a clean table
         for item in display_links:
-            cols = st.columns([3, 2])
-            cols[0].write(f"**{item['name']}** - {item['phone']}")
-            cols[1].markdown(f"[Open WhatsApp]({item['whatsapp']})")
+            with st.expander(f"📱 {item['name']} - {item['phone']}"):
+                st.markdown("**Full Message Preview:**")
+                st.text(item['message'])  # Show full message text
+                
+                st.markdown("**Personal Link:**")
+                st.code(item['link'])  # Show the complete link
+                
+                cols = st.columns(2)
+                with cols[0]:
+                    st.markdown(f"[📲 Click to Open WhatsApp]({item['whatsapp']})")
+                with cols[1]:
+                    if st.button(f"📋 Copy Link", key=f"copy_{item['name']}"):
+                        st.write(f"Link copied! {item['link']}")
         
-        if len(st.session_state.whatsapp_links) > 10 and not search_term:
-            st.caption(f"... and {len(st.session_state.whatsapp_links) - 28} more. Use search or download CSV below.")
-        
-        # Export all
+        # Download all
         st.divider()
         df_links = pd.DataFrame(st.session_state.whatsapp_links)
         csv = df_links.to_csv(index=False).encode('utf-8')
         st.download_button("📥 Download All Links (CSV)", csv, f"whatsapp_links_{date_str}.csv", "text/csv")
         
-        # Bulk sender tools compatibility
-        with st.expander("🔗 Advanced: For Bulk Sender Software"):
-            st.markdown("Copy this format for 'WhatsApp Bulk Sender' or 'Wati' tools:")
-            
-            bulk_format = ""
-            for item in st.session_state.whatsapp_links:
-                bulk_format += f"{item['phone']}|{item['name']}|{item['message']}\n"
-            
-            st.code(bulk_format)
+        # Bulk WhatsApp Web option
+        st.info("💡 Tip: You can also copy the link and paste into WhatsApp Web if you prefer")
 
 with tab3:
     st.header("📊 Reports")
