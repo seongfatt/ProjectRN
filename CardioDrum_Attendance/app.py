@@ -1,14 +1,68 @@
 import streamlit as st
-st.set_page_config(page_title="Cardio Drumming Attendance", layout="wide", initial_sidebar_state="collapsed")
-
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime
 from supabase import create_client
 import hashlib
+from tab5_import import show_tab5
 
 # ============== CONFIGURATION ==============
+st.set_page_config(
+    page_title="Cardio Drumming Attendance", 
+    layout="wide", 
+    initial_sidebar_state="collapsed"
+)
+
 SUPABASE_URL = "https://nqmvsjubgsghjpzojaxm.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xbXZzanViZ3NnaGpwem9qYXhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NzQ3ODMsImV4cCI6MjA4NTE1MDc4M30.OukUcFvR1J5-DJVoPGmgjf34dBv7lrB1198YCp_uRIw"
+
+# ============== MOBILE RESPONSIVE CSS ==============
+MOBILE_CSS = """
+<style>
+    /* Enable scrolling */
+    .main {
+        overflow-y: auto !important;
+        height: 100vh !important;
+    }
+    
+    .block-container {
+        padding: 1rem 1rem !important;
+        max-width: 100% !important;
+        overflow-y: auto !important;
+    }
+    
+    /* Mobile Responsive */
+    @media (max-width: 768px) {
+        .block-container {padding: 0.5rem !important;}
+        h1 {font-size: 24px !important;}
+        h2 {font-size: 20px !important;}
+        .stButton > button {
+            width: 100% !important;
+            font-size: 18px !important;
+            padding: 15px !important;
+            min-height: 50px !important;
+        }
+        input, select, textarea {font-size: 16px !important;}
+    }
+    
+    /* Prevent horizontal scroll */
+    .stApp {
+        overflow-x: hidden !important;
+    }
+</style>
+"""
+
+st.markdown(MOBILE_CSS, unsafe_allow_html=True)
+
+# ============== DATABASE & HELPERS ==============
+@st.cache_resource
+def get_db():
+    try:
+        return create_client(SUPABASE_URL, SUPABASE_KEY), True
+    except Exception as e:
+        st.error(f"DB Error: {e}")
+        return None, False
+
+supabase, DB_CONNECTED = get_db()
 
 def generate_token(participant_id, date_str):
     secret = SUPABASE_KEY[:20]
@@ -17,148 +71,143 @@ def generate_token(participant_id, date_str):
 def verify_token(participant_id, date_str, token):
     return token == generate_token(participant_id, date_str)
 
-# ============== DETECT SELF CHECK-IN MODE FIRST ==============
-# This must run BEFORE any other st commands
-is_self_checkin = False
-checkin_pid = None
-checkin_date = None
-checkin_token = None
-
-try:
-    # Try new Streamlit syntax
-    params = st.query_params
-    if params.get("mode") == "checkin":
-        is_self_checkin = True
-        checkin_pid = params.get("pid")
-        checkin_date = params.get("date", datetime.now().strftime("%Y%m%d"))
-        checkin_token = params.get("tk")
-except:
-    pass
-
-# ============== SELF CHECK-IN PAGE (ELDERLY VIEW) ==============
-if is_self_checkin and checkin_pid and checkin_token:
-    # Verify token first
-    if not verify_token(checkin_pid, checkin_date, checkin_token):
-        st.error("❌ Invalid or expired link. Please contact administrator.")
-        st.stop()
-    
-    # Load THIS participant directly from DB (don't rely on session state)
-    try:
-        supabase_temp = create_client(SUPABASE_URL, SUPABASE_KEY)
-        participant_data = supabase_temp.table('participants').select("*").eq('id', checkin_pid).execute().data
-        if not participant_data:
-            st.error("❌ Participant not found.")
-            st.stop()
-        participant = participant_data[0]
-    except Exception as e:
-        st.error(f"❌ Error loading your data: {e}")
-        st.stop()
-    
-    # ELDERLY-FRIENDLY UI
-    st.title("🥁 Cardio Drumming")
-    st.header(f"Hello {participant['name']}!")
-    st.subheader(f"📅 {datetime.strptime(checkin_date, '%Y%m%d').strftime('%d %B %Y')}")
-    
-    st.divider()
-    st.markdown("### Which session will you attend?")
-    
-    # Large buttons for elderly
-    col1, col2 = st.columns(2)
-    with col1:
-        s1 = st.checkbox("## Session 1\n### 7:00 PM - 8:00 PM", key="s1")
-    with col2:
-        s2 = st.checkbox("## Session 2\n### 8:00 PM - 9:00 PM", key="s2")
-    
-    st.divider()
-    
-    if st.button("✅ CONFIRM MY ATTENDANCE", type="primary", use_container_width=True):
-        if not s1 and not s2:
-            st.warning("⚠️ Please select at least one session")
-        else:
-            try:
-                supabase_temp.table('attendance').insert({
-                    "participant_id": checkin_pid,
-                    "name": participant['name'],
-                    "date": datetime.strptime(checkin_date, "%Y%m%d").strftime("%Y-%m-%d"),
-                    "session_1": s1,
-                    "session_2": s2,
-                    "timestamp": datetime.now().isoformat(),
-                    "self_checkin": True
-                }).execute()
-                
-                st.balloons()
-                st.success("## ✅ Thank You!")
-                st.info("Your attendance is confirmed. See you at Woodlands Zone 6!")
-                st.markdown("### 📍 Block 622 Woodlands Drive 52 #01-22")
-                if s1:
-                    st.markdown("**Session 1:** 7:00 PM - 8:00 PM")
-                if s2:
-                    st.markdown("**Session 2:** 8:00 PM - 9:00 PM")
-                
-            except Exception as e:
-                st.error(f"❌ Error: {e}")
-    
-    st.divider()
-    st.caption("Need help? Contact admin")
-    st.stop()  # CRITICAL: Stop here so admin UI never loads
-
-# ============== ADMIN APP BELOW (NORMAL VIEW) ==============
-st.title("🥁 Woodlands Zone 6 - Cardio Drumming")
-st.subheader("Admin Dashboard")
-
-# Database setup for admin
-@st.cache_resource
-def get_db():
-    try:
-        return create_client(SUPABASE_URL, SUPABASE_KEY), True
-    except:
-        return None, False
-
-supabase, DB_CONNECTED = get_db()
-
-@st.cache_data(ttl=300)
-def load_participants():
-    if not DB_CONNECTED:
-        return []
-    try:
-        return supabase.table('participants').select("*").execute().data
-    except:
-        return []
-
-@st.cache_data(ttl=60)
-def get_attendance_counts():
-    if not DB_CONNECTED:
-        return {}
-    try:
-        data = supabase.table('attendance').select('participant_id').execute().data
-        counts = {}
-        for row in data:
-            pid = row['participant_id']
-            counts[pid] = counts.get(pid, 0) + 1
-        return counts
-    except:
-        return {}
-
 def refresh_data():
     st.cache_data.clear()
 
-# State
+# ============== STATE INITIALIZATION ==============
 if 'participants' not in st.session_state:
-    st.session_state.participants = load_participants()
+    if DB_CONNECTED:
+        try:
+            st.session_state.participants = supabase.table('participants').select("*").execute().data
+        except:
+            st.session_state.participants = []
+    else:
+        st.session_state.participants = []
+
 if 'attendance_counts' not in st.session_state:
-    st.session_state.attendance_counts = get_attendance_counts()
+    st.session_state.attendance_counts = {}
+
 if 'whatsapp_links' not in st.session_state:
     st.session_state.whatsapp_links = []
+
 if 'today_date' not in st.session_state:
     st.session_state.today_date = datetime.now()
 
-# Sidebar
+# ============== SELF CHECK-IN MODE (ELDERLY VIEW) ==============
+is_self_checkin = False
+
+try:
+    params = st.query_params
+    if params.get("mode") == "checkin":
+        is_self_checkin = True
+        pid = params.get("pid")
+        date_str = params.get("date", datetime.now().strftime("%Y%m%d"))
+        token = params.get("tk")
+        
+        if not verify_token(pid, date_str, token):
+            st.error("❌ Invalid or expired link. Please contact administrator.")
+            st.stop()
+        
+        if not DB_CONNECTED:
+            st.error("❌ Database not connected")
+            st.stop()
+        
+        # Load participant directly from DB (not session state)
+        try:
+            result = supabase.table('participants').select("*").eq('id', pid).execute()
+            if not result.data:
+                st.error("❌ Participant not found")
+                st.stop()
+            participant = result.data[0]
+        except Exception as e:
+            st.error(f"❌ Error loading data: {e}")
+            st.stop()
+        
+        # ============== MOBILE-FRIENDLY CHECK-IN UI ==============
+        st.title("🥁 Cardio Drumming")
+        
+        # Large header for elderly
+        st.markdown(f"""
+        <h1 style='text-align: center; color: #0066CC; margin-bottom: 10px;'>
+            Hello {participant['name']}!
+        </h1>
+        """, unsafe_allow_html=True)
+        
+        st.subheader(f"📅 {datetime.strptime(date_str, '%Y%m%d').strftime('%d %B %Y')}")
+        
+        st.divider()
+        st.markdown("### 👇 Tap to select session(s):")
+        
+        # Large touch targets for mobile
+        col1, col2 = st.columns(2)
+        with col1:
+            s1 = st.checkbox("## Session 1\n### 7:00 PM - 8:00 PM\n\nTap here ✓", key="s1_mobile")
+        with col2:
+            s2 = st.checkbox("## Session 2\n### 8:00 PM - 9:00 PM\n\nTap here ✓", key="s2_mobile")
+        
+        st.write("")  # Spacer
+        
+        # Large confirm button
+        if st.button("✅ CONFIRM MY ATTENDANCE", type="primary", use_container_width=True):
+            if not s1 and not s2:
+                st.warning("⚠️ Please tap at least one session above")
+            else:
+                try:
+                    record = {
+                        "participant_id": pid,
+                        "name": participant['name'],
+                        "date": datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d"),
+                        "session_1": s1,
+                        "session_2": s2,
+                        "timestamp": datetime.now().isoformat(),
+                        "self_checkin": True
+                    }
+                    supabase.table('attendance').insert(record).execute()
+                    
+                    st.balloons()
+                    st.success("## ✅ Thank You!", icon="🎉")
+                    st.info("Your attendance is confirmed!", icon="✅")
+                    
+                    # Show what they selected
+                    if s1 and s2:
+                        st.markdown("**You selected: Both Sessions**")
+                    elif s1:
+                        st.markdown("**You selected: Session 1**")
+                    else:
+                        st.markdown("**You selected: Session 2**")
+                    
+                    st.caption("See you at Woodlands Zone 6!")
+                    
+                except Exception as e:
+                    st.error("❌ Error saving. Please contact admin.")
+        
+        st.divider()
+        st.caption("📍 Block 622 Woodlands Drive 52 #01-22")
+        st.caption("Having trouble? Contact: [Admin]")
+        st.stop()  # CRITICAL: Stop here so admin UI doesn't show
+        
+except Exception as e:
+    # Not in self-checkin mode, continue to admin app
+    pass
+
+# ============== MAIN ADMIN APP ==============
+st.title("🥁 Woodlands Zone 6 - Cardio Drumming")
+
+# Mobile-friendly subtitle
+col1, col2 = st.columns([2, 1])
+with col1:
+    st.subheader("Admin Dashboard")
+with col2:
+    st.caption(f"📅 {datetime.now().strftime('%d %b %Y')}")
+
+# Sidebar (collapsible on mobile)
 with st.sidebar:
     st.title("⚡ Quick Actions")
     if st.button("🔄 Refresh Data", use_container_width=True):
         refresh_data()
-        st.session_state.participants = load_participants()
-        st.session_state.attendance_counts = get_attendance_counts()
+        # Reload from DB
+        if DB_CONNECTED:
+            st.session_state.participants = supabase.table('participants').select("*").execute().data
         st.rerun()
     
     selected_date = st.date_input("📅 Session Date", value=st.session_state.today_date)
@@ -167,296 +216,49 @@ with st.sidebar:
     st.markdown("**⏰ Session Times**")
     st.markdown("1st: 7:00 PM - 8:00 PM")
     st.markdown("2nd: 8:00 PM - 9:00 PM")
-
-# Styles
-st.markdown("""
-<style>
-    .stButton>button {font-size: 20px !important; padding: 20px !important;}
-    .stCheckbox {font-size: 18px !important;}
-</style>
-""", unsafe_allow_html=True)
-
-# Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📝 Quick Check-In", "📱 WhatsApp Links", "📊 Reports", "⚙️ Manage"])
-
-with tab1:
-    st.header("Mark Attendance")
     
-    participants = st.session_state.participants
-    counts = st.session_state.attendance_counts
-    
-    cols = st.columns([2, 2, 1])
-    with cols[0]:
-        search = st.text_input("🔍 Search name", placeholder="Type here...")
-    with cols[1]:
-        filter_type = st.selectbox("Filter", ["All", "New Only", "Regular Only", "Unsigned Indemnity"])
-    with cols[2]:
-        st.metric("Total", len(participants))
-    
-    filtered = [p for p in participants if p.get('active', True)]
-    if search:
-        filtered = [p for p in filtered if search.lower() in p['name'].lower()]
-    if filter_type == "New Only":
-        filtered = [p for p in filtered if p.get('is_new')]
-    elif filter_type == "Regular Only":
-        filtered = [p for p in filtered if not p.get('is_new')]
-    elif filter_type == "Unsigned Indemnity":
-        filtered = [p for p in filtered if not p.get('indemnity')]
-    
-    if filtered:
-        st.divider()
-        cols = st.columns([4, 2, 2, 2])
-        cols[0].markdown("**Name**")
-        cols[1].markdown("**S1**")
-        cols[2].markdown("**S2**")
-        cols[3].markdown("**Action**")
-        
-        for p in filtered:
-            pid = p['id']
-            attend_count = counts.get(pid, 0)
-            
-            cols = st.columns([4, 2, 2, 2])
-            with cols[0]:
-                status = "🟢" if p.get('indemnity') else "🔴"
-                badge = "🆕" if p.get('is_new') else "⭐"
-                st.write(f"{status} {badge} **{p['name']}**")
-                if p.get('is_new') and attend_count > 0:
-                    st.caption(f"{attend_count}/3 attendances")
-            
-            with cols[1]:
-                s1 = st.checkbox("", key=f"s1_{pid}", label_visibility="collapsed")
-            with cols[2]:
-                s2 = st.checkbox("", key=f"s2_{pid}", label_visibility="collapsed")
-            with cols[3]:
-                if st.button("✓", key=f"btn_{pid}", type="primary"):
-                    try:
-                        supabase.table('attendance').insert({
-                            "participant_id": pid,
-                            "name": p['name'],
-                            "date": str(selected_date),
-                            "session_1": s1,
-                            "session_2": s2,
-                            "timestamp": datetime.now().isoformat()
-                        }).execute()
-                        counts[pid] = counts.get(pid, 0) + 1
-                        st.session_state.attendance_counts = counts
-                        
-                        if counts[pid] >= 3 and p.get('is_new'):
-                            supabase.table('participants').update({'is_new': False}).eq('id', pid).execute()
-                            refresh_data()
-                            st.success(f"🎉 {p['name']} is now REGULAR!")
-                        else:
-                            st.success(f"✓ {p['name']} recorded!")
-                    except Exception as e:
-                        st.error(f"Error: {e}")
+    # Mobile stats
+    active_count = len([p for p in st.session_state.participants if p.get('active', True)])
+    st.metric("Active Members", active_count)
 
-with tab2:
-    st.header("📱 WhatsApp Self Check-in Links")
-    
-    date_str = selected_date.strftime("%Y%m%d")
-    base_url = "https://wrnz6-cardiodrum.hf.space"
-    
-    col1, col2, col3 = st.columns([1, 1, 2])
-    with col1:
-        if st.button("🔄 Generate Links", type="primary"):
-            with st.spinner("Generating..."):
-                links_data = []
-                for p in st.session_state.participants:
-                    if p.get('active', True):
-                        token = generate_token(p['id'], date_str)
-                        personal_link = f"{base_url}/?mode=checkin&pid={p['id']}&date={date_str}&tk={token}"
-                        phone = p['contact'].replace(" ", "").replace("-", "")
-                        if not phone.startswith("+"):
-                            phone = "+65" + phone
-                        
-                        # Individual message
-                        wa_message = f"Hello *{p['name']}*! 👋 Cardio Drumming {selected_date.strftime('%d %b')}: {personal_link}"
-                        
-                        import urllib.parse
-                        wa_url = f"https://wa.me/{phone}?text={urllib.parse.quote(wa_message)}"
-                        
-                        links_data.append({
-                            'name': p['name'],
-                            'phone': phone,
-                            'link': personal_link,
-                            'whatsapp': wa_url,
-                            'message': wa_message
-                        })
-                
-                st.session_state.whatsapp_links = links_data
-                st.success(f"Generated {len(links_data)} links!")
-    
-    with col2:
-        st.info("💡 **Bulk Send:** Save time by sending to all 28 at once!")
-    
-    st.divider()
-    
-    # BULK SEND SECTION
-    if st.session_state.whatsapp_links:
-        st.subheader("🚀 Bulk Send Options (Choose One)")
-        
-        # Option 1: Auto-Open All (JavaScript)
-        with st.expander("⚡ Option 1: Auto-Open All WhatsApp (Fastest)", expanded=True):
-            st.warning("⚠️ Disable popup blocker for this site first!")
-            st.markdown("Opens all 28 WhatsApp chats in sequence (5 seconds apart)")
-            
-            delay_seconds = st.slider("Delay between opens (seconds)", 3, 10, 5)
-            
-            if st.button("🚀 OPEN ALL 28 WHATSAPP CHATS", type="primary", use_container_width=True):
-                # Generate JavaScript to open all URLs with delays
-                urls_js = ", ".join([f"'{item['whatsapp']}'" for item in st.session_state.whatsapp_links])
-                
-                js_code = f"""
-                <script>
-                    var urls = [{urls_js}];
-                    var current = 0;
-                    
-                    function openNext() {{
-                        if (current < urls.length) {{
-                            window.open(urls[current], '_blank');
-                            current++;
-                            setTimeout(openNext, {delay_seconds * 1000});
-                        }}
-                    }}
-                    
-                    openNext();
-                </script>
-                <p style='color: green; font-weight: bold;'>Opening {len(st.session_state.whatsapp_links)} WhatsApp tabs... Please wait!</p>
-                """
-                
-                st.components.v1.html(js_code, height=100)
-                st.success(f"Opening {len(st.session_state.whatsapp_links)} chats! Wait {delay_seconds}s between each.")
-        
-        # Option 2: Copy-All for WhatsApp Broadcast
-        with st.expander("📋 Option 2: Copy for WhatsApp Broadcast List"):
-            st.markdown("""
-            **How to send to all 28 at once via WhatsApp Broadcast:**
-            1. Save all contacts to your phone first (use VCF download below)
-            2. In WhatsApp, create a **Broadcast List** (Menu → New Broadcast)
-            3. Select all 28 contacts
-            4. Send one message to everyone individually
-            """)
-            
-            # Generate one message template for broadcast
-            broadcast_message = f"""Hello everyone! 👋
+# ============== TAB IMPORTS (Lazy loading for speed) ==============
+# Only import tabs when needed for better mobile performance
 
-Cardio Drumming on *{selected_date.strftime('%d %B %Y')}*
+with st.spinner("Loading..."):
+    try:
+        # Import here to speed up initial load on mobile
+        import sys
+        from pathlib import Path
+        
+        # Add current directory to path
+        sys.path.append(str(Path(__file__).parent))
+        
+        from tab1_checkin import show_tab1
+        from tab2_whatsapp import show_tab2
+        from tab3_reports import show_tab3
+        from tab4_manage import show_tab4
+        
+        # Tabs
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 Check-In", "📱 WhatsApp", "📊 Reports", "⚙️ Manage", "📥 Import"])
+              
+        with tab1:
+            show_tab1(selected_date)
+        
+        with tab2:
+            show_tab2(selected_date)
+        
+        with tab3:
+            show_tab3(selected_date)
+        
+        with tab4:
+            show_tab4(selected_date)
 
-Please confirm your attendance using your personal link below:
-
-👇 INDIVIDUAL LINKS 👇
-
-"""
-            # Add just first 5 as preview
-            for item in st.session_state.whatsapp_links[:5]:
-                broadcast_message += f"\n{item['name']}: {item['link']}"
+        with tab5:
+            show_tab5(selected_date)
             
-            broadcast_message += f"\n\n... and {len(st.session_state.whatsapp_links) - 5} more links"
-            broadcast_message += "\n\n📍 Location: Block 622 Woodlands Drive 52 #01-22"
-            
-            st.text_area("Broadcast Message Template", broadcast_message, height=300)
-            
-            if st.button("📋 Copy Full Message for Broadcast"):
-                st.write("Copied to clipboard!")
-        
-        # Option 3: Download VCF for Contact Import
-        with st.expander("📱 Option 3: Import All Contacts (For Broadcast List)"):
-            st.markdown("Download this VCF file and import to your phone. Then create WhatsApp Broadcast List.")
-            
-            # Generate VCF content
-            vcf_content = ""
-            for item in st.session_state.whatsapp_links:
-                vcf_content += f"""BEGIN:VCARD
-VERSION:3.0
-FN:Cardio_{item['name'].replace(' ', '_')}
-TEL:{item['phone']}
-NOTE:Cardio Drumming Participant
-END:VCARD
-"""
-            
-            st.download_button(
-                "📥 Download All Contacts (.vcf)",
-                vcf_content,
-                f"cardio_participants_{date_str}.vcf",
-                "text/vcard",
-                use_container_width=True
-            )
-            
-            st.info("Import: Open file on phone → Add to contacts → Then create WhatsApp Broadcast List")
-        
-        # Individual Links (Original)
-        st.divider()
-        st.subheader("👤 Individual Links (If bulk doesn't work)")
-        
-        # Search
-        search_term = st.text_input("🔍 Find participant", placeholder="Type name...")
-        display_links = [l for l in st.session_state.whatsapp_links if search_term.lower() in l['name'].lower()] if search_term else st.session_state.whatsapp_links[:30]  # Show first 10 by default
-        
-        for item in display_links:
-            cols = st.columns([3, 2])
-            cols[0].write(f"**{item['name']}** - {item['phone']}")
-            cols[1].markdown(f"[Open WhatsApp]({item['whatsapp']})")
-        
-        if len(st.session_state.whatsapp_links) > 10 and not search_term:
-            st.caption(f"... and {len(st.session_state.whatsapp_links) - 28} more. Use search or download CSV below.")
-        
-        # Export all
-        st.divider()
-        df_links = pd.DataFrame(st.session_state.whatsapp_links)
-        csv = df_links.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download All Links (CSV)", csv, f"whatsapp_links_{date_str}.csv", "text/csv")
-        
-        # Bulk sender tools compatibility
-        with st.expander("🔗 Advanced: For Bulk Sender Software"):
-            st.markdown("Copy this format for 'WhatsApp Bulk Sender' or 'Wati' tools:")
-            
-            bulk_format = ""
-            for item in st.session_state.whatsapp_links:
-                bulk_format += f"{item['phone']}|{item['name']}|{item['message']}\n"
-            
-            st.code(bulk_format)
-
-with tab3:
-    st.header("📊 Reports")
-    if DB_CONNECTED:
-        today_data = supabase.table('attendance').select("*").eq('date', str(selected_date)).execute().data
-        if today_data:
-            df_today = pd.DataFrame(today_data)
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total", len(df_today))
-            with col2:
-                st.metric("Session 1", int(df_today['session_1'].sum()))
-            with col3:
-                st.metric("Session 2", int(df_today['session_2'].sum()))
-            
-            st.dataframe(df_today[['name', 'session_1', 'session_2', 'timestamp']], use_container_width=True)
-        else:
-            st.info("No records for selected date")
-
-with tab4:
-    st.header("⚙️ Manage")
-    
-    with st.expander("➕ New Participant"):
-        with st.form("new_p"):
-            name = st.text_input("Name")
-            contact = st.text_input("Contact")
-            indemnity = st.checkbox("Indemnity Signed")
-            if st.form_submit_button("Register"):
-                if name and contact:
-                    new_p = {
-                        "id": datetime.now().strftime("%Y%m%d%H%M%S"),
-                        "name": name.upper(),
-                        "contact": contact,
-                        "indemnity": indemnity,
-                        "is_new": True,
-                        "active": True,
-                        "registration_date": str(selected_date)
-                    }
-                    supabase.table('participants').insert(new_p).execute()
-                    refresh_data()
-                    st.success(f"Added {name}")
-                    st.rerun()
+    except ImportError as e:
+        st.error(f"Error loading modules: {e}")
+        st.info("Please ensure all tab files (tab1_checkin.py, tab2_whatsapp.py, etc.) are in the same folder")
 
 st.divider()
-st.caption("Woodlands Zone 6 - Cardio Drumming System")
+st.caption("Woodlands Zone 6 - Cardio Drumming System | Optimized for Mobile")
