@@ -41,17 +41,19 @@ def render_plot_grid(plots, selected_plot=None, user_id=None):
                 plot_data = plots_dict.get(plot_num, {
                     'occupied': False,
                     'user_id': None,
+                    'user_name': None,
                     'plot_type': TYPE_MAP.get(plot_num, 'B')
                 })
                 
                 occupied = plot_data.get('occupied', False)
-                owner = plot_data.get('user_id', '') or ''
+                owner_id = plot_data.get('user_id') or ''
+                owner_name = plot_data.get('user_name') or ''
                 plot_type = plot_data.get('plot_type', TYPE_MAP.get(plot_num, 'B'))
                 
                 # Check if this is current user's plot
                 is_my_plot = False
-                if user_id and owner:
-                    is_my_plot = str(owner).strip().lower() == str(user_id).strip().lower()
+                if user_id and owner_id:
+                    is_my_plot = str(owner_id).strip().lower() == str(user_id).strip().lower()
 
                 color = PLOT_TYPES[plot_type]["colour"]
                 is_selected = (selected_plot == plot_num)
@@ -107,23 +109,33 @@ def render_plot_grid(plots, selected_plot=None, user_id=None):
                     </div>
                     """, unsafe_allow_html=True)
 
-                    # Owner label
+                    # Owner label - NOW SHOWS BOTH ID AND NAME
                     if occupied:
+                        # Format: "ID: Name" or just "ID" if no name
+                        display_id = str(owner_id)[:10]  # Limit ID length
+                        display_name = str(owner_name)[:12] if owner_name else ""  # Limit name length
+                        
                         if is_my_plot:
-                            label_text = f"👤 YOU"
+                            # MY plot styling
+                            if display_name:
+                                label_text = f"👤 YOU<br/><small>{display_id}: {display_name}</small>"
+                            else:
+                                label_text = f"👤 YOU<br/><small>{display_id}</small>"
                             label_color = "#00FF00"
-                            font_weight = "bold"
                             bg = "rgba(0, 100, 0, 0.3)"
                             border = "1px solid #00FF00"
                         else:
-                            label_text = f"👤 {owner[:8]}..." if len(str(owner)) > 8 else f"👤 {owner}"
-                            label_color = "#CCCCCC"
-                            font_weight = "normal"
+                            # Other people's plot styling
+                            if display_name:
+                                label_text = f"👤 {display_id}<br/><small>{display_name}</small>"
+                            else:
+                                label_text = f"👤 {display_id}"
+                            label_color = "#FFFFFF"
                             bg = "rgba(100, 100, 100, 0.2)"
                             border = "none"
                         
                         st.markdown(
-                            f'<div style="text-align:center;font-size:11px;color:{label_color};margin-top:-4px;height:18px;font-weight:{font_weight};background:{bg};padding:1px 3px;border:{border};border-radius:4px;">{label_text}</div>',
+                            f'<div style="text-align:center;font-size:10px;color:{label_color};margin-top:-4px;min-height:28px;line-height:1.2;background:{bg};padding:2px 3px;border:{border};border-radius:4px;overflow:hidden;">{label_text}</div>',
                             unsafe_allow_html=True
                         )
                     else:
