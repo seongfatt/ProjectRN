@@ -43,7 +43,7 @@ def show_tab1(selected_date):
     # Remove duplicates by ID (safety check)
     seen_ids = set()
     unique_participants = []
-    for p in participants:  # FIXED: "p i n" → "p in"
+    for p in participants:
         if p['id'] not in seen_ids:
             seen_ids.add(p['id'])
             unique_participants.append(p)
@@ -53,7 +53,7 @@ def show_tab1(selected_date):
     today_attendees = get_today_attendees(selected_date)
     
     # Mobile-friendly filters
-    with st.container():  # FIXED: "wi th" → "with"
+    with st.container():
         search = st.text_input("🔍 Search name or phone", placeholder="Type name or phone number...")
         filter_type = st.selectbox("Filter View", 
                                    ["All", "New Only", "Regular Only", "Unsigned Indemnity"],
@@ -138,29 +138,45 @@ def show_tab1(selected_date):
             
             if s1_checked and not st.session_state.get(f"s1_saved_{pid}_{selected_date}", False):
                 try:
-                    record = {
-                        "participant_id": pid,
-                        "name": p['name'],
-                        "date": str(selected_date),
-                        "session_1": True,
-                        "session_2": False,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                        "self_checkin": False
-                    }
-                    result = supabase.table('attendance').insert(record).execute()
+                    # CHECK if record already exists today
+                    existing = supabase.table('attendance')\
+                        .select("*")\
+                        .eq('participant_id', pid)\
+                        .eq('date', str(selected_date))\
+                        .execute()
+                    
+                    if existing.data:
+                        # UPDATE existing record
+                        supabase.table('attendance')\
+                            .update({"session_1": True})\
+                            .eq('id', existing.data[0]['id'])\
+                            .execute()
+                    else:
+                        # INSERT new record
+                        record = {
+                            "participant_id": pid,
+                            "name": p['name'],
+                            "date": str(selected_date),
+                            "session_1": True,
+                            "session_2": False,
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "self_checkin": False
+                        }
+                        supabase.table('attendance').insert(record).execute()
                     
                     # Mark as saved to prevent duplicate
                     st.session_state[f"s1_saved_{pid}_{selected_date}"] = True
                     
-                    # Update attendance count
-                    counts[pid] = counts.get(pid, 0) + 1
-                    st.session_state.attendance_counts = counts
+                    # Update attendance count (only if new record created)
+                    if not existing.data:
+                        counts[pid] = counts.get(pid, 0) + 1
+                        st.session_state.attendance_counts = counts
                     
                     # Refresh today's attendees to show highlight
                     today_attendees = get_today_attendees(selected_date)
                     
                     # Check for status conversion
-                    msg = check_and_convert_status(pid, p['name'])  # FIXED: "p[' name']" → "p['name']"
+                    msg = check_and_convert_status(pid, p['name'])
                     if msg:
                         st.success(f"✅ {msg}")
                     else:
