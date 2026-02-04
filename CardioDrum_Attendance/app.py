@@ -146,6 +146,22 @@ try:
             st.error(f"❌ Error loading data: {e}")
             st.stop()
         
+        # ============== CHECK IF ALREADY CHECKED IN TODAY ==============
+        today_date = datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
+        existing_attendance = None
+        
+        try:
+            existing = supabase.table('attendance')\
+                .select("*")\
+                .eq('participant_id', pid)\
+                .eq('date', today_date)\
+                .execute()
+            
+            if existing.data:
+                existing_attendance = existing.data[0]
+        except Exception as e:
+            pass  # Continue even if check fails
+        
         # ============== MOBILE-FRIENDLY CHECK-IN UI ==============
         st.title("🥁 Cardio Drumming")
         
@@ -158,54 +174,114 @@ try:
         
         st.subheader(f"📅 {datetime.strptime(date_str, '%Y%m%d').strftime('%d %B %Y')}")
         
+        # ============== SHOW CONFIRMATION IF ALREADY CHECKED IN ==============
+        if existing_attendance:
+            st.success("## ✅ You're All Set!", icon="🎉")
+            st.info("## Your attendance is confirmed!", icon="✅")
+            
+            # Show what they selected
+            sessions_attended = []
+            if existing_attendance.get('session_1'):
+                sessions_attended.append("Session 1 (7:00 PM - 8:00 PM)")
+            if existing_attendance.get('session_2'):
+                sessions_attended.append("Session 2 (8:00 PM - 9:00 PM)")
+            
+            if sessions_attended:
+                st.markdown("**### Your Sessions:**")
+                for session in sessions_attended:
+                    st.markdown(f"- ✅ {session}")
+            
+            st.divider()
+            st.caption("📍 Block 622 Woodlands Drive 52 #01-22")
+            st.caption("See you at the session! 👋")
+            st.stop()
+        
         st.divider()
-        st.markdown("### 👇 Tap to select session(s):")
+        st.markdown("### 👇 Tap to select your session(s):")
+        st.caption("💡 **Just tap the box - No need to press any button!**")
         
-        # Large touch targets for mobile
-        col1, col2 = st.columns(2)
-        with col1:
-            s1 = st.checkbox("## Session 1\n### 7:00 PM - 8:00 PM\n\nTap here ✓", key="s1_mobile")
-        with col2:
-            s2 = st.checkbox("## Session 2\n### 8:00 PM - 9:00 PM\n\nTap here ✓", key="s2_mobile")
+        # ============== SESSION 1 CHECKBOX ==============
+        st.markdown("##")
+        s1_checked = st.checkbox(
+            "## ✅ Session 1\n### 7:00 PM - 8:00 PM",
+            key="s1_auto",
+            value=False
+        )
         
-        st.write("")  # Spacer
+        if s1_checked and 'saved_s1' not in st.session_state:
+            try:
+                record = {
+                    "participant_id": pid,
+                    "name": participant['name'],
+                    "date": today_date,
+                    "session_1": True,
+                    "session_2": False,
+                    "timestamp": datetime.now().isoformat(),
+                    "self_checkin": True
+                }
+                supabase.table('attendance').insert(record).execute()
+                
+                st.session_state.saved_s1 = True
+                st.session_state.s1_confirmed = True
+                
+                st.balloons()
+                st.success("## ✅ Session 1 Confirmed!", icon="🎉")
+                st.info("You can now close this page or select Session 2 if attending both.", icon="ℹ️")
+                
+            except Exception as e:
+                st.error("❌ Error saving. Please try again or contact admin.")
         
-        # Large confirm button
-        if st.button("✅ CONFIRM MY ATTENDANCE", type="primary", use_container_width=True):
-            if not s1 and not s2:
-                st.warning("⚠️ Please tap at least one session above")
-            else:
-                try:
+        st.markdown("##")
+        
+        # ============== SESSION 2 CHECKBOX ==============
+        s2_checked = st.checkbox(
+            "## ✅ Session 2\n### 8:00 PM - 9:00 PM",
+            key="s2_auto",
+            value=False
+        )
+        
+        if s2_checked and 'saved_s2' not in st.session_state:
+            try:
+                # Check if Session 1 was already recorded today
+                existing = supabase.table('attendance')\
+                    .select("*")\
+                    .eq('participant_id', pid)\
+                    .eq('date', today_date)\
+                    .execute()
+                
+                if existing.data:
+                    # Update existing record to add Session 2
+                    supabase.table('attendance')\
+                        .update({"session_2": True})\
+                        .eq('participant_id', pid)\
+                        .eq('date', today_date)\
+                        .execute()
+                else:
+                    # Create new record with Session 2 only
                     record = {
                         "participant_id": pid,
                         "name": participant['name'],
-                        "date": datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d"),
-                        "session_1": s1,
-                        "session_2": s2,
+                        "date": today_date,
+                        "session_1": False,
+                        "session_2": True,
                         "timestamp": datetime.now().isoformat(),
                         "self_checkin": True
                     }
                     supabase.table('attendance').insert(record).execute()
-                    
-                    st.balloons()
-                    st.success("## ✅ Thank You!", icon="🎉")
-                    st.info("Your attendance is confirmed!", icon="✅")
-                    
-                    # Show what they selected
-                    if s1 and s2:
-                        st.markdown("**You selected: Both Sessions**")
-                    elif s1:
-                        st.markdown("**You selected: Session 1**")
-                    else:
-                        st.markdown("**You selected: Session 2**")
-                    
-                    st.caption("See you at Woodlands Zone 6!")
-                    
-                except Exception as e:
-                    st.error("❌ Error saving. Please contact admin.")
+                
+                st.session_state.saved_s2 = True
+                st.session_state.s2_confirmed = True
+                
+                st.balloons()
+                st.success("## ✅ Session 2 Confirmed!", icon="🎉")
+                st.info("You can now close this page. See you at the session!", icon="ℹ️")
+                
+            except Exception as e:
+                st.error("❌ Error saving. Please try again or contact admin.")
         
         st.divider()
         st.caption("📍 Block 622 Woodlands Drive 52 #01-22")
+        st.caption("💡 **Remember: Just tap the box above - it saves automatically!**")
         st.caption("Having trouble? Contact: [Admin]")
         st.stop()  # CRITICAL: Stop here so admin UI doesn't show
         

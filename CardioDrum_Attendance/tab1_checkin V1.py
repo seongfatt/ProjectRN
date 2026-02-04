@@ -3,29 +3,6 @@ from datetime import datetime, timezone
 from config import supabase, DB_CONNECTED
 from utils import check_and_convert_status
 
-def get_today_attendees(selected_date):
-    """Get dictionary of participants who attended today with their sessions"""
-    try:
-        result = supabase.table('attendance')\
-            .select('*')\
-            .eq('date', str(selected_date))\
-            .execute()
-        
-        attendees = {}
-        for record in result.data:
-            pid = record['participant_id']
-            if pid not in attendees:
-                attendees[pid] = {'sessions': [], 'record_id': record.get('id')}
-            if record.get('session_1'):
-                attendees[pid]['sessions'].append('Session 1')
-            if record.get('session_2'):
-                attendees[pid]['sessions'].append('Session 2')
-        
-        return attendees
-    except Exception as e:
-        st.error(f"Error loading today's attendance: {e}")
-        return {}
-
 def show_tab1(selected_date):
     st.header("📝 Mark Attendance")
     
@@ -41,9 +18,6 @@ def show_tab1(selected_date):
             unique_participants.append(p)
     participants = unique_participants
     
-    # Get today's attendees for highlighting
-    today_attendees = get_today_attendees(selected_date)
-    
     # Mobile-friendly filters
     with st.container():
         search = st.text_input("🔍 Search name or phone", placeholder="Type name or phone number...")
@@ -53,12 +27,9 @@ def show_tab1(selected_date):
     
     # Stats in mobile-friendly columns
     active_count = len([p for p in participants if p.get('active', True)])
-    attended_count = len(today_attendees)
-    
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     col1.metric("Active", active_count)
-    col2.metric("Attended Today", attended_count)
-    col3.metric("Date", selected_date.strftime("%d %b"))
+    col2.metric("Date", selected_date.strftime("%d %b"))
     
     # Apply filters (include phone in search)
     filtered = [p for p in participants if p.get('active', True)]
@@ -80,33 +51,13 @@ def show_tab1(selected_date):
     
     st.divider()
 
-    # ============== AUTO-SAVE CHECKBOXES WITH HIGHLIGHTING ==============
+    # ============== AUTO-SAVE CHECKBOXES (No Confirm Button) ==============
     for idx, p in enumerate(filtered):
         pid = p['id']
         attend_count = counts.get(pid, 0)
         phone = p.get('contact', 'No phone')
         
-        # Check if this participant attended today
-        attended_info = today_attendees.get(pid)
-        is_attended_today = attended_info is not None
-        
         with st.container():
-            # ============== HIGHLIGHT IF ATTENDED TODAY ==============
-            if is_attended_today:
-                sessions_str = ", ".join(attended_info['sessions'])
-                st.markdown(f"""
-                <div style='
-                    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-                    border-left: 5px solid #28a745;
-                    padding: 12px;
-                    border-radius: 8px;
-                    margin-bottom: 10px;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                '>
-                    <strong style='color: #155724; font-size: 16px;'>🎉 ATTENDED TODAY: {sessions_str}</strong>
-                </div>
-                """, unsafe_allow_html=True)
-            
             # Header with name and phone
             status = "🟢" if p.get('indemnity') else "🔴"
             badge = "🆕" if p.get('is_new') else "⭐"
@@ -133,7 +84,7 @@ def show_tab1(selected_date):
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "self_checkin": False
                     }
-                    result = supabase.table('attendance').insert(record).execute()
+                    supabase.table('attendance').insert(record).execute()
                     
                     # Mark as saved to prevent duplicate
                     st.session_state[f"s1_saved_{pid}_{selected_date}"] = True
@@ -141,9 +92,6 @@ def show_tab1(selected_date):
                     # Update attendance count
                     counts[pid] = counts.get(pid, 0) + 1
                     st.session_state.attendance_counts = counts
-                    
-                    # Refresh today's attendees to show highlight
-                    today_attendees = get_today_attendees(selected_date)
                     
                     # Check for status conversion
                     msg = check_and_convert_status(pid, p['name'])
@@ -197,9 +145,6 @@ def show_tab1(selected_date):
                     if not existing.data:
                         counts[pid] = counts.get(pid, 0) + 1
                         st.session_state.attendance_counts = counts
-                    
-                    # Refresh today's attendees to show highlight
-                    today_attendees = get_today_attendees(selected_date)
                     
                     # Check for status conversion
                     msg = check_and_convert_status(pid, p['name'])
