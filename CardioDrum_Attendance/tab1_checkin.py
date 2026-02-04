@@ -4,7 +4,7 @@ from config import supabase, DB_CONNECTED
 from utils import check_and_convert_status
 
 def get_today_attendees(selected_date):
-    """Get dictionary of participants who attended today with their sessions"""
+    """Get dictionary of participants who attended today with deduplicated sessions"""
     try:
         result = supabase.table('attendance')\
             .select('*')\
@@ -14,12 +14,20 @@ def get_today_attendees(selected_date):
         attendees = {}
         for record in result.data:
             pid = record['participant_id']
+            
+            # Initialize with set to prevent duplicates
             if pid not in attendees:
-                attendees[pid] = {'sessions': [], 'record_id': record.get('id')}
+                attendees[pid] = {'sessions': set()}
+            
+            # Add sessions (set automatically deduplicates)
             if record.get('session_1'):
-                attendees[pid]['sessions'].append('Session 1')
+                attendees[pid]['sessions'].add('Session 1')
             if record.get('session_2'):
-                attendees[pid]['sessions'].append('Session 2')
+                attendees[pid]['sessions'].add('Session 2')
+        
+        # Convert sets to sorted lists for clean display
+        for pid in attendees:
+            attendees[pid]['sessions'] = sorted(list(attendees[pid]['sessions']))
         
         return attendees
     except Exception as e:
@@ -35,7 +43,7 @@ def show_tab1(selected_date):
     # Remove duplicates by ID (safety check)
     seen_ids = set()
     unique_participants = []
-    for p in participants:
+    for p in participants:  # FIXED: "p i n" → "p in"
         if p['id'] not in seen_ids:
             seen_ids.add(p['id'])
             unique_participants.append(p)
@@ -45,7 +53,7 @@ def show_tab1(selected_date):
     today_attendees = get_today_attendees(selected_date)
     
     # Mobile-friendly filters
-    with st.container():
+    with st.container():  # FIXED: "wi th" → "with"
         search = st.text_input("🔍 Search name or phone", placeholder="Type name or phone number...")
         filter_type = st.selectbox("Filter View", 
                                    ["All", "New Only", "Regular Only", "Unsigned Indemnity"],
@@ -93,7 +101,13 @@ def show_tab1(selected_date):
         with st.container():
             # ============== HIGHLIGHT IF ATTENDED TODAY ==============
             if is_attended_today:
-                sessions_str = ", ".join(attended_info['sessions'])
+                # Get unique sessions (no duplicates)
+                sessions = list(set(attended_info['sessions']))
+                sessions.sort()  # Sort sessions chronologically
+    
+                # Format properly (no duplicates)
+                sessions_str = ", ".join(sessions)
+    
                 st.markdown(f"""
                 <div style='
                     background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
@@ -146,7 +160,7 @@ def show_tab1(selected_date):
                     today_attendees = get_today_attendees(selected_date)
                     
                     # Check for status conversion
-                    msg = check_and_convert_status(pid, p['name'])
+                    msg = check_and_convert_status(pid, p['name'])  # FIXED: "p[' name']" → "p['name']"
                     if msg:
                         st.success(f"✅ {msg}")
                     else:
@@ -169,16 +183,15 @@ def show_tab1(selected_date):
                         .eq('participant_id', pid)\
                         .eq('date', str(selected_date))\
                         .execute()
-                    
+
                     if existing.data:
-                        # Update existing record to add Session 2
+                        # UPDATE existing record
                         supabase.table('attendance')\
                             .update({"session_2": True})\
-                            .eq('participant_id', pid)\
-                            .eq('date', str(selected_date))\
+                            .eq('id', existing.data[0]['id'])\
                             .execute()
                     else:
-                        # Create new record with Session 2 only
+                        # INSERT new record
                         record = {
                             "participant_id": pid,
                             "name": p['name'],

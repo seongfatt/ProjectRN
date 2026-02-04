@@ -3,18 +3,7 @@ import pandas as pd
 from datetime import datetime
 from supabase import create_client
 import hashlib
-import os
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
-
-# ============== ADMIN PASSWORD CONFIGURATION ==============
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "wrn6admin")
-
-def verify_admin_password(password):
-    """Verify admin password"""
-    return password == ADMIN_PASSWORD
+from tab5_import import show_tab5
 
 # ============== CONFIGURATION ==============
 st.set_page_config(
@@ -59,11 +48,6 @@ MOBILE_CSS = """
     .stApp {
         overflow-x: hidden !important;
     }
-    
-    /* Login modal styling */
-    .stAlert {
-        margin-bottom: 10px !important;
-    }
 </style>
 """
 
@@ -89,13 +73,6 @@ def verify_token(participant_id, date_str, token):
 
 def refresh_data():
     st.cache_data.clear()
-
-# ============== AUTHENTICATION STATE INITIALIZATION ==============
-if 'is_authenticated' not in st.session_state:
-    st.session_state.is_authenticated = False
-
-if 'show_login' not in st.session_state:
-    st.session_state.show_login = False
 
 # ============== STATE INITIALIZATION ==============
 if 'participants' not in st.session_state:
@@ -146,22 +123,6 @@ try:
             st.error(f"❌ Error loading data: {e}")
             st.stop()
         
-        # ============== CHECK IF ALREADY CHECKED IN TODAY ==============
-        today_date = datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-        existing_attendance = None
-        
-        try:
-            existing = supabase.table('attendance')\
-                .select("*")\
-                .eq('participant_id', pid)\
-                .eq('date', today_date)\
-                .execute()
-            
-            if existing.data:
-                existing_attendance = existing.data[0]
-        except Exception as e:
-            pass  # Continue even if check fails
-        
         # ============== MOBILE-FRIENDLY CHECK-IN UI ==============
         st.title("🥁 Cardio Drumming")
         
@@ -174,114 +135,54 @@ try:
         
         st.subheader(f"📅 {datetime.strptime(date_str, '%Y%m%d').strftime('%d %B %Y')}")
         
-        # ============== SHOW CONFIRMATION IF ALREADY CHECKED IN ==============
-        if existing_attendance:
-            st.success("## ✅ You're All Set!", icon="🎉")
-            st.info("## Your attendance is confirmed!", icon="✅")
-            
-            # Show what they selected
-            sessions_attended = []
-            if existing_attendance.get('session_1'):
-                sessions_attended.append("Session 1 (7:00 PM - 8:00 PM)")
-            if existing_attendance.get('session_2'):
-                sessions_attended.append("Session 2 (8:00 PM - 9:00 PM)")
-            
-            if sessions_attended:
-                st.markdown("**### Your Sessions:**")
-                for session in sessions_attended:
-                    st.markdown(f"- ✅ {session}")
-            
-            st.divider()
-            st.caption("📍 Block 622 Woodlands Drive 52 #01-22")
-            st.caption("See you at the session! 👋")
-            st.stop()
-        
         st.divider()
-        st.markdown("### 👇 Tap to select your session(s):")
-        st.caption("💡 **Just tap the box - No need to press any button!**")
+        st.markdown("### 👇 Tap to select session(s):")
         
-        # ============== SESSION 1 CHECKBOX ==============
-        st.markdown("##")
-        s1_checked = st.checkbox(
-            "## ✅ Session 1\n### 7:00 PM - 8:00 PM",
-            key="s1_auto",
-            value=False
-        )
+        # Large touch targets for mobile
+        col1, col2 = st.columns(2)
+        with col1:
+            s1 = st.checkbox("## Session 1\n### 7:00 PM - 8:00 PM\n\nTap here ✓", key="s1_mobile")
+        with col2:
+            s2 = st.checkbox("## Session 2\n### 8:00 PM - 9:00 PM\n\nTap here ✓", key="s2_mobile")
         
-        if s1_checked and 'saved_s1' not in st.session_state:
-            try:
-                record = {
-                    "participant_id": pid,
-                    "name": participant['name'],
-                    "date": today_date,
-                    "session_1": True,
-                    "session_2": False,
-                    "timestamp": datetime.now().isoformat(),
-                    "self_checkin": True
-                }
-                supabase.table('attendance').insert(record).execute()
-                
-                st.session_state.saved_s1 = True
-                st.session_state.s1_confirmed = True
-                
-                st.balloons()
-                st.success("## ✅ Session 1 Confirmed!", icon="🎉")
-                st.info("You can now close this page or select Session 2 if attending both.", icon="ℹ️")
-                
-            except Exception as e:
-                st.error("❌ Error saving. Please try again or contact admin.")
+        st.write("")  # Spacer
         
-        st.markdown("##")
-        
-        # ============== SESSION 2 CHECKBOX ==============
-        s2_checked = st.checkbox(
-            "## ✅ Session 2\n### 8:00 PM - 9:00 PM",
-            key="s2_auto",
-            value=False
-        )
-        
-        if s2_checked and 'saved_s2' not in st.session_state:
-            try:
-                # Check if Session 1 was already recorded today
-                existing = supabase.table('attendance')\
-                    .select("*")\
-                    .eq('participant_id', pid)\
-                    .eq('date', today_date)\
-                    .execute()
-                
-                if existing.data:
-                    # Update existing record to add Session 2
-                    supabase.table('attendance')\
-                        .update({"session_2": True})\
-                        .eq('participant_id', pid)\
-                        .eq('date', today_date)\
-                        .execute()
-                else:
-                    # Create new record with Session 2 only
+        # Large confirm button
+        if st.button("✅ CONFIRM MY ATTENDANCE", type="primary", use_container_width=True):
+            if not s1 and not s2:
+                st.warning("⚠️ Please tap at least one session above")
+            else:
+                try:
                     record = {
                         "participant_id": pid,
                         "name": participant['name'],
-                        "date": today_date,
-                        "session_1": False,
-                        "session_2": True,
+                        "date": datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d"),
+                        "session_1": s1,
+                        "session_2": s2,
                         "timestamp": datetime.now().isoformat(),
                         "self_checkin": True
                     }
                     supabase.table('attendance').insert(record).execute()
-                
-                st.session_state.saved_s2 = True
-                st.session_state.s2_confirmed = True
-                
-                st.balloons()
-                st.success("## ✅ Session 2 Confirmed!", icon="🎉")
-                st.info("You can now close this page. See you at the session!", icon="ℹ️")
-                
-            except Exception as e:
-                st.error("❌ Error saving. Please try again or contact admin.")
+                    
+                    st.balloons()
+                    st.success("## ✅ Thank You!", icon="🎉")
+                    st.info("Your attendance is confirmed!", icon="✅")
+                    
+                    # Show what they selected
+                    if s1 and s2:
+                        st.markdown("**You selected: Both Sessions**")
+                    elif s1:
+                        st.markdown("**You selected: Session 1**")
+                    else:
+                        st.markdown("**You selected: Session 2**")
+                    
+                    st.caption("See you at Woodlands Zone 6!")
+                    
+                except Exception as e:
+                    st.error("❌ Error saving. Please contact admin.")
         
         st.divider()
         st.caption("📍 Block 622 Woodlands Drive 52 #01-22")
-        st.caption("💡 **Remember: Just tap the box above - it saves automatically!**")
         st.caption("Having trouble? Contact: [Admin]")
         st.stop()  # CRITICAL: Stop here so admin UI doesn't show
         
@@ -292,65 +193,16 @@ except Exception as e:
 # ============== MAIN ADMIN APP ==============
 st.title("🥁 Woodlands Zone 6 - Cardio Drumming")
 
-# ============== ACCESS LEVEL INDICATOR ==============
-if st.session_state.is_authenticated:
-    st.success("👑 Admin Access - Full Permissions", icon="✅")
-else:
-    st.info("👤 Normal User - Limited Access (Check-In & Reports only)", icon="ℹ️")
-
-# ============== LOGIN/LOGOUT CONTROLS ==============
-col1, col2, col3 = st.columns([2, 1, 1])
-
+# Mobile-friendly subtitle
+col1, col2 = st.columns([2, 1])
 with col1:
     st.subheader("Admin Dashboard")
-
 with col2:
     st.caption(f"📅 {datetime.now().strftime('%d %b %Y')}")
 
-with col3:
-    if st.session_state.is_authenticated:
-        if st.button("🚪 Logout", use_container_width=True):
-            st.session_state.is_authenticated = False
-            st.rerun()
-    else:
-        if st.button("🔐 Login", use_container_width=True):
-            st.session_state.show_login = True
-
-# ============== LOGIN MODAL ==============
-if not st.session_state.is_authenticated and st.session_state.show_login:
-    st.divider()
-    st.subheader("🔐 Admin Login")
-    
-    col_a, col_b = st.columns([2, 1])
-    
-    with col_a:
-        password_input = st.text_input(
-            "Enter Admin Password", 
-            type="password", 
-            key="admin_password_input",
-            placeholder="Type password..."
-        )
-    
-    with col_b:
-        st.write("")  # Spacer
-        st.write("")
-        if st.button("✓ Submit", type="primary", use_container_width=True):
-            if verify_admin_password(password_input):
-                st.session_state.is_authenticated = True
-                st.session_state.show_login = False
-                st.success("✅ Login successful!")
-                st.rerun()
-            else:
-                st.error("❌ Invalid password")
-        
-        if st.button("Cancel", use_container_width=True):
-            st.session_state.show_login = False
-            st.rerun()
-
-# ============== SIDEBAR (collapsible on mobile) ==============
+# Sidebar (collapsible on mobile)
 with st.sidebar:
     st.title("⚡ Quick Actions")
-    
     if st.button("🔄 Refresh Data", use_container_width=True):
         refresh_data()
         # Reload from DB
@@ -370,6 +222,8 @@ with st.sidebar:
     st.metric("Active Members", active_count)
 
 # ============== TAB IMPORTS (Lazy loading for speed) ==============
+# Only import tabs when needed for better mobile performance
+
 with st.spinner("Loading..."):
     try:
         # Import here to speed up initial load on mobile
@@ -381,41 +235,26 @@ with st.spinner("Loading..."):
         
         from tab1_checkin import show_tab1
         from tab2_whatsapp import show_tab2
-        from tab3_reports import show_tab3
+        from tab3_reports import show_tab3  # FIXED: removed space in "tab3"
         from tab4_manage import show_tab4
-        from tab5_import import show_tab5
         
-        # ============== CONDITIONAL TAB DISPLAY ==============
-        if st.session_state.is_authenticated:
-            # Admin sees ALL tabs
-            tab_names = ["📝 Check-In", "📱 WhatsApp", "📊 Reports", "⚙️ Manage", "📥 Import"]
-            tab1, tab2, tab3, tab4, tab5 = st.tabs(tab_names)
-            
-            with tab1:
-                show_tab1(selected_date)
-            
-            with tab2:
-                show_tab2(selected_date)
-            
-            with tab3:
-                show_tab3(selected_date)
-            
-            with tab4:
-                show_tab4(selected_date)
-            
-            with tab5:
-                show_tab5(selected_date)
-                
-        else:
-            # Normal user sees ONLY Check-In and Reports
-            tab_names = ["📝 Check-In", "📊 Reports"]
-            tab1, tab3 = st.tabs(tab_names)
-            
-            with tab1:
-                show_tab1(selected_date)
-            
-            with tab3:
-                show_tab3(selected_date)
+        # Tabs
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 Check-In", "📱 WhatsApp", "📊 Reports", "⚙️ Manage", "📥 Import"])
+              
+        with tab1:
+            show_tab1(selected_date)
+        
+        with tab2:
+            show_tab2(selected_date)
+        
+        with tab3:
+            show_tab3(selected_date)
+        
+        with tab4:  # FIXED: removed space in "with"
+            show_tab4(selected_date)
+
+        with tab5:
+            show_tab5(selected_date)
             
     except ImportError as e:
         st.error(f"Error loading modules: {e}")
