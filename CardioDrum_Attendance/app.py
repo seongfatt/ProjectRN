@@ -3,7 +3,18 @@ import pandas as pd
 from datetime import datetime
 from supabase import create_client
 import hashlib
-from tab5_import import show_tab5
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# ============== ADMIN PASSWORD CONFIGURATION ==============
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "wrn6admin")
+
+def verify_admin_password(password):
+    """Verify admin password"""
+    return password == ADMIN_PASSWORD
 
 # ============== CONFIGURATION ==============
 st.set_page_config(
@@ -48,6 +59,11 @@ MOBILE_CSS = """
     .stApp {
         overflow-x: hidden !important;
     }
+    
+    /* Login modal styling */
+    .stAlert {
+        margin-bottom: 10px !important;
+    }
 </style>
 """
 
@@ -73,6 +89,13 @@ def verify_token(participant_id, date_str, token):
 
 def refresh_data():
     st.cache_data.clear()
+
+# ============== AUTHENTICATION STATE INITIALIZATION ==============
+if 'is_authenticated' not in st.session_state:
+    st.session_state.is_authenticated = False
+
+if 'show_login' not in st.session_state:
+    st.session_state.show_login = False
 
 # ============== STATE INITIALIZATION ==============
 if 'participants' not in st.session_state:
@@ -193,16 +216,65 @@ except Exception as e:
 # ============== MAIN ADMIN APP ==============
 st.title("🥁 Woodlands Zone 6 - Cardio Drumming")
 
-# Mobile-friendly subtitle
-col1, col2 = st.columns([2, 1])
+# ============== ACCESS LEVEL INDICATOR ==============
+if st.session_state.is_authenticated:
+    st.success("👑 Admin Access - Full Permissions", icon="✅")
+else:
+    st.info("👤 Normal User - Limited Access (Check-In & Reports only)", icon="ℹ️")
+
+# ============== LOGIN/LOGOUT CONTROLS ==============
+col1, col2, col3 = st.columns([2, 1, 1])
+
 with col1:
     st.subheader("Admin Dashboard")
+
 with col2:
     st.caption(f"📅 {datetime.now().strftime('%d %b %Y')}")
 
-# Sidebar (collapsible on mobile)
+with col3:
+    if st.session_state.is_authenticated:
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.is_authenticated = False
+            st.rerun()
+    else:
+        if st.button("🔐 Login", use_container_width=True):
+            st.session_state.show_login = True
+
+# ============== LOGIN MODAL ==============
+if not st.session_state.is_authenticated and st.session_state.show_login:
+    st.divider()
+    st.subheader("🔐 Admin Login")
+    
+    col_a, col_b = st.columns([2, 1])
+    
+    with col_a:
+        password_input = st.text_input(
+            "Enter Admin Password", 
+            type="password", 
+            key="admin_password_input",
+            placeholder="Type password..."
+        )
+    
+    with col_b:
+        st.write("")  # Spacer
+        st.write("")
+        if st.button("✓ Submit", type="primary", use_container_width=True):
+            if verify_admin_password(password_input):
+                st.session_state.is_authenticated = True
+                st.session_state.show_login = False
+                st.success("✅ Login successful!")
+                st.rerun()
+            else:
+                st.error("❌ Invalid password")
+        
+        if st.button("Cancel", use_container_width=True):
+            st.session_state.show_login = False
+            st.rerun()
+
+# ============== SIDEBAR (collapsible on mobile) ==============
 with st.sidebar:
     st.title("⚡ Quick Actions")
+    
     if st.button("🔄 Refresh Data", use_container_width=True):
         refresh_data()
         # Reload from DB
@@ -222,8 +294,6 @@ with st.sidebar:
     st.metric("Active Members", active_count)
 
 # ============== TAB IMPORTS (Lazy loading for speed) ==============
-# Only import tabs when needed for better mobile performance
-
 with st.spinner("Loading..."):
     try:
         # Import here to speed up initial load on mobile
@@ -237,24 +307,39 @@ with st.spinner("Loading..."):
         from tab2_whatsapp import show_tab2
         from tab3_reports import show_tab3
         from tab4_manage import show_tab4
+        from tab5_import import show_tab5
         
-        # Tabs
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📝 Check-In", "📱 WhatsApp", "📊 Reports", "⚙️ Manage", "📥 Import"])
-              
-        with tab1:
-            show_tab1(selected_date)
-        
-        with tab2:
-            show_tab2(selected_date)
-        
-        with tab3:
-            show_tab3(selected_date)
-        
-        with tab4:
-            show_tab4(selected_date)
-
-        with tab5:
-            show_tab5(selected_date)
+        # ============== CONDITIONAL TAB DISPLAY ==============
+        if st.session_state.is_authenticated:
+            # Admin sees ALL tabs
+            tab_names = ["📝 Check-In", "📱 WhatsApp", "📊 Reports", "⚙️ Manage", "📥 Import"]
+            tab1, tab2, tab3, tab4, tab5 = st.tabs(tab_names)
+            
+            with tab1:
+                show_tab1(selected_date)
+            
+            with tab2:
+                show_tab2(selected_date)
+            
+            with tab3:
+                show_tab3(selected_date)
+            
+            with tab4:
+                show_tab4(selected_date)
+            
+            with tab5:
+                show_tab5(selected_date)
+                
+        else:
+            # Normal user sees ONLY Check-In and Reports
+            tab_names = ["📝 Check-In", "📊 Reports"]
+            tab1, tab3 = st.tabs(tab_names)
+            
+            with tab1:
+                show_tab1(selected_date)
+            
+            with tab3:
+                show_tab3(selected_date)
             
     except ImportError as e:
         st.error(f"Error loading modules: {e}")

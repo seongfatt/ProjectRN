@@ -5,6 +5,14 @@ import hashlib
 import os
 os.environ['TZ'] = 'UTC'
 
+# Password Configuration (Hash for security)
+ADMIN_PASSWORD_HASH = "wrn6admin"  # "password" hashed
+# Change this to your desired password hash using: hashlib.sha256("your_password".encode()).hexdigest()
+
+def verify_password(password):
+    """Verify password against hash"""
+    import hashlib
+    return hashlib.sha256(password.encode()).hexdigest() == ADMIN_PASSWORD_HASH
 
 # Database Config
 SUPABASE_URL = "https://nqmvsjubgsghjpzojaxm.supabase.co"
