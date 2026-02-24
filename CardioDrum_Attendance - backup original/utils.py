@@ -27,24 +27,3 @@ def get_attendance_count(participant_id):
         return data.count
     except:
         return 0
-    
-def mask_phone(phone):
-    """
-    Mask phone number to show only last 4 digits (PDPA compliant)
-    Example: +65 91234567 → +65 ****4567
-    """
-    if not phone:
-        return "No phone"
-    
-    # Remove spaces and dashes
-    cleaned = phone.replace(" ", "").replace("-", "")
-    
-    # Keep country code and last 4 digits
-    if len(cleaned) >= 8:
-        # Extract country code (first 3 chars if starts with +65)
-        if cleaned.startswith("+65"):
-            return f"+65 ****{cleaned[-4:]}"
-        else:
-            # For numbers without country code
-            return f"****{cleaned[-4:]}"
-    return phone

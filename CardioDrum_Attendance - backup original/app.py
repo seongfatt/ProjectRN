@@ -9,17 +9,12 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# ============== AUTHORIZATION CONFIGURATION ==============
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
-CHECKER_PASSWORD = os.getenv("CHECKER_PASSWORD", "checker123")
+# ============== ADMIN PASSWORD CONFIGURATION ==============
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "wrn6admin")
 
-def verify_password(password, role):
-    """Verify password based on role"""
-    if role == "admin":
-        return password == ADMIN_PASSWORD
-    elif role == "checker":
-        return password == CHECKER_PASSWORD
-    return False
+def verify_admin_password(password):
+    """Verify admin password"""
+    return password == ADMIN_PASSWORD
 
 # ============== CONFIGURATION ==============
 st.set_page_config(
@@ -28,7 +23,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# CRITICAL FIX: Removed trailing spaces in URL
 SUPABASE_URL = "https://nqmvsjubgsghjpzojaxm.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xbXZzanViZ3NnaGpwem9qYXhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NzQ3ODMsImV4cCI6MjA4NTE1MDc4M30.OukUcFvR1J5-DJVoPGmgjf34dBv7lrB1198YCp_uRIw"
 
@@ -70,16 +64,6 @@ MOBILE_CSS = """
     .stAlert {
         margin-bottom: 10px !important;
     }
-    
-    /* PDPA Compliance Notice */
-    .pdpa-notice {
-        background-color: #fff3cd;
-        border-left: 4px solid #ffc107;
-        padding: 12px;
-        border-radius: 4px;
-        margin: 10px 0;
-        font-size: 14px;
-    }
 </style>
 """
 
@@ -89,25 +73,9 @@ st.markdown(MOBILE_CSS, unsafe_allow_html=True)
 @st.cache_resource
 def get_db():
     try:
-        # CRITICAL: Validate URL format before connection
-        if " " in SUPABASE_URL:
-            st.error("❌ Configuration Error: SUPABASE_URL contains spaces. Please fix config.py")
-            return None, False
-        
-        client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        # Test connection with a simple query
-        client.table('participants').select("id").limit(1).execute()
-        return client, True
+        return create_client(SUPABASE_URL, SUPABASE_KEY), True
     except Exception as e:
-        error_msg = str(e).lower()
-        if "getaddrinfo failed" in error_msg or "11001" in error_msg:
-            st.error("❌ Network Error: Cannot connect to Supabase. Check your internet connection.")
-        elif "403" in error_msg or "forbidden" in error_msg:
-            st.error("❌ Authentication Error: Invalid Supabase credentials. Check SUPABASE_KEY.")
-        elif "404" in error_msg:
-            st.error("❌ Configuration Error: Supabase project not found. Check SUPABASE_URL.")
-        else:
-            st.error(f"❌ Database Error: {e}")
+        st.error(f"DB Error: {e}")
         return None, False
 
 supabase, DB_CONNECTED = get_db()
@@ -125,8 +93,7 @@ def refresh_data():
 # ============== AUTHENTICATION STATE INITIALIZATION ==============
 if 'is_authenticated' not in st.session_state:
     st.session_state.is_authenticated = False
-if 'user_role' not in st.session_state:
-    st.session_state.user_role = None  # None, 'checker', or 'admin'
+
 if 'show_login' not in st.session_state:
     st.session_state.show_login = False
 
@@ -135,9 +102,8 @@ if 'participants' not in st.session_state:
     if DB_CONNECTED:
         try:
             st.session_state.participants = supabase.table('participants').select("*").execute().data
-        except Exception as e:
+        except:
             st.session_state.participants = []
-            st.error(f"⚠️ Failed to load participants: {e}")
     else:
         st.session_state.participants = []
 
@@ -166,7 +132,7 @@ try:
             st.stop()
         
         if not DB_CONNECTED:
-            st.error("❌ Database not connected. Please try again later.")
+            st.error("❌ Database not connected")
             st.stop()
         
         # Load participant directly from DB (not session state)
@@ -250,19 +216,11 @@ except Exception as e:
 # ============== MAIN ADMIN APP ==============
 st.title("🥁 Woodlands Zone 6 - Cardio Drumming")
 
-# ============== PDPA COMPLIANCE NOTICE ==============
-st.markdown("""
-<div class="pdpa-notice">
-🔒 <strong>PDPA Compliant:</strong> Phone numbers displayed with last 4 digits only for privacy protection.
-</div>
-""", unsafe_allow_html=True)
-
 # ============== ACCESS LEVEL INDICATOR ==============
 if st.session_state.is_authenticated:
-    role_badge = "👑 Admin" if st.session_state.user_role == "admin" else "👤 Attendance Checker"
-    st.success(f"{role_badge} - Full Access" if st.session_state.user_role == "admin" else f"{role_badge} - Attendance Only", icon="✅")
+    st.success("👑 Admin Access - Full Permissions", icon="✅")
 else:
-    st.info("🔐 Please login to access the system", icon="ℹ️")
+    st.info("👤 Normal User - Limited Access (Check-In & Reports only)", icon="ℹ️")
 
 # ============== LOGIN/LOGOUT CONTROLS ==============
 col1, col2, col3 = st.columns([2, 1, 1])
@@ -277,7 +235,6 @@ with col3:
     if st.session_state.is_authenticated:
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.is_authenticated = False
-            st.session_state.user_role = None
             st.rerun()
     else:
         if st.button("🔐 Login", use_container_width=True):
@@ -286,35 +243,26 @@ with col3:
 # ============== LOGIN MODAL ==============
 if not st.session_state.is_authenticated and st.session_state.show_login:
     st.divider()
-    st.subheader("🔐 User Login")
+    st.subheader("🔐 Admin Login")
     
     col_a, col_b = st.columns([2, 1])
     
     with col_a:
         password_input = st.text_input(
-            "Enter Password", 
+            "Enter Admin Password", 
             type="password", 
-            key="user_password_input",
+            key="admin_password_input",
             placeholder="Type password..."
         )
-        st.caption("• Checker: Attendance marking only\n• Admin: Full system access")
     
     with col_b:
+        st.write("")  # Spacer
         st.write("")
-        st.write("")
-        if st.button("✓ Login", type="primary", use_container_width=True):
-            # Try admin first, then checker
-            if verify_password(password_input, "admin"):
+        if st.button("✓ Submit", type="primary", use_container_width=True):
+            if verify_admin_password(password_input):
                 st.session_state.is_authenticated = True
-                st.session_state.user_role = "admin"
                 st.session_state.show_login = False
-                st.success("✅ Admin login successful!")
-                st.rerun()
-            elif verify_password(password_input, "checker"):
-                st.session_state.is_authenticated = True
-                st.session_state.user_role = "checker"
-                st.session_state.show_login = False
-                st.success("✅ Attendance Checker login successful!")
+                st.success("✅ Login successful!")
                 st.rerun()
             else:
                 st.error("❌ Invalid password")
@@ -331,10 +279,7 @@ with st.sidebar:
         refresh_data()
         # Reload from DB
         if DB_CONNECTED:
-            try:
-                st.session_state.participants = supabase.table('participants').select("*").execute().data
-            except Exception as e:
-                st.error(f"⚠️ Refresh failed: {e}")
+            st.session_state.participants = supabase.table('participants').select("*").execute().data
         st.rerun()
     
     selected_date = st.date_input("📅 Session Date", value=st.session_state.today_date)
@@ -366,38 +311,39 @@ with st.spinner("Loading..."):
         
         # ============== CONDITIONAL TAB DISPLAY ==============
         if st.session_state.is_authenticated:
-            if st.session_state.user_role == "admin":
-                # Admin sees ALL tabs
-                tab_names = ["📝 Check-In", "📱 WhatsApp", "📊 Reports", "⚙️ Manage", "📥 Import"]
-                tab1, tab2, tab3, tab4, tab5 = st.tabs(tab_names)
+            # Admin sees ALL tabs
+            tab_names = ["📝 Check-In", "📱 WhatsApp", "📊 Reports", "⚙️ Manage", "📥 Import"]
+            tab1, tab2, tab3, tab4, tab5 = st.tabs(tab_names)
+            
+            with tab1:
+                show_tab1(selected_date)
+            
+            with tab2:
+                show_tab2(selected_date)
+            
+            with tab3:
+                show_tab3(selected_date)
+            
+            with tab4:
+                show_tab4(selected_date)
+            
+            with tab5:
+                show_tab5(selected_date)
                 
-                with tab1:
-                    show_tab1(selected_date)
-                with tab2:
-                    show_tab2(selected_date)
-                with tab3:
-                    show_tab3(selected_date)
-                with tab4:
-                    show_tab4(selected_date)
-                with tab5:
-                    show_tab5(selected_date)
-                    
-            elif st.session_state.user_role == "checker":
-                # Checker sees only Check-In and Reports
-                tab_names = ["📝 Check-In", "📊 Reports"]
-                tab1, tab3 = st.tabs(tab_names)
-                
-                with tab1:
-                    show_tab1(selected_date)
-                with tab3:
-                    show_tab3(selected_date)
-                    
         else:
-            st.info("🔐 Please login to access attendance features")
+            # Normal user sees ONLY Check-In and Reports
+            tab_names = ["📝 Check-In", "📊 Reports"]
+            tab1, tab3 = st.tabs(tab_names)
+            
+            with tab1:
+                show_tab1(selected_date)
+            
+            with tab3:
+                show_tab3(selected_date)
             
     except ImportError as e:
         st.error(f"Error loading modules: {e}")
         st.info("Please ensure all tab files (tab1_checkin.py, tab2_whatsapp.py, etc.) are in the same folder")
 
 st.divider()
-st.caption("Woodlands Zone 6 - Cardio Drumming System | PDPA Compliant | Optimized for Mobile")
+st.caption("Woodlands Zone 6 - Cardio Drumming System | Optimized for Mobile")
