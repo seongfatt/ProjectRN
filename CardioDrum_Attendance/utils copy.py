@@ -4,8 +4,9 @@ from config import supabase, DB_CONNECTED
 
 def check_and_convert_status(participant_id, participant_name):
     """Auto-convert New to Regular after 3 attendances"""
-    if not DB_CONNECTED or supabase is None:
+    if not DB_CONNECTED:
         return None
+    
     try:
         count_data = supabase.table('attendance').select('*', count='exact').eq('participant_id', participant_id).execute()
         count = count_data.count
@@ -21,23 +22,29 @@ def check_and_convert_status(participant_id, participant_name):
 
 def get_attendance_count(participant_id):
     """Get attendance count for a participant"""
-    if not DB_CONNECTED or supabase is None:
-        return 0
     try:
         data = supabase.table('attendance').select('*', count='exact').eq('participant_id', participant_id).execute()
         return data.count
     except:
         return 0
-
+    
 def mask_phone(phone):
-    """Mask phone number to show only last 4 digits (PDPA compliant)"""
+    """
+    Mask phone number to show only last 4 digits (PDPA compliant)
+    Example: +65 91234567 → +65 ****4567
+    """
     if not phone:
         return "No phone"
-    cleaned = phone.replace("  ", " ").replace("-", " ")
     
+    # Remove spaces and dashes
+    cleaned = phone.replace(" ", "").replace("-", "")
+    
+    # Keep country code and last 4 digits
     if len(cleaned) >= 8:
-        if cleaned.startswith("+65 "):
+        # Extract country code (first 3 chars if starts with +65)
+        if cleaned.startswith("+65"):
             return f"+65 ****{cleaned[-4:]}"
         else:
+            # For numbers without country code
             return f"****{cleaned[-4:]}"
     return phone
