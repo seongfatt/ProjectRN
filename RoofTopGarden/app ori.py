@@ -3,14 +3,8 @@ import streamlit as st
 from datetime import datetime
 from config import (
     PLOT_TYPES, TOTAL_PLOTS, TYPE_MAP, PLOT_LAYOUTS, 
-    ADMIN_PASSWORD, DB_CONNECTED, refresh_data, supabase
+    ADMIN_PASSWORD, DB_CONNECTED, refresh_data
 )
-
-# ✅ Check BOTH DB_CONNECTED and supabase is None
-if not DB_CONNECTED or supabase is None:
-    st.error("❌ Database not connected. Please refresh the page.")
-    st.stop()
-    
 from data_manager import (
     load_plots, get_plot, update_plot, get_user_plot,
     create_request, get_pending_requests, update_request_status, get_occupied_count
