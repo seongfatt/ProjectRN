@@ -13,13 +13,14 @@ if not DB_CONNECTED or supabase is None:
     
 from data_manager import (
     load_plots, get_plot, update_plot, get_user_plot,
-    create_request, get_pending_requests, update_request_status, get_occupied_count
+    create_request, get_pending_requests, update_request_status, get_occupied_count,
+    mask_phone
 )
-from ui_components import render_legend, render_plot_grid
+from ui_components import render_legend, render_plot_grid, render_occupant_list
 
 # ========== PAGE CONFIG ==========
 st.set_page_config(
-    page_title="Rooftop Garden Plot Manager",
+    page_title="Woodlands Zone 6 - Roof Top Garden",
     page_icon="🌿",
     layout="wide"
 )
@@ -34,7 +35,8 @@ if 'user_id' not in st.session_state:
 
 # ========== MAIN APP ==========
 def main():
-    st.title("🌿 Woodlands Zone 6 - Rooftop Garden")
+    st.title("🌿 Woodlands Zone 6 - Roof Top Garden")
+    st.caption("✅ PDPA Compliant | Optimized for Mobile")
     
     if not DB_CONNECTED:
         st.error("⚠️ Database connection failed. Please check Supabase settings.")
@@ -90,6 +92,10 @@ def main():
     
     # Plot Grid
     render_plot_grid(plots, st.session_state.selected_plot, user_id)
+    st.markdown("---")
+    
+    # OCCUPANT LIST SECTION - NEW ADDITION
+    render_occupant_list(plots, is_admin=st.session_state.get("is_admin", False))
     
     # Plot Selection Logic
     if st.session_state.selected_plot:
@@ -292,7 +298,7 @@ def main():
     
     # Footer
     st.markdown("---")
-    st.caption(f"🌱 **Woodlands Zone 6 Rooftop Garden** | Data persists in Supabase | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    st.caption(f"🌱 **Woodlands Zone 6 Rooftop Garden** | PDPA Compliant | {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
 if __name__ == "__main__":
     main()

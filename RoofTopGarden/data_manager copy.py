@@ -1,7 +1,10 @@
 # data_manager.py - Supabase Data Operations
+import pandas as pd
 import streamlit as st
 from datetime import datetime
 from config import supabase, DB_CONNECTED, refresh_data
+from datetime import datetime, timezone
+
 
 def load_plots():
     """Load all garden plots from Supabase"""
@@ -26,22 +29,36 @@ def get_plot(plot_number):
     except:
         return None
 
+from datetime import datetime, timezone
+
 def update_plot(plot_number, updates):
-    """Update plot with new data"""
+    """Update plot in garden_plots table — fixed for Supabase compatibility"""
     if not DB_CONNECTED:
+        st.error("Database not connected!")
         return False
-    
+
+    # Clean empty strings → None
+    for k, v in updates.items():
+        if isinstance(v, str) and v.strip() == "":
+            updates[k] = None
+
+    # ✅ Critical: Use UTC timestamp in compatible format
+    updates['updated_at'] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
     try:
-        # Add timestamp to change log
-        if 'change_log' in updates:
-            updates['change_log'] = f"{updates['change_log']} - {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        st.caption(f"📤 Updating plot {plot_number} with: {updates}")
         
-        updates['updated_at'] = datetime.now().isoformat()
+        response = supabase.table('garden_plots').update(updates).eq('plot_number', plot_number).execute()
         
-        result = supabase.table('garden_plots').update(updates).eq('plot_number', plot_number).execute()
-        return True if result.data else False
+        if response.data and len(response.data) > 0:
+            st.success(f"✅ Updated plot {plot_number} successfully!")
+            return True
+        else:
+            st.warning(f"⚠️ Update returned empty data. Response: {response}")
+            return False
+
     except Exception as e:
-        st.error(f"Update failed: {e}")
+        st.error(f"💥 Update failed: {e}")
         return False
 
 def get_user_plot(user_id):
@@ -57,7 +74,6 @@ def get_user_plot(user_id):
 
 # Request Management Functions
 def create_request(plot_number, user_id, user_name, contact, notes=""):
-    """Create new plot request"""
     if not DB_CONNECTED:
         return None
     
@@ -109,6 +125,7 @@ def get_occupied_count():
     except:
         return 0
     
+    # PDPA Compliance Function
 def mask_phone(phone):
     """Mask phone number to show only last 4 digits (PDPA compliance)"""
     if not phone or phone == "N/A" or str(phone).lower() == "nan":

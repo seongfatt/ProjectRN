@@ -2,7 +2,7 @@
 import streamlit as st
 import pandas as pd
 from config import PLOT_TYPES, TYPE_MAP, PLOT_LAYOUTS
-from data_manager import load_plots
+from data_manager import mask_phone
 
 def render_legend():
     st.markdown("### 🎨 Plot Type Legend")
@@ -143,3 +143,61 @@ def render_plot_grid(plots, selected_plot=None, user_id=None):
                             '<div style="text-align:center;font-size:11px;color:#888888;margin-top:-4px;height:16px;">available</div>',
                             unsafe_allow_html=True
                         )
+
+# pdpa_compliance_ui.py - New file for PDPA-compliant occupant list rendering
+
+def render_occupant_list(plots, is_admin=False):
+    """Render PDPA-compliant occupant list with admin toggle for full phone numbers"""
+    import pandas as pd
+    from data_manager import mask_phone  # ✅ Only import mask_phone
+    
+    st.markdown("## 📋 Occupied Plots List")
+    
+    # Filter occupied plots (passed as parameter)
+    occupied_plots = [p for p in plots if p.get('occupied', False)]
+    
+    if not occupied_plots:
+        st.info("No plots are currently occupied.")
+        return
+    
+    # Admin toggle for full phone visibility
+    show_full_phone = False
+    if is_admin:
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.caption("🔒 PDPA Compliant View (Last 4 digits shown)")
+        with col2:
+            show_full_phone = st.toggle("Show Full Phone", value=False, help="Admin-only toggle (resets on refresh)")
+    
+    # Prepare display data
+    display_data = []
+    for plot in occupied_plots:
+        phone = plot.get('contact', 'N/A')
+        if show_full_phone and is_admin:
+            masked_phone = phone if phone else "N/A"
+        else:
+            masked_phone = mask_phone(phone)
+        
+        display_data.append({
+            "Plot #": plot['plot_number'],
+            "Owner Name": plot.get('user_name', 'N/A'),
+            "Phone": masked_phone,
+            "Plot Type": plot['plot_type']
+        })
+    
+    # Create DataFrame for display
+    display_df = pd.DataFrame(display_data)
+    
+    # Display table
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    
+    # Download button (admin only)
+    if is_admin:
+        csv = display_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Download Full List (CSV)",
+            data=csv,
+            file_name="woodlands_zone6_occupants.csv",
+            mime="text/csv",
+            use_container_width=True
+        )

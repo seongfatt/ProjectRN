@@ -4,14 +4,20 @@ from supabase import create_client
 import os
 
 # ========== DATABASE CONFIG ==========
+# ✅ FIX: Removed trailing spaces from URL
 SUPABASE_URL = "https://nqmvsjubgsghjpzojaxm.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xbXZzanViZ3NnaGpwem9qYXhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NzQ3ODMsImV4cCI6MjA4NTE1MDc4M30.OukUcFvR1J5-DJVoPGmgjf34dBv7lrB1198YCp_uRIw"
+# SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92d3Zsd2NxaHN3a2FtZHJya3h1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTY2ODk3OSwiZXhwIjoyMDg1MjQ0OTc5fQ.fFQtsNJCt-rzTt7b0xu9mA0RMNScR_ij4nRwzKmCGlc"
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 @st.cache_resource
 def get_db():
     """Initialize Supabase connection"""
     try:
-        client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        # ✅ Optional: Strip URL to be extra safe
+        url = SUPABASE_URL.strip()
+        client = create_client(url, SUPABASE_KEY)
         return client, True
     except Exception as e:
         st.error(f"Database connection failed: {e}")
@@ -25,10 +31,10 @@ def refresh_data():
 
 # ========== GARDEN CONFIGURATION ==========
 PLOT_TYPES = {
-    "A": {"boxes": 12, "area": 3.0, "colour": "#2ca02c", "total": 16},   # Green
-    "B": {"boxes": 10, "area": 2.5, "colour": "#ff7f0e", "total": 24},   # Orange
-    "C": {"boxes": 9,  "area": 2.25, "colour": "#1f77b4", "total": 8},   # Blue
-    "D": {"boxes": 8,  "area": 2.0, "colour": "#d62728", "total": 28},   # Red
+    "A": {"boxes": 12, "area": 3.0, "colour": "#2ca02c", "total": 16},
+    "B": {"boxes": 10, "area": 2.5, "colour": "#ff7f0e", "total": 24},
+    "C": {"boxes": 9,  "area": 2.25, "colour": "#1f77b4", "total": 8},
+    "D": {"boxes": 8,  "area": 2.0, "colour": "#d62728", "total": 28},
 }
 
 TOTAL_PLOTS = 76
@@ -67,7 +73,7 @@ PLOT_LAYOUTS = {
     "Plot 4": [
         [None, 32, None, None, 35, 38, None, None, None, None],
         [30, None, 33, 34, None, None, None, None, None, None],
-        [None, 31, None, None,36, 37, None, None, None]
+        [None, 31, None, None, 36, 37, None, None, None]
     ],
     "Plot 5": [
         [40, 41, 45, 46, None, None, None, None, None, None],
