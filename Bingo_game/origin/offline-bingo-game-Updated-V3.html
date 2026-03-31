@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bingo Game - Woodlands Zone 6 Residents' Network</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            padding: 1vh 1vw;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 1.5vh 1.5vw;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 98vw;
+            height: 98vh;
+            display: flex;
+            flex-direction: column;
+            max-width: 130vh;
+        }
+
+        h1 {
+            text-align: center;
+            color: #667eea;
+            margin-bottom: 1.5vh;
+            font-size: 3.5vh;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .game-area {
+            display: grid;
+            grid-template-columns: 0.9fr 2.5fr;
+            gap: 1.5vw;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5vh;
+        }
+
+        .call-display {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 15px;
+            padding: 2vh;
+            text-align: center;
+            color: white;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .call-text {
+            font-size: 2.2vh;
+            opacity: 0.9;
+            z-index: 2;
+        }
+
+        .current-ball {
+            font-size: 14vh;
+            font-weight: bold;
+            margin: 1.5vh 0;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.3);
+            z-index: 2;
+            transition: all 0.3s ease;
+        }
+
+        .current-ball.animating {
+            animation: numberSpin 0.1s ease;
+        }
+
+        @keyframes numberSpin {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+        }
+
+        .rolling-numbers {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .rolling-numbers.active {
+            opacity: 1;
+        }
+
+        .rolling-number {
+            position: absolute;
+            font-size: 10vh;
+            font-weight: bold;
+            animation: roll 0.15s ease-out;
+        }
+
+        @keyframes roll {
+            0% { transform: translateY(-100%) scale(0.5); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateY(100%) scale(1.5); opacity: 0; }
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5vh;
+        }
+
+        .btn-fullscreen {
+            background: #8b5cf6;
+            color: white;
+        }
+
+        .btn-fullscreen:hover {
+            background: #7c3aed;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(139, 92, 246, 0.4);
+        }
+
+        button {
+            padding: 1.5vh 2vw;
+            font-size: 2vh;
+            font-weight: bold;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .btn-call {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-call:hover {
+            background: #059669;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-call:disabled {
+            background: #d1d5db;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-reset {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-reset:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(239, 68, 68, 0.4);
+        }
+
+        .btn-auto {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .btn-auto:hover {
+            background: #2563eb;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4);
+        }
+
+        .board {
+            background: #f3f4f6;
+            border-radius: 15px;
+            padding: 1.5vh 1vw;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .numbers-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 0.5vw;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        .number-cell {
+            background: white;
+            border: 2px solid #d1d5db;
+            border-radius: 8px;
+            padding: 1.2vh;
+            text-align: center;
+            font-size: 3vh;
+            font-weight: bold;
+            color: #374151;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 5.5vh;
+        }
+
+        .number-cell:hover {
+            transform: scale(1.05);
+            border-color: #667eea;
+        }
+
+        .number-cell.called {
+            background: #10b981;
+            color: white;
+            border-color: #059669;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            padding: 1.5vh;
+            background: #f9fafb;
+            border-radius: 10px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 4vh;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #6b7280;
+            margin-top: 0.5vh;
+            font-size: 1.6vh;
+        }
+
+        .history {
+            margin-top: 1.5vh;
+            padding: 1.5vh;
+            background: #f9fafb;
+            border-radius: 10px;
+            max-height: 10vh;
+            overflow-y: auto;
+        }
+
+        .history-title {
+            font-weight: bold;
+            margin-bottom: 0.8vh;
+            color: #374151;
+            font-size: 1.8vh;
+        }
+
+        .history-numbers {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.8vw;
+        }
+
+        .history-number {
+            background: #667eea;
+            color: white;
+            padding: 0.5vh 0.8vw;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 1.6vh;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎱 BINGO GAME - Woodlands Zone 6 Residents' Network 🎱</h1>
+        
+        <div class="game-area">
+            <div class="left-panel">
+                <div class="call-display">
+                    <div class="rolling-numbers" id="rollingNumbers"></div>
+                    <div class="call-text">Current Call</div>
+                    <div class="current-ball" id="currentBall">-</div>
+                    <div class="call-text" id="callLetter">Ready to Start</div>
+                </div>
+                
+                <div class="controls">
+                    <button class="btn-fullscreen" onclick="toggleFullscreen()">Enter Fullscreen</button>
+                    <button class="btn-call" id="callBtn" onclick="callNumber()">Call Number</button>
+                    <button class="btn-auto" id="autoBtn" onclick="toggleAuto()">Start Auto-Call</button>
+                    <button class="btn-reset" onclick="resetGame()">Reset Game</button>
+                </div>
+
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-value" id="calledCount">0</div>
+                        <div class="stat-label">Called</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="remainingCount">75</div>
+                        <div class="stat-label">Remaining</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="board">
+                <div class="numbers-grid" id="numbersGrid"></div>
+            </div>
+        </div>
+
+        <div class="history">
+            <div class="history-title">Call History (Most Recent First)</div>
+            <div class="history-numbers" id="historyNumbers"></div>
+        </div>
+    </div>
+
+    <script>
+        let availableNumbers = [];
+        let calledNumbers = [];
+        let autoCallInterval = null;
+        let synth = window.speechSynthesis;
+        let voicesLoaded = false;
+
+        // Wait for voices to load on Android
+        function loadVoices() {
+            return new Promise((resolve) => {
+                let voices = synth.getVoices();
+                if (voices.length > 0) {
+                    voicesLoaded = true;
+                    resolve(voices);
+                } else {
+                    synth.onvoiceschanged = () => {
+                        voices = synth.getVoices();
+                        voicesLoaded = true;
+                        resolve(voices);
+                    };
+                }
+            });
+        }
+
+        // Sound generation functions
+        function playCallSound() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.5);
+        }
+
+        function speakNumber(number, letter) {
+            // Cancel any ongoing speech
+            if (synth.speaking) {
+                synth.cancel();
+            }
+            
+            // Add a small delay for Android compatibility
+            setTimeout(() => {
+                try {
+                    const utterance = new SpeechSynthesisUtterance(`${number}`);
+                    utterance.rate = 0.85;
+                    utterance.pitch = 1.0;
+                    utterance.volume = 1.0;
+                    utterance.lang = 'en-US';
+                    
+                    // Try to use a specific voice if available
+                    const voices = synth.getVoices();
+                    if (voices.length > 0) {
+                        // Prefer English voices
+                        const englishVoice = voices.find(v => v.lang.startsWith('en'));
+                        if (englishVoice) {
+                            utterance.voice = englishVoice;
+                        }
+                    }
+                    
+                    synth.speak(utterance);
+                } catch (error) {
+                    console.log('Speech synthesis error:', error);
+                }
+            }, 100);
+        }
+
+        function getRandomColor() {
+            const colors = [
+                '#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', 
+                '#6c5ce7', '#a29bfe', '#fd79a8', '#fdcb6e',
+                '#e17055', '#00b894', '#0984e3', '#6c5ce7'
+            ];
+            return colors[Math.floor(Math.random() * colors.length)];
+        }
+
+        function animateRollingNumbers(finalNumber) {
+            const rollingContainer = document.getElementById('rollingNumbers');
+            rollingContainer.classList.add('active');
+            rollingContainer.innerHTML = '';
+
+            let iterations = 0;
+            const maxIterations = 20;
+            const intervalTime = 100;
+
+            const rollInterval = setInterval(() => {
+                const randomNum = Math.floor(Math.random() * 75) + 1;
+                const numElement = document.createElement('div');
+                numElement.className = 'rolling-number';
+                numElement.textContent = randomNum;
+                numElement.style.color = getRandomColor();
+                
+                rollingContainer.innerHTML = '';
+                rollingContainer.appendChild(numElement);
+
+                iterations++;
+
+                if (iterations >= maxIterations) {
+                    clearInterval(rollInterval);
+                    setTimeout(() => {
+                        rollingContainer.classList.remove('active');
+                        const ballDisplay = document.getElementById('currentBall');
+                        ballDisplay.classList.add('animating');
+                        setTimeout(() => ballDisplay.classList.remove('animating'), 300);
+                    }, 150);
+                }
+            }, intervalTime);
+        }
+
+        function initializeGame() {
+            availableNumbers = [];
+            for (let i = 1; i <= 75; i++) {
+                availableNumbers.push(i);
+            }
+            calledNumbers = [];
+            renderBoard();
+            updateStats();
+            updateHistory();
+            document.getElementById('currentBall').textContent = '-';
+            document.getElementById('callLetter').textContent = 'Ready to Start';
+        }
+
+        function renderBoard() {
+            const grid = document.getElementById('numbersGrid');
+            grid.innerHTML = '';
+            
+            // 12 columns × ~7 rows layout (12x7 = 84, but we only have 75 numbers)
+            // Numbers go horizontally: 1-12, 13-24, 25-36, etc.
+            
+            for (let i = 1; i <= 75; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'number-cell';
+                cell.textContent = i;
+                cell.id = `cell-${i}`;
+                
+                if (calledNumbers.includes(i)) {
+                    cell.classList.add('called');
+                }
+                
+                cell.onclick = () => toggleNumber(i);
+                grid.appendChild(cell);
+            }
+        }
+
+        function toggleNumber(number) {
+            const cell = document.getElementById(`cell-${number}`);
+            if (calledNumbers.includes(number)) {
+                calledNumbers = calledNumbers.filter(n => n !== number);
+                availableNumbers.push(number);
+                availableNumbers.sort((a, b) => a - b);
+                cell.classList.remove('called');
+            } else {
+                calledNumbers.push(number);
+                availableNumbers = availableNumbers.filter(n => n !== number);
+                cell.classList.add('called');
+            }
+            updateStats();
+            updateHistory();
+        }
+
+        function callNumber() {
+            if (availableNumbers.length === 0) {
+                alert('All numbers have been called!');
+                return;
+            }
+
+            // Play sound
+            playCallSound();
+
+            // Start rolling animation
+            const randomIndex = Math.floor(Math.random() * availableNumbers.length);
+            const number = availableNumbers[randomIndex];
+            
+            animateRollingNumbers(number);
+
+            // Update game state after animation
+            setTimeout(() => {
+                availableNumbers.splice(randomIndex, 1);
+                calledNumbers.unshift(number);
+
+                const letter = getLetterForNumber(number);
+                document.getElementById('currentBall').textContent = number;
+                document.getElementById('callLetter').textContent = letter + ' - ' + number;
+
+                // Speak the number
+                speakNumber(number, letter);
+
+                const cell = document.getElementById(`cell-${number}`);
+                if (cell) {
+                    cell.classList.add('called');
+                    
+                    // Simple color blinking with direct style changes
+                    const colors = ['#ef4444', '#f59e0b', '#8b5cf6', '#ef4444', '#f59e0b', '#8b5cf6'];
+                    let colorIndex = 0;
+                    
+                    const blinkInterval = setInterval(() => {
+                        if (colorIndex < colors.length && cell.classList.contains('called')) {
+                            cell.style.backgroundColor = colors[colorIndex];
+                            colorIndex++;
+                        } else {
+                            clearInterval(blinkInterval);
+                            cell.style.backgroundColor = ''; // Reset to CSS default
+                        }
+                    }, 200);
+                }
+
+                updateStats();
+                updateHistory();
+            }, 2100);
+        }
+
+        function getLetterForNumber(number) {
+            if (number <= 15) return 'B';
+            if (number <= 30) return 'I';
+            if (number <= 45) return 'N';
+            if (number <= 60) return 'G';
+            return 'O';
+        }
+
+        function updateStats() {
+            document.getElementById('calledCount').textContent = calledNumbers.length;
+            document.getElementById('remainingCount').textContent = availableNumbers.length;
+        }
+
+        function updateHistory() {
+            const historyDiv = document.getElementById('historyNumbers');
+            historyDiv.innerHTML = '';
+            
+            calledNumbers.slice(0, 20).forEach(number => {
+                const span = document.createElement('span');
+                span.className = 'history-number';
+                span.textContent = getLetterForNumber(number) + number;
+                historyDiv.appendChild(span);
+            });
+        }
+
+        function toggleAuto() {
+            const btn = document.getElementById('autoBtn');
+            const callBtn = document.getElementById('callBtn');
+            
+            if (autoCallInterval) {
+                clearInterval(autoCallInterval);
+                autoCallInterval = null;
+                btn.textContent = 'Start Auto-Call';
+                callBtn.disabled = false;
+            } else {
+                if (availableNumbers.length === 0) {
+                    alert('All numbers have been called!');
+                    return;
+                }
+                autoCallInterval = setInterval(() => {
+                    if (availableNumbers.length > 0) {
+                        callNumber();
+                    } else {
+                        toggleAuto();
+                        alert('All numbers have been called!');
+                    }
+                }, 5000);
+                btn.textContent = 'Stop Auto-Call';
+                callBtn.disabled = true;
+            }
+        }
+
+        function resetGame() {
+            if (autoCallInterval) {
+                toggleAuto();
+            }
+            if (confirm('Are you sure you want to reset the game?')) {
+                initializeGame();
+            }
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    alert('Error attempting to enable fullscreen: ' + err.message);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+
+        // Update fullscreen button text when fullscreen state changes
+        document.addEventListener('fullscreenchange', () => {
+            const btn = document.querySelector('.btn-fullscreen');
+            if (document.fullscreenElement) {
+                btn.textContent = 'Exit Fullscreen';
+            } else {
+                btn.textContent = 'Enter Fullscreen';
+            }
+        });
+
+        // Remote control support - Press any of these keys to toggle fullscreen
+        document.addEventListener('keydown', (e) => {
+            // F key, F11, or Media Play button (179) triggers fullscreen
+            if (e.key === 'f' || e.key === 'F' || e.keyCode === 122 || e.keyCode === 179) {
+                e.preventDefault();
+                toggleFullscreen();
+            }
+            // ESC exits fullscreen
+            if (e.key === 'Escape' && document.fullscreenElement) {
+                document.exitFullscreen();
+            }
+        });
+
+        // Auto-enter fullscreen on page load (optional - remove if not wanted)
+        window.addEventListener('load', () => {
+            // Load voices for Android compatibility
+            loadVoices();
+            
+            // Uncomment the line below to auto-enter fullscreen on load
+            // setTimeout(() => toggleFullscreen(), 1000);
+        });
+
+        // Initialize voices when user first interacts (required for Android)
+        document.addEventListener('click', () => {
+            if (!voicesLoaded) {
+                loadVoices();
+            }
+            // Trigger speech synthesis on first click to "unlock" it on Android
+            if (synth && !synth.speaking) {
+                const utterance = new SpeechSynthesisUtterance('');
+                utterance.volume = 0;
+                synth.speak(utterance);
+            }
+        }, { once: true });
+
+        initializeGame();
+    </script>
+</body>
+</html>

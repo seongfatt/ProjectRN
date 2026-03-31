@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#667eea">
+    <title>Bingo Game - Woodlands Zone 6 Residents' Network</title>
+    <style>
+        :root {
+            --primary: #667eea;
+            --primary-dark: #5568d3;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --info: #3b82f6;
+            --purple: #8b5cf6;
+            --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --text-dark: #1f2937;
+            --text-light: #6b7280;
+            --card-bg: #ffffff;
+            --border-radius: 1rem;
+            --focus-ring: 0 0 0 4px rgba(102, 126, 234, 0.6);
+            --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            --base-font: clamp(0.75rem, 1.8vw, 1.25rem);
+            --container-padding: clamp(0.5rem, 2vw, 2rem);
+            --gap-size: clamp(0.5rem, 1.5vw, 1.5rem);
+            --ball-size: clamp(3rem, 12vw, 8rem);
+            --cell-size: clamp(2.2rem, 4.5vw, 3.5rem);
+            --letter-b: #ef4444;
+            --letter-i: #3b82f6;
+            --letter-n: #10b981;
+            --letter-g: #f59e0b;
+            --letter-o: #8b5cf6;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'Arial', 'Noto Sans', sans-serif;
+            background: var(--bg-gradient);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 0;
+            font-size: var(--base-font);
+            position: relative;
+        }
+
+        .container {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            padding: var(--container-padding);
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: min(99vw, 100%);
+            height: min(99vh, 100%);
+            display: flex;
+            flex-direction: column;
+            gap: var(--gap-size);
+            position: relative;
+            max-width: 100%;
+            max-height: 100%;
+            overflow: hidden;
+            transform-origin: center center;
+            transition: transform 0.3s ease;
+        }
+
+        .header {
+            text-align: center;
+            padding: 0.5rem 0;
+            flex-shrink: 0;
+            min-height: clamp(60px, 10vh, 120px);
+        }
+
+        h1 {
+            color: var(--primary);
+            font-size: clamp(1.2rem, 3.5vw, 2.5rem);
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 0.5rem;
+            padding: 0 1rem;
+        }
+
+        .game-status {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+
+        .status-badge {
+            background: linear-gradient(135deg, var(--primary), var(--purple));
+            color: white;
+            padding: 0.3rem 1rem;
+            border-radius: 2rem;
+            font-size: clamp(0.7rem, 2vw, 1rem);
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            white-space: nowrap;
+        }
+
+        .pattern-display {
+            background: rgba(255,255,255,0.95);
+            border: 3px solid var(--primary);
+            border-radius: 1rem;
+            padding: 0.75rem;
+            margin-top: 0.5rem;
+            text-align: center;
+        }
+
+        .pattern-title {
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 0.5rem;
+            font-size: clamp(0.8rem, 2vw, 1.125rem);
+        }
+
+        .pattern-visual {
+            display: flex;
+            justify-content: center;
+            gap: 0.4rem;
+            font-size: clamp(1.2rem, 4vw, 2.5rem);
+            font-weight: 700;
+        }
+
+        .pattern-cell {
+            width: clamp(2rem, 5vw, 3.5rem);
+            height: clamp(2rem, 5vw, 3.5rem);
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #e5e7eb;
+            color: var(--text-light);
+            transition: var(--transition);
+        }
+
+        .pattern-cell.active {
+            background: var(--success);
+            color: white;
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .game-area {
+            display: grid;
+            grid-template-columns: minmax(250px, 1fr) 2.5fr;
+            gap: var(--gap-size);
+            flex: 1;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        @media (max-width: 900px) {
+            .game-area {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr;
+            }
+        }
+
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            gap: var(--gap-size);
+            min-width: 0;
+            overflow-y: auto;
+        }
+
+        /* Enhanced Call Display with Shuffle */
+        .call-display {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: var(--border-radius);
+            padding: clamp(1rem, 3vw, 2rem);
+            text-align: center;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            min-height: clamp(200px, 35vh, 300px);
+            box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
+            overflow: hidden;
+            transition: var(--transition);
+        }
+
+        .call-display.pulse {
+            animation: callPulse 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes callPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4); }
+            50% { transform: scale(1.02); box-shadow: 0 20px 60px rgba(102, 126, 234, 0.6); }
+        }
+
+        .call-label {
+            font-size: clamp(0.9rem, 2vw, 1.5rem);
+            opacity: 0.95;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .current-ball {
+            font-size: var(--ball-size);
+            font-weight: 800;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.3);
+            line-height: 1;
+            margin: 0.5rem 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        /* Shuffle Animation */
+        .current-ball.shuffle {
+            animation: shuffleShake 0.1s ease-in-out;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        @keyframes shuffleShake {
+            0%, 100% { transform: translateX(0) scale(1); }
+            25% { transform: translateX(-5px) scale(1.05); }
+            75% { transform: translateX(5px) scale(0.95); }
+        }
+
+        .current-ball.animate {
+            animation: ballBounce 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes ballBounce {
+            0%, 100% { transform: scale(1) rotate(0deg); }
+            25% { transform: scale(1.15) rotate(-5deg); }
+            50% { transform: scale(1) rotate(0deg); }
+            75% { transform: scale(1.1) rotate(5deg); }
+        }
+
+        .call-letter {
+            font-size: clamp(1.5rem, 5vw, 3.5rem);
+            font-weight: 800;
+            margin-top: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+            letter-spacing: 0.1em;
+        }
+
+        .call-letter.b { color: #fecaca; }
+        .call-letter.i { color: #bfdbfe; }
+        .call-letter.n { color: #a7f3d0; }
+        .call-letter.g { color: #fde68a; }
+        .call-letter.o { color: #ddd6fe; }
+
+        /* Rolling Numbers Container */
+        .rolling-numbers {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.15s ease;
+            z-index: 1;
+        }
+
+        .rolling-numbers.active {
+            opacity: 1;
+        }
+
+        .rolling-number {
+            font-size: clamp(3rem, 10vw, 6rem);
+            font-weight: 800;
+            animation: rollFast 0.1s ease-out;
+            background: linear-gradient(135deg, #fff 0%, #f0f0f0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        @keyframes rollFast {
+            0% { transform: translateY(-40%) scale(0.8) rotate(-10deg); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateY(40%) scale(1.2) rotate(10deg); opacity: 0; }
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: clamp(0.5rem, 1.2vw, 0.875rem);
+            flex-shrink: 0;
+        }
+
+        button {
+            padding: clamp(0.75rem, 2vw, 1.25rem);
+            font-size: clamp(0.8rem, 2.2vw, 1.125rem);
+            font-weight: 700;
+            border: none;
+            border-radius: 0.875rem;
+            cursor: pointer;
+            transition: var(--transition);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: white;
+            position: relative;
+            outline: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            white-space: nowrap;
+            width: 100%;
+            touch-action: manipulation;
+        }
+
+        button:focus-visible {
+            box-shadow: var(--focus-ring), 0 4px 12px rgba(0,0,0,0.15);
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0) scale(0.98);
+        }
+
+        button:disabled {
+            background: #d1d5db !important;
+            cursor: not-allowed;
+            transform: none;
+            opacity: 0.6;
+            box-shadow: none;
+        }
+
+        .btn-fullscreen { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+        .btn-fullscreen:hover:not(:disabled) { background: linear-gradient(135deg, #7c3aed, #6d28d9); box-shadow: 0 8px 20px rgba(139, 92, 246, 0.4); }
+        
+        .btn-call { 
+            background: linear-gradient(135deg, #10b981, #059669); 
+            font-size: clamp(1rem, 3vw, 1.5rem);
+            padding: clamp(1rem, 3vw, 1.75rem);
+        }
+        .btn-call:hover:not(:disabled) { background: linear-gradient(135deg, #059669, #047857); box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4); }
+        
+        .btn-reset { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        .btn-reset:hover:not(:disabled) { background: linear-gradient(135deg, #dc2626, #b91c1c); box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4); }
+        
+        .btn-auto { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .btn-auto:hover:not(:disabled) { background: linear-gradient(135deg, #2563eb, #1d4ed8); box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4); }
+
+        .btn-sound {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .stats-panel {
+            background: linear-gradient(135deg, #f9fafb, #f3f4f6);
+            border-radius: 0.875rem;
+            padding: clamp(0.75rem, 1.5vw, 1rem);
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: clamp(0.4rem, 1vw, 0.75rem);
+            flex-shrink: 0;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 0.4rem;
+            background: white;
+            border-radius: 0.625rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        .stat-value {
+            font-size: clamp(1.2rem, 3.5vw, 2rem);
+            font-weight: 800;
+            color: var(--primary);
+            line-height: 1;
+        }
+
+        .stat-label {
+            color: var(--text-light);
+            margin-top: 0.25rem;
+            font-size: clamp(0.65rem, 1.8vw, 0.85rem);
+            font-weight: 600;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--purple));
+            transition: width 0.5s ease;
+            border-radius: 4px;
+        }
+
+        .column-stats {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 0.4rem;
+            margin-top: 0.4rem;
+        }
+
+        .col-stat {
+            text-align: center;
+            padding: 0.3rem;
+            border-radius: 0.5rem;
+            font-weight: 700;
+            font-size: clamp(0.65rem, 1.8vw, 0.85rem);
+            color: white;
+        }
+
+        .col-stat.b { background: var(--letter-b); }
+        .col-stat.i { background: var(--letter-i); }
+        .col-stat.n { background: var(--letter-n); }
+        .col-stat.g { background: var(--letter-g); }
+        .col-stat.o { background: var(--letter-o); }
+
+        .board {
+            background: linear-gradient(135deg, #f9fafb, #f3f4f6);
+            border-radius: var(--border-radius);
+            padding: clamp(0.75rem, 2vw, 1.25rem);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+
+        .board-header {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: clamp(0.2rem, 0.6vw, 0.4rem);
+            margin-bottom: 0.5rem;
+            padding: 0 0.25rem;
+            flex-shrink: 0;
+        }
+
+        .board-letter {
+            text-align: center;
+            font-weight: 800;
+            font-size: clamp(0.7rem, 2.5vw, 1.25rem);
+            padding: 0.3rem;
+            border-radius: 0.5rem;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+        }
+
+        .board-letter.b { background: var(--letter-b); }
+        .board-letter.i { background: var(--letter-i); }
+        .board-letter.n { background: var(--letter-n); }
+        .board-letter.g { background: var(--letter-g); }
+        .board-letter.o { background: var(--letter-o); }
+
+        .numbers-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: clamp(0.2rem, 0.6vw, 0.5rem);
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 0.25rem;
+            min-height: 0;
+        }
+
+        .number-cell {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 0.625rem;
+            padding: clamp(0.3rem, 1vw, 0.625rem);
+            text-align: center;
+            font-size: clamp(0.75rem, 2.2vw, 1.125rem);
+            font-weight: 700;
+            color: var(--text-dark);
+            transition: var(--transition);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            aspect-ratio: 1;
+            min-height: 0;
+            outline: none;
+            position: relative;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+            touch-action: manipulation;
+        }
+
+        .number-cell:focus-visible {
+            box-shadow: var(--focus-ring), 0 4px 12px rgba(0,0,0,0.15);
+            border-color: var(--primary);
+            z-index: 10;
+            transform: scale(1.05);
+        }
+
+        .number-cell:hover:not(.called) {
+            transform: translateY(-2px) scale(1.03);
+            border-color: var(--primary);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.3);
+        }
+
+        /* Called Number - Base Style */
+        .number-cell.called {
+            color: white;
+            font-weight: 800;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            animation: cellCalled 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes cellCalled {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
+
+        .number-cell.called::after {
+            content: '✓';
+            position: absolute;
+            top: 2px;
+            right: 4px;
+            font-size: 0.75rem;
+            font-weight: 800;
+        }
+
+        /* BLINKING ANIMATION - Rainbow Effect */
+        .number-cell.blinking {
+            animation: rainbowBlink 0.8s ease-in-out;
+            z-index: 5;
+        }
+
+        @keyframes rainbowBlink {
+            0% { 
+                background: var(--letter-b); 
+                transform: scale(1);
+                box-shadow: 0 0 20px var(--letter-b);
+            }
+            14% { 
+                background: var(--letter-i); 
+                transform: scale(1.15);
+                box-shadow: 0 0 30px var(--letter-i);
+            }
+            28% { 
+                background: var(--letter-n); 
+                transform: scale(1.05);
+                box-shadow: 0 0 25px var(--letter-n);
+            }
+            42% { 
+                background: var(--letter-g); 
+                transform: scale(1.12);
+                box-shadow: 0 0 35px var(--letter-g);
+            }
+            57% { 
+                background: var(--letter-o); 
+                transform: scale(1.08);
+                box-shadow: 0 0 28px var(--letter-o);
+            }
+            71% { 
+                background: var(--warning); 
+                transform: scale(1.1);
+                box-shadow: 0 0 32px var(--warning);
+            }
+            85% { 
+                background: var(--danger); 
+                transform: scale(1.05);
+                box-shadow: 0 0 25px var(--danger);
+            }
+            100% { 
+                transform: scale(1);
+            }
+        }
+
+        /* Column-based coloring for called numbers */
+        .number-cell.called[data-col="b"] { 
+            background: linear-gradient(135deg, #f87171, #ef4444); 
+            border-color: #dc2626; 
+        }
+        .number-cell.called[data-col="i"] { 
+            background: linear-gradient(135deg, #60a5fa, #3b82f6); 
+            border-color: #2563eb; 
+        }
+        .number-cell.called[data-col="n"] { 
+            background: linear-gradient(135deg, #34d399, #10b981); 
+            border-color: #059669; 
+        }
+        .number-cell.called[data-col="g"] { 
+            background: linear-gradient(135deg, #fbbf24, #f59e0b); 
+            border-color: #d97706; 
+        }
+        .number-cell.called[data-col="o"] { 
+            background: linear-gradient(135deg, #a78bfa, #8b5cf6); 
+            border-color: #7c3aed; 
+        }
+
+        .number-cell[data-col="b"] { border-left: 4px solid var(--letter-b); }
+        .number-cell[data-col="i"] { border-left: 4px solid var(--letter-i); }
+        .number-cell[data-col="n"] { border-left: 4px solid var(--letter-n); }
+        .number-cell[data-col="g"] { border-left: 4px solid var(--letter-g); }
+        .number-cell[data-col="o"] { border-left: 4px solid var(--letter-o); }
+
+        .history {
+            background: linear-gradient(135deg, #f9fafb, #f3f4f6);
+            border-radius: 0.875rem;
+            padding: clamp(0.625rem, 1.5vw, 1rem);
+            box-shadow: inset 0 2px 8px rgba(0,0,0,0.05);
+            flex-shrink: 0;
+            max-height: clamp(60px, 12vh, 100px);
+            overflow-y: auto;
+        }
+
+        .history-title {
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--text-dark);
+            font-size: clamp(0.75rem, 2vw, 1rem);
+        }
+
+        .history-numbers {
+            display: flex;
+            flex-wrap: wrap;
+            gap: clamp(0.3rem, 0.8vw, 0.5rem);
+        }
+
+        .history-number {
+            padding: clamp(0.3rem, 0.8vw, 0.5rem) clamp(0.6rem, 1.2vw, 0.875rem);
+            border-radius: 0.5rem;
+            font-weight: 700;
+            font-size: clamp(0.75rem, 2vw, 1rem);
+            color: white;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            min-width: clamp(2.5rem, 5vw, 4rem);
+            text-align: center;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px) scale(0.8); }
+            to { opacity: 1; transform: translateX(0) scale(1); }
+        }
+
+        .history-number.b { background: var(--letter-b); }
+        .history-number.i { background: var(--letter-i); }
+        .history-number.n { background: var(--letter-n); }
+        .history-number.g { background: var(--letter-g); }
+        .history-number.o { background: var(--letter-o); }
+
+        .shortcuts {
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 0.625rem;
+            padding: 0.625rem;
+            margin-top: auto;
+            font-size: clamp(0.65rem, 1.8vw, 0.8rem);
+            color: var(--text-light);
+            flex-shrink: 0;
+        }
+
+        .shortcuts-title {
+            font-weight: 700;
+            margin-bottom: 0.4rem;
+            color: var(--primary);
+        }
+
+        .shortcut-list {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.25rem;
+        }
+
+        .shortcut-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .key {
+            background: white;
+            padding: 0.15rem 0.4rem;
+            border-radius: 0.375rem;
+            font-weight: 700;
+            font-family: monospace;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            min-width: 1.75rem;
+            text-align: center;
+            font-size: clamp(0.65rem, 1.8vw, 0.8rem);
+        }
+
+        #confettiCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        .mute-indicator {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 700;
+            display: none;
+            z-index: 100;
+        }
+
+        .mute-indicator.show {
+            display: block;
+            animation: fadeInOut 2s ease;
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-10px); }
+            10% { opacity: 1; transform: translateY(0); }
+            90% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-10px); }
+        }
+
+        @media (max-width: 1000px) {
+            .column-stats { font-size: 0.75rem; }
+            .board-header { display: none; }
+        }
+
+        @media (orientation: landscape) and (max-height: 600px) {
+            .container { padding: 0.75rem; gap: 0.75rem; }
+            .game-area { gap: 0.75rem; }
+            .call-display { min-height: 150px; }
+            .current-ball { font-size: clamp(2.5rem, 8vw, 5rem); }
+            .call-letter { font-size: clamp(1.2rem, 4vw, 2.5rem); }
+        }
+
+        @media (orientation: portrait) {
+            .game-area {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .pattern-visual { gap: 0.25rem; }
+            .pattern-cell {
+                width: clamp(1.5rem, 8vw, 2.5rem);
+                height: clamp(1.5rem, 8vw, 2.5rem);
+                font-size: clamp(1rem, 5vw, 1.75rem);
+            }
+            .numbers-grid { gap: 0.15rem; }
+            .number-cell {
+                border-radius: 0.375rem;
+                font-size: clamp(0.65rem, 3vw, 0.875rem);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+
+        @media (display-mode: tv) {
+            :root { --base-font: clamp(1rem, 2.5vw, 1.5rem); }
+            body { padding: 1vh 1vw; }
+            .container { width: 98vw; height: 98vh; }
+            button {
+                min-height: clamp(3rem, 8vh, 4rem);
+                font-size: clamp(1rem, 3vw, 1.375rem);
+            }
+            .number-cell {
+                font-size: clamp(1rem, 3vw, 1.5rem);
+            }
+            .current-ball { font-size: clamp(4rem, 15vw, 10rem); }
+        }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary-dark); }
+
+        @media (pointer: coarse) {
+            * { touch-action: manipulation; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="confettiCanvas"></canvas>
+    <div class="mute-indicator" id="muteIndicator">🔇 Sound Muted</div>
+    
+    <div class="container" id="mainContainer">
+        <div class="header">
+            <h1>🎱 BINGO GAME - Woodlands Zone 6 Residents' Network 🎱</h1>
+            <div class="game-status">
+                <span class="status-badge" id="gameTimer">⏱️ 00:00</span>
+                <span class="status-badge" id="gameProgress">0/75 Called</span>
+            </div>
+            <div class="pattern-display">
+                <div class="pattern-title">Current Pattern: Straight Line</div>
+                <div class="pattern-visual" id="patternVisual">
+                    <div class="pattern-cell">B</div>
+                    <div class="pattern-cell">I</div>
+                    <div class="pattern-cell active">N</div>
+                    <div class="pattern-cell">G</div>
+                    <div class="pattern-cell">O</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="game-area">
+            <div class="left-panel">
+                <div class="call-display" id="callDisplay" aria-live="polite">
+                    <div class="rolling-numbers" id="rollingNumbers" aria-hidden="true"></div>
+                    <div class="call-label">Current Call</div>
+                    <div class="current-ball" id="currentBall">-</div>
+                    <div class="call-letter" id="callLetter">READY</div>
+                </div>
+                
+                <div class="controls" role="group" aria-label="Game controls">
+                    <button class="btn-call" id="callBtn" onclick="callNumber()" aria-label="Call next random bingo number">📢 Call Number</button>
+                    <button class="btn-auto" id="autoBtn" onclick="toggleAuto()" aria-label="Toggle auto-call mode">▶️ Start Auto-Call</button>
+                    <button class="btn-fullscreen" id="fullscreenBtn" onclick="toggleFullscreen()" aria-label="Toggle fullscreen mode">⛶ Enter Fullscreen</button>
+                    <button class="btn-sound" id="soundBtn" onclick="toggleSound()" aria-label="Toggle sound on/off">🔊 Sound On</button>
+                    <button class="btn-reset" onclick="resetGame()" aria-label="Reset the bingo game">🔄 Reset Game</button>
+                </div>
+
+                <div class="stats-panel">
+                    <div class="stat-item">
+                        <div class="stat-value" id="calledCount">0</div>
+                        <div class="stat-label">Called</div>
+                        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width: 0%"></div></div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="remainingCount">75</div>
+                        <div class="stat-label">Remaining</div>
+                    </div>
+                    <div class="column-stats">
+                        <div class="col-stat b" id="colB">B: 0/15</div>
+                        <div class="col-stat i" id="colI">I: 0/15</div>
+                        <div class="col-stat n" id="colN">N: 0/15</div>
+                        <div class="col-stat g" id="colG">G: 0/15</div>
+                        <div class="col-stat o" id="colO">O: 0/15</div>
+                    </div>
+                </div>
+
+                <div class="shortcuts">
+                    <div class="shortcuts-title">⌨️ Remote Control Shortcuts</div>
+                    <div class="shortcut-list">
+                        <div class="shortcut-item"><span class="key">Enter</span> Call Number</div>
+                        <div class="shortcut-item"><span class="key">Space</span> Pause/Resume</div>
+                        <div class="shortcut-item"><span class="key">R</span> Reset Game</div>
+                        <div class="shortcut-item"><span class="key">F</span> Fullscreen</div>
+                        <div class="shortcut-item"><span class="key">M</span> Mute Sound</div>
+                        <div class="shortcut-item"><span class="key">↑↓←→</span> Navigate</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="board">
+                <div class="board-header">
+                    <div class="board-letter b">B</div><div class="board-letter b">1-15</div>
+                    <div class="board-letter i">I</div><div class="board-letter i">16-30</div>
+                    <div class="board-letter n">N</div><div class="board-letter n">31-45</div>
+                    <div class="board-letter g">G</div><div class="board-letter g">46-60</div>
+                    <div class="board-letter o">O</div><div class="board-letter o">61-75</div>
+                </div>
+                <div class="numbers-grid" id="numbersGrid" role="grid" aria-label="Bingo number board"></div>
+            </div>
+        </div>
+
+        <div class="history">
+            <div class="history-title">📜 Call History (Most Recent First)</div>
+            <div class="history-numbers" id="historyNumbers" aria-live="off"></div>
+        </div>
+    </div>
+
+    <script>
+        const TVConfig = {
+            isTV: /Android.*TV|SmartTV|HbbTV|CrKey|Netflix|Web0S|Tizen/i.test(navigator.userAgent),
+            focusableSelector: 'button, .number-cell[tabindex]:not([tabindex="-1"])'
+        };
+
+        let availableNumbers = [];
+        let calledNumbers = [];
+        let autoCallInterval = null;
+        let synth = window.speechSynthesis;
+        let voicesLoaded = false;
+        let audioContext = null;
+        let currentFocusedCell = null;
+        let soundEnabled = true;
+        let gameStartTime = null;
+        let gameTimerInterval = null;
+        let columnStats = { b: 0, i: 0, n: 0, g: 0, o: 0 };
+
+        function autoFitContainer() {
+            const container = document.getElementById('mainContainer');
+            if (!container) return;
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+            container.style.transform = 'scale(1)';
+            const containerWidth = container.offsetWidth;
+            const containerHeight = container.offsetHeight;
+            const scaleX = windowWidth / containerWidth;
+            const scaleY = windowHeight / containerHeight;
+            const scale = Math.min(scaleX, scaleY, 1);
+            if (scale < 1) {
+                container.style.transform = `scale(${scale})`;
+            }
+        }
+
+        function initAudioContext() {
+            if (!audioContext) {
+                try {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                } catch (e) { console.warn('AudioContext not supported:', e); }
+            }
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume().catch(() => {});
+            }
+        }
+
+        function playCallSound() {
+            if (!soundEnabled) return;
+            initAudioContext();
+            if (!audioContext) return;
+            try {
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                oscillator.frequency.value = 523.25;
+                oscillator.type = 'sine';
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.5);
+            } catch (e) { console.warn('Sound play failed:', e); }
+        }
+
+        function playWinSound() {
+            if (!soundEnabled) return;
+            initAudioContext();
+            if (!audioContext) return;
+            const notes = [523.25, 659.25, 783.99, 1046.50];
+            notes.forEach((freq, i) => {
+                setTimeout(() => {
+                    const osc = audioContext.createOscillator();
+                    const gain = audioContext.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioContext.destination);
+                    osc.frequency.value = freq;
+                    osc.type = 'triangle';
+                    gain.gain.setValueAtTime(0.3, audioContext.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                    osc.start(audioContext.currentTime);
+                    osc.stop(audioContext.currentTime + 0.3);
+                }, i * 150);
+            });
+        }
+
+        function loadVoices() {
+            return new Promise((resolve) => {
+                const load = () => {
+                    const voices = synth.getVoices();
+                    if (voices && voices.length > 0) { voicesLoaded = true; resolve(voices); }
+                };
+                load();
+                if (!voicesLoaded) {
+                    synth.onvoiceschanged = load;
+                    const poll = setInterval(() => {
+                        if (synth.getVoices().length > 0) { clearInterval(poll); load(); }
+                    }, 500);
+                    setTimeout(() => clearInterval(poll), 5000);
+                }
+            });
+        }
+
+        function speakNumber(number, letter) {
+            if (!soundEnabled || !synth) return;
+            if (synth.speaking) synth.cancel();
+            setTimeout(() => {
+                try {
+                    const utterance = new SpeechSynthesisUtterance(`${letter} ... ${number}`);
+                    utterance.rate = 0.9; utterance.pitch = 1.0; utterance.volume = 1.0; utterance.lang = 'en-US';
+                    const voices = synth.getVoices();
+                    if (voices && voices.length > 0) {
+                        const englishVoice = voices.find(v => v.lang && v.lang.startsWith('en')) || voices[0];
+                        if (englishVoice) utterance.voice = englishVoice;
+                    }
+                    synth.speak(utterance);
+                } catch (error) { console.warn('Speech synthesis error:', error); }
+            }, TVConfig.isTV ? 150 : 50);
+        }
+
+        function getLetterForNumber(number) {
+            if (number <= 15) return 'B';
+            if (number <= 30) return 'I';
+            if (number <= 45) return 'N';
+            if (number <= 60) return 'G';
+            return 'O';
+        }
+
+        function getColumnForNumber(number) {
+            return getLetterForNumber(number).toLowerCase();
+        }
+
+        // ===== SHUFFLE ANIMATION =====
+        function shuffleNumbersAnimation(finalNumber) {
+            const ball = document.getElementById('currentBall');
+            const rollingContainer = document.getElementById('rollingNumbers');
+            const display = document.getElementById('callDisplay');
+            
+            // Add shuffle class for shake effect
+            ball.classList.add('shuffle');
+            display.classList.add('pulse');
+            
+            let shuffleCount = 0;
+            const maxShuffles = 15;
+            const shuffleInterval = 80;
+            
+            const shuffleInt = setInterval(() => {
+                const randomNum = Math.floor(Math.random() * 75) + 1;
+                ball.textContent = randomNum;
+                shuffleCount++;
+                
+                if (shuffleCount >= maxShuffles) {
+                    clearInterval(shuffleInt);
+                    // Show final number
+                    ball.textContent = finalNumber;
+                    ball.classList.remove('shuffle');
+                    setTimeout(() => {
+                        ball.classList.add('animate');
+                        setTimeout(() => ball.classList.remove('animate'), 600);
+                    }, 100);
+                }
+            }, shuffleInterval);
+        }
+
+        function startConfetti() {
+            const canvas = document.getElementById('confettiCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            const particles = [];
+            const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'];
+            for (let i = 0; i < 150; i++) {
+                particles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height - canvas.height,
+                    vx: Math.random() * 4 - 2,
+                    vy: Math.random() * 4 + 2,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    size: Math.random() * 8 + 4,
+                    rotation: Math.random() * 360,
+                    rotationSpeed: Math.random() * 10 - 5
+                });
+            }
+            let animationId;
+            function animate() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                particles.forEach(p => {
+                    p.x += p.vx; p.y += p.vy; p.rotation += p.rotationSpeed;
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate((p.rotation * Math.PI) / 180);
+                    ctx.fillStyle = p.color;
+                    ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                    ctx.restore();
+                    if (p.y > canvas.height) { p.y = -20; p.x = Math.random() * canvas.width; }
+                });
+                animationId = requestAnimationFrame(animate);
+            }
+            animate();
+            setTimeout(() => { cancelAnimationFrame(animationId); ctx.clearRect(0, 0, canvas.width, canvas.height); }, 5000);
+        }
+
+        function initializeGame() {
+            availableNumbers = Array.from({length: 75}, (_, i) => i + 1);
+            calledNumbers = [];
+            columnStats = { b: 0, i: 0, n: 0, g: 0, o: 0 };
+            gameStartTime = Date.now();
+            if (gameTimerInterval) clearInterval(gameTimerInterval);
+            gameTimerInterval = setInterval(updateTimer, 1000);
+            renderBoard();
+            updateStats();
+            updateHistory();
+            updatePattern();
+            document.getElementById('currentBall').textContent = '-';
+            document.getElementById('callLetter').textContent = 'READY';
+            document.getElementById('callLetter').className = 'call-letter';
+            currentFocusedCell = null;
+            setTimeout(autoFitContainer, 100);
+        }
+
+        function updateTimer() {
+            if (!gameStartTime) return;
+            const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
+            const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
+            const seconds = String(elapsed % 60).padStart(2, '0');
+            document.getElementById('gameTimer').textContent = `⏱️ ${minutes}:${seconds}`;
+        }
+
+        function renderBoard() {
+            const grid = document.getElementById('numbersGrid');
+            grid.innerHTML = '';
+            for (let i = 1; i <= 75; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'number-cell';
+                cell.textContent = i;
+                cell.id = `cell-${i}`;
+                cell.setAttribute('role', 'gridcell');
+                cell.setAttribute('aria-label', `Number ${i}`);
+                cell.setAttribute('data-col', getColumnForNumber(i));
+                cell.tabIndex = -1;
+                if (calledNumbers.includes(i)) {
+                    cell.classList.add('called');
+                    cell.setAttribute('aria-selected', 'true');
+                } else {
+                    cell.setAttribute('aria-selected', 'false');
+                }
+                cell.addEventListener('click', () => toggleNumber(i));
+                cell.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleNumber(i); }
+                });
+                grid.appendChild(cell);
+            }
+            if (TVConfig.isTV) setupGridNavigation();
+        }
+
+        function setupGridNavigation() {
+            const cells = Array.from(document.querySelectorAll('.number-cell'));
+            const cols = 12;
+            cells.forEach((cell, index) => {
+                cell.addEventListener('focus', () => {
+                    currentFocusedCell = index;
+                    cell.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+                });
+            });
+            document.getElementById('numbersGrid').addEventListener('keydown', (e) => {
+                if (!currentFocusedCell && cells.length > 0) {
+                    cells[0].tabIndex = 0; cells[0].focus(); currentFocusedCell = 0;
+                    e.preventDefault(); return;
+                }
+                let newIndex = currentFocusedCell;
+                const col = currentFocusedCell % cols;
+                if (e.key === 'ArrowUp') { newIndex = Math.max(0, currentFocusedCell - cols); e.preventDefault(); }
+                else if (e.key === 'ArrowDown') { newIndex = Math.min(cells.length - 1, currentFocusedCell + cols); e.preventDefault(); }
+                else if (e.key === 'ArrowLeft' && col > 0) { newIndex = currentFocusedCell - 1; e.preventDefault(); }
+                else if (e.key === 'ArrowRight' && col < cols - 1) { newIndex = currentFocusedCell + 1; e.preventDefault(); }
+                if (newIndex !== currentFocusedCell && cells[newIndex]) {
+                    cells[currentFocusedCell].tabIndex = -1;
+                    cells[newIndex].tabIndex = 0;
+                    cells[newIndex].focus();
+                    currentFocusedCell = newIndex;
+                }
+            });
+        }
+
+        function toggleNumber(number) {
+            const cell = document.getElementById(`cell-${number}`);
+            if (!cell) return;
+            if (calledNumbers.includes(number)) {
+                calledNumbers = calledNumbers.filter(n => n !== number);
+                availableNumbers.push(number);
+                availableNumbers.sort((a, b) => a - b);
+                cell.classList.remove('called');
+                cell.setAttribute('aria-selected', 'false');
+                columnStats[getColumnForNumber(number)]--;
+            } else {
+                calledNumbers.push(number);
+                availableNumbers = availableNumbers.filter(n => n !== number);
+                cell.classList.add('called');
+                cell.setAttribute('aria-selected', 'true');
+                columnStats[getColumnForNumber(number)]++;
+            }
+            updateStats();
+            updateHistory();
+        }
+
+        function callNumber() {
+            if (availableNumbers.length === 0) {
+                showAlert('🎉 All numbers have been called!');
+                if (calledNumbers.length === 75) { playWinSound(); startConfetti(); }
+                return;
+            }
+            playCallSound();
+            const randomIndex = Math.floor(Math.random() * availableNumbers.length);
+            const number = availableNumbers[randomIndex];
+            const letter = getLetterForNumber(number);
+            
+            // Start shuffle animation
+            shuffleNumbersAnimation(number);
+            
+            setTimeout(() => {
+                availableNumbers.splice(randomIndex, 1);
+                calledNumbers.unshift(number);
+                const col = getColumnForNumber(number);
+                columnStats[col]++;
+                
+                // Update display
+                document.getElementById('callLetter').textContent = letter;
+                document.getElementById('callLetter').className = `call-letter ${col}`;
+                
+                // Speak
+                speakNumber(number, letter);
+                
+                // Update and BLINK the cell
+                const cell = document.getElementById(`cell-${number}`);
+                if (cell) {
+                    cell.classList.add('called');
+                    cell.setAttribute('aria-selected', 'true');
+                    // Trigger blinking animation
+                    cell.classList.remove('blinking');
+                    void cell.offsetWidth; // Force reflow
+                    cell.classList.add('blinking');
+                }
+                
+                setTimeout(() => {
+                    document.getElementById('callDisplay').classList.remove('pulse');
+                }, 600);
+                
+                updateStats();
+                updateHistory();
+                updatePattern();
+            }, 1400); // Wait for shuffle to finish
+        }
+
+        function updateStats() {
+            document.getElementById('calledCount').textContent = calledNumbers.length;
+            document.getElementById('remainingCount').textContent = availableNumbers.length;
+            document.getElementById('gameProgress').textContent = `${calledNumbers.length}/75 Called`;
+            const progress = (calledNumbers.length / 75) * 100;
+            document.getElementById('progressFill').style.width = `${progress}%`;
+            document.getElementById('colB').textContent = `B: ${columnStats.b}/15`;
+            document.getElementById('colI').textContent = `I: ${columnStats.i}/15`;
+            document.getElementById('colN').textContent = `N: ${columnStats.n}/15`;
+            document.getElementById('colG').textContent = `G: ${columnStats.g}/15`;
+            document.getElementById('colO').textContent = `O: ${columnStats.o}/15`;
+        }
+
+        function updateHistory() {
+            const historyDiv = document.getElementById('historyNumbers');
+            historyDiv.innerHTML = '';
+            calledNumbers.slice(0, 20).forEach((number, index) => {
+                const span = document.createElement('span');
+                const letter = getLetterForNumber(number);
+                const col = getColumnForNumber(number);
+                span.className = `history-number ${col}`;
+                span.textContent = `${letter}${number}`;
+                span.setAttribute('aria-label', `Called: ${letter} ${number}`);
+                if (index === 0) span.style.animation = 'slideIn 0.3s ease';
+                historyDiv.appendChild(span);
+            });
+        }
+
+        function updatePattern() {
+            const cells = document.querySelectorAll('.pattern-cell');
+            const letters = ['B', 'I', 'N', 'G', 'O'];
+            cells.forEach((cell, i) => {
+                const letter = letters[i];
+                const col = letter.toLowerCase();
+                if (columnStats[col] > 0) cell.classList.add('active');
+                else cell.classList.remove('active');
+            });
+        }
+
+        function toggleAuto() {
+            const btn = document.getElementById('autoBtn');
+            const callBtn = document.getElementById('callBtn');
+            if (autoCallInterval) {
+                clearInterval(autoCallInterval);
+                autoCallInterval = null;
+                btn.textContent = '▶️ Start Auto-Call';
+                callBtn.disabled = false;
+                btn.setAttribute('aria-pressed', 'false');
+            } else {
+                if (availableNumbers.length === 0) { showAlert('All numbers have been called!'); return; }
+                const interval = TVConfig.isTV ? 7000 : 5000;
+                autoCallInterval = setInterval(() => {
+                    if (availableNumbers.length > 0) callNumber();
+                    else { toggleAuto(); }
+                }, interval);
+                btn.textContent = '⏸️ Stop Auto-Call';
+                callBtn.disabled = true;
+                btn.setAttribute('aria-pressed', 'true');
+            }
+        }
+
+        function resetGame() {
+            if (autoCallInterval) toggleAuto();
+            if (confirm('Reset the bingo game? All progress will be lost.')) {
+                if (gameTimerInterval) clearInterval(gameTimerInterval);
+                initializeGame();
+            }
+        }
+
+        function showAlert(message) {
+            const display = document.querySelector('.call-display');
+            const originalLetter = document.getElementById('callLetter').textContent;
+            const originalClass = document.getElementById('callLetter').className;
+            document.getElementById('callLetter').textContent = '⚠️';
+            document.getElementById('currentBall').textContent = message;
+            display.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+            setTimeout(() => {
+                document.getElementById('callLetter').textContent = originalLetter;
+                document.getElementById('callLetter').className = originalClass;
+                document.getElementById('currentBall').textContent = calledNumbers[0] || '-';
+                display.style.background = '';
+            }, 2500);
+        }
+
+        function toggleFullscreen() {
+            const btn = document.getElementById('fullscreenBtn');
+            const docEl = document.documentElement;
+            const requestFS = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+            const exitFS = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                if (requestFS) {
+                    requestFS.call(docEl).catch(err => {
+                        console.warn('Fullscreen error:', err);
+                        document.body.style.padding = '0';
+                        document.querySelector('.container').style.cssText = 'width:100vw;height:100vh;border-radius:0;margin:0;padding:2vw';
+                        btn.textContent = '⛶ Exit Fullscreen';
+                    });
+                }
+            } else {
+                if (exitFS) exitFS.call(document).catch(() => {});
+                document.body.style.padding = '';
+                document.querySelector('.container').style.cssText = '';
+                btn.textContent = '⛶ Enter Fullscreen';
+            }
+            setTimeout(autoFitContainer, 300);
+        }
+
+        function updateFullscreenButton() {
+            const btn = document.getElementById('fullscreenBtn');
+            const isFS = document.fullscreenElement || document.webkitFullscreenElement;
+            btn.textContent = isFS ? '⛶ Exit Fullscreen' : '⛶ Enter Fullscreen';
+            btn.setAttribute('aria-pressed', isFS ? 'true' : 'false');
+        }
+
+        document.addEventListener('fullscreenchange', updateFullscreenButton);
+        document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            const btn = document.getElementById('soundBtn');
+            const indicator = document.getElementById('muteIndicator');
+            if (soundEnabled) {
+                btn.textContent = '🔊 Sound On';
+                btn.classList.remove('btn-danger');
+                initAudioContext();
+            } else {
+                btn.textContent = '🔇 Sound Off';
+                btn.classList.add('btn-danger');
+                indicator.classList.add('show');
+                if (synth && synth.speaking) synth.cancel();
+                setTimeout(() => indicator.classList.remove('show'), 2000);
+            }
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (TVConfig.isTV && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) {
+                if (e.target === document.body || e.target === document.documentElement) e.preventDefault();
+            }
+            if (e.key === 'f' || e.key === 'F' || e.keyCode === 122) { e.preventDefault(); toggleFullscreen(); return; }
+            if ((e.key === 'Escape' || e.key === 'Back') && (document.fullscreenElement || document.webkitFullscreenElement)) {
+                e.preventDefault();
+                if (document.exitFullscreen) document.exitFullscreen();
+                else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+                return;
+            }
+            if (document.activeElement === document.body || document.activeElement === document.documentElement) {
+                if (e.key === 'Enter') { e.preventDefault(); callNumber(); }
+                else if (e.key === 'r' || e.key === 'R') { e.preventDefault(); resetGame(); }
+                else if (e.key === 'a' || e.key === 'A') { e.preventDefault(); toggleAuto(); }
+                else if (e.key === 'm' || e.key === 'M') { e.preventDefault(); toggleSound(); }
+                else if (e.key === ' ') { e.preventDefault(); toggleAuto(); }
+            }
+        }, { passive: false });
+
+        window.addEventListener('load', async () => {
+            await loadVoices();
+            initializeGame();
+            updateFullscreenButton();
+            if (TVConfig.isTV) {
+                const firstBtn = document.querySelector('.controls button');
+                if (firstBtn) { firstBtn.tabIndex = 0; setTimeout(() => firstBtn.focus(), 500); }
+                console.log('📺 TV Mode detected');
+            }
+            setTimeout(autoFitContainer, 200);
+        });
+
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                autoFitContainer();
+                const canvas = document.getElementById('confettiCanvas');
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }, 150);
+        });
+
+        document.addEventListener('pointerdown', () => {
+            initAudioContext();
+            if (!voicesLoaded) loadVoices();
+            if (soundEnabled && synth && !synth.speaking) {
+                try { const u = new SpeechSynthesisUtterance(''); u.volume = 0; synth.speak(u); } catch(e) {}
+            }
+        }, { once: true });
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && autoCallInterval) {
+                clearInterval(autoCallInterval);
+                autoCallInterval = null;
+                const btn = document.getElementById('autoBtn');
+                btn.textContent = '▶️ Start Auto-Call';
+                document.getElementById('callBtn').disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
