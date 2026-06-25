@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
-from config import supabase, DB_CONNECTED, load_activities
-from utils import mask_phone, get_attendance_count, get_user_plot
+from config import supabase, DB_CONNECTED, load_activities, PLOT_TYPES, TYPE_MAP, TOTAL_PLOTS
+from utils import mask_phone, get_attendance_count
 
 def show_residents():
     st.header("Resident Network & Entitlements")
@@ -105,44 +105,83 @@ def show_residents():
     st.divider()
     st.subheader("Garden Plot Entitlements")
 
-    plot_owners = [p for p in plots if p.get('occupied')]
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Plots", 76)
-    c2.metric("Occupied", len(plot_owners))
-    c3.metric("Available", 76 - len(plot_owners))
+    # Build complete list of all 76 plots
+    occupied_plots = {p['plot_number']: p for p in plots if p.get('occupied')}
+    occupied_count = len(occupied_plots)
+    available_count = TOTAL_PLOTS - occupied_count
 
-    if plot_owners:
-        owner_data = []
-        for plot in plot_owners:
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Plots", TOTAL_PLOTS)
+    c2.metric("Occupied", occupied_count)
+    c3.metric("Available", available_count)
+
+    # Show ALL plots in a single table
+    all_plot_data = []
+    for pn in range(1, TOTAL_PLOTS + 1):
+        ptype = TYPE_MAP.get(pn, 'B')
+        area = PLOT_TYPES[ptype]["area"]
+
+        if pn in occupied_plots:
+            plot = occupied_plots[pn]
             resident = next((p for p in participants if p['id'].lower().strip() == str(plot.get('user_id', '')).lower().strip()), None)
-            owner_data.append({
-                "Plot #": plot['plot_number'],
-                "Type": plot['plot_type'],
+            all_plot_data.append({
+                "Plot #": pn,
+                "Type": f"Type {ptype} ({area} m²)",
+                "Status": "🔴 Occupied",
                 "Owner ID": plot.get('user_id', 'N/A'),
                 "Owner Name": plot.get('user_name', resident['name'] if resident else 'N/A'),
                 "Contact": mask_phone(plot.get('contact', resident.get('contact', 'N/A') if resident else 'N/A')),
                 "Paid": "Yes" if plot.get('paid', False) else "No"
             })
+        else:
+            all_plot_data.append({
+                "Plot #": pn,
+                "Type": f"Type {ptype} ({area} m²)",
+                "Status": "🟢 Available",
+                "Owner ID": "—",
+                "Owner Name": "—",
+                "Contact": "—",
+                "Paid": "—"
+            })
 
-        owner_df = pd.DataFrame(owner_data)
-        st.dataframe(owner_df, use_container_width=True, hide_index=True)
+    all_df = pd.DataFrame(all_plot_data)
 
-        if st.session_state.get('is_admin'):
-            st.markdown("### Payment Management")
-            st.info("Admin can mark plots as paid/unpaid")
+    # Filter toggle for admin convenience
+    show_filter = st.selectbox("Filter Plots", ["All Plots", "Occupied Only", "Available Only"], key="plot_filter")
+    if show_filter == "Occupied Only":
+        display_df = all_df[all_df["Status"] == "🔴 Occupied"]
+    elif show_filter == "Available Only":
+        display_df = all_df[all_df["Status"] == "🟢 Available"]
+    else:
+        display_df = all_df
 
-            for plot in plot_owners:
-                cols = st.columns([2, 2, 1, 1])
-                cols[0].write(f"Plot {plot['plot_number']}")
-                cols[1].write(plot.get('user_name', 'N/A'))
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+    # Admin: Mark Paid buttons
+    if st.session_state.get('is_authenticated') and st.session_state.get('user_role') == 'admin':
+        st.markdown("### Payment Management")
+        st.info("Admin can mark occupied plots as paid/unpaid")
+
+        occupied_only = all_df[all_df["Status"] == "🔴 Occupied"]
+        if occupied_only.empty:
+            st.info("No occupied plots to manage")
+        else:
+            for _, row in occupied_only.iterrows():
+                pn = row["Plot #"]
+                plot = occupied_plots.get(pn, {})
                 is_paid = plot.get('paid', False)
-                cols[2].write("Yes" if is_paid else "No")
+
+                cols = st.columns([1, 2, 2, 1, 1])
+                cols[0].write(f"**Plot {pn}**")
+                cols[1].write(row["Owner Name"])
+                cols[2].write(row["Owner ID"])
+                cols[3].write("✅ Paid" if is_paid else "❌ Unpaid")
 
                 btn_label = "Mark Unpaid" if is_paid else "Mark Paid"
-                if cols[3].button(btn_label, key=f"pay_{plot['plot_number']}"):
+                if cols[4].button(btn_label, key=f"pay_{pn}"):
                     try:
-                        supabase.table('garden_plots').update({'paid': not is_paid}).eq('plot_number', plot['plot_number']).execute()
-                        st.success(f"Plot {plot['plot_number']} updated!")
+                        supabase.table('garden_plots').update({'paid': not is_paid}).eq('plot_number', pn).execute()
+                        st.success(f"Plot {pn} updated!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error: {e}")

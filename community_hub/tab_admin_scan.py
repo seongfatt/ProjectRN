@@ -73,15 +73,20 @@ def show_admin_scan(selected_date):
         st.info("No residents found")
         return
 
+    # NEW: Show All toggle
+    show_all = st.toggle("Show All Residents", value=False, key="scan_show_all")
+    display_filtered = filtered if show_all else filtered[:12]
+    st.caption(f"Showing {len(display_filtered)} of {len(filtered)} residents {'(all)' if show_all else '(first 12 — toggle above to show all)'}")
+
     cols = st.columns(3)
-    for i, p in enumerate(filtered[:12]):
+    for i, p in enumerate(display_filtered):
         with cols[i % 3]:
             with st.container():
                 st.markdown(f"**{p['name']}**")
                 st.caption(f"ID: {p['id'][:15]}...")
 
                 try:
-                    existing = supabase.table('attendance').select("*")                        .eq('participant_id', p['id'])                        .eq('date', str(selected_date))                        .eq('source', activity)                        .execute()
+                    existing = supabase.table('attendance').select("*")                         .eq('participant_id', p['id'])                         .eq('date', str(selected_date))                         .eq('source', activity)                         .execute()
                     already_done = bool(existing.data)
                 except:
                     already_done = False
@@ -148,7 +153,7 @@ def process_manual_entry(query, selected_date, activity, s1, s2):
 
 def mark_attendance(pid, name, selected_date, activity, s1, s2):
     try:
-        existing = supabase.table('attendance').select("*")            .eq('participant_id', pid)            .eq('date', str(selected_date))            .eq('source', activity)            .execute()
+        existing = supabase.table('attendance').select("*")             .eq('participant_id', pid)             .eq('date', str(selected_date))             .eq('source', activity)             .execute()
 
         if existing.data:
             record = existing.data[0]

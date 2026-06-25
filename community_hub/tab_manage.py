@@ -1,6 +1,14 @@
 import streamlit as st
 from datetime import datetime
-from config import supabase, refresh_data, load_activities
+from config import supabase, refresh_data
+
+def load_all_activities():
+    """Load ALL activities (active + inactive) for management"""
+    try:
+        r = supabase.table('activities').select("*").order('id').execute()
+        return r.data if r.data else []
+    except:
+        return []
 
 def show_manage(selected_date):
     st.header("Management")
@@ -31,33 +39,79 @@ def show_manage(selected_date):
 
     with tab2:
         st.subheader("Manage Activities")
-        acts = load_activities()
-        for a in acts:
-            with st.expander(f"{a['name']} {'✅' if a.get('active') else '❌'}"):
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.write(f"S1: {a.get('session_1_label', 'Session 1')}")
-                    st.write(f"S2: {a.get('session_2_label', 'Session 2')}")
-                with c2:
-                    if st.button("Toggle Active", key=f"act_toggle_{a['id']}"):
-                        supabase.table('activities').update({'active': not a.get('active', True)}).eq('id', a['id']).execute()
-                        refresh_data(); st.rerun()
+        st.caption("All activities are shown here. Inactive ones are hidden from dropdowns but kept in the database.")
 
-        with st.expander("Add New Activity"):
+        acts = load_all_activities()
+
+        if not acts:
+            st.info("No activities found in database")
+        else:
+            for a in acts:
+                status_icon = "🟢" if a.get('active') else "⚪"
+                with st.expander(f"{status_icon} {a['name']} (ID: {a['id']})"):
+                    c1, c2, c3 = st.columns([3, 1, 1])
+                    with c1:
+                        st.write(f"**Session 1:** {a.get('session_1_label', 'Session 1')}")
+                        st.write(f"**Session 2:** {a.get('session_2_label', 'Session 2')}")
+                        st.write(f"**Status:** {'Active' if a.get('active') else 'Inactive'}")
+                    with c2:
+                        toggle_label = "Deactivate" if a.get('active') else "Reactivate"
+                        if st.button(toggle_label, key=f"act_toggle_{a['id']}"):
+                            supabase.table('activities').update({'active': not a.get('active', True)}).eq('id', a['id']).execute()
+                            refresh_data(); st.rerun()
+                    with c3:
+                        if st.button("🗑️ Remove", key=f"act_del_{a['id']}"):
+                            supabase.table('activities').delete().eq('id', a['id']).execute()
+                            refresh_data(); st.success(f"Removed '{a['name']}'"); st.rerun()
+
+                    # Edit Activity Form
+                    with st.form(key=f"edit_act_{a['id']}"):
+                        st.markdown("**Edit Activity**")
+                        edit_name = st.text_input("Activity Name", value=a.get('name', ''), key=f"edit_name_{a['id']}")
+                        edit_s1 = st.text_input("Session 1 Label", value=a.get('session_1_label', 'Session 1'), key=f"edit_s1_{a['id']}")
+                        edit_s2 = st.text_input("Session 2 Label", value=a.get('session_2_label', 'Session 2'), key=f"edit_s2_{a['id']}")
+                        if st.form_submit_button("Update Activity", type="primary"):
+                            if edit_name.strip():
+                                supabase.table('activities').update({
+                                    'name': edit_name.strip(),
+                                    'session_1_label': edit_s1.strip(),
+                                    'session_2_label': edit_s2.strip()
+                                }).eq('id', a['id']).execute()
+                                refresh_data()
+                                st.success(f"Updated '{edit_name}'!")
+                                st.rerun()
+
+        st.divider()
+        with st.expander("➕ Add New Activity"):
+            st.info("Adding a new activity will NOT remove existing ones. Old activities remain in the list.")
             with st.form("new_act"):
-                act_name = st.text_input("Activity Name")
-                s1_label = st.text_input("Session 1 Label", value="Session 1")
-                s2_label = st.text_input("Session 2 Label", value="Session 2")
-                if st.form_submit_button("Add Activity"):
-                    if act_name:
-                        supabase.table('activities').insert({"name": act_name, "session_1_label": s1_label, "session_2_label": s2_label, "active": True}).execute()
-                        refresh_data(); st.success(f"Added {act_name}!"); st.rerun()
+                act_name = st.text_input("Activity Name *")
+                s1_label = st.text_input("Session 1 Label", value="Session 1 (7PM-8PM)")
+                s2_label = st.text_input("Session 2 Label", value="Session 2 (8PM-9PM)")
+                if st.form_submit_button("Add Activity", type="primary"):
+                    if act_name.strip():
+                        # Insert without specifying ID — let Supabase auto-generate
+                        supabase.table('activities').insert({
+                            "name": act_name.strip(),
+                            "session_1_label": s1_label.strip(),
+                            "session_2_label": s2_label.strip(),
+                            "active": True
+                        }).execute()
+                        refresh_data()
+                        st.success(f"Added '{act_name}'! It will now appear in the activity dropdown.")
+                        st.rerun()
+                    else:
+                        st.error("Activity name is required")
 
     with tab3:
         newbies = [p for p in st.session_state.participants if p.get('is_new') and p.get('active', True)]
-        for p in newbies:
-            c1, c2 = st.columns([3, 1])
-            c1.write(f"{p['name']}")
-            if c2.button("Make Regular", key=f"reg_{p['id']}"):
-                supabase.table('participants').update({'is_new': False}).eq('id', p['id']).execute()
-                refresh_data(); st.rerun()
+        if not newbies:
+            st.info("No new residents pending conversion")
+        else:
+            st.write(f"**{len(newbies)} new resident(s) ready to convert to Regular**")
+            for p in newbies:
+                c1, c2 = st.columns([3, 1])
+                c1.write(f"{p['name']}")
+                if c2.button("Make Regular", key=f"reg_{p['id']}"):
+                    supabase.table('participants').update({'is_new': False}).eq('id', p['id']).execute()
+                    refresh_data(); st.rerun()

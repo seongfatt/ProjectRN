@@ -138,10 +138,11 @@ def show_garden():
             pc = (to / ti["total"]) * 100 if ti["total"] > 0 else 0
             st.markdown(f'<div style="background:{ti["colour"]};color:white;padding:10px;border-radius:8px;text-align:center;"><div style="font-size:14px;font-weight:bold;">Type {tk}</div><div style="font-size:20px;margin:3px 0;">{to}/{ti["total"]}</div><div>{ti["area"]} m²</div><div>({pc:.1f}%)</div></div>', unsafe_allow_html=True)
 
+    # ── ADMIN PANEL (uses global auth, no separate login) ──
     st.markdown("---")
     with st.expander("Admin Panel"):
-        if st.session_state.get('is_admin'):
-            st.success("Admin mode")
+        if st.session_state.get('is_authenticated') and st.session_state.get('user_role') == 'admin':
+            st.success("Admin mode — Garden Management")
             at1, at2, at3 = st.tabs(["Requests", "Direct", "Logout"])
 
             with at1:
@@ -190,11 +191,8 @@ def show_garden():
 
             with at3:
                 if st.button("Logout", type="primary", use_container_width=True):
-                    st.session_state.is_admin = False; st.rerun()
+                    st.session_state.is_authenticated = False
+                    st.session_state.user_role = None
+                    st.rerun()
         else:
-            ap = st.text_input("Admin Password:", type="password", key="garden_admin_pass")
-            if st.button("Login", type="primary"):
-                from config import ADMIN_PASSWORD
-                if ap == ADMIN_PASSWORD:
-                    st.session_state.is_admin = True; st.success("Admin!"); st.rerun()
-                else: st.error("Wrong password")
+            st.info("🔒 Admin access required. Please use the main Login button at the top of the page.")

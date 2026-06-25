@@ -78,17 +78,22 @@ def show_qr_links(selected_date):
     st.caption("Each QR code is personal. Scanning instantly records attendance.")
 
     total = len(st.session_state.whatsapp_links)
-    st.markdown(f"**Showing {total} QR codes** | Activity: {activity} | Session: {session_display}")
+    st.markdown(f"**Total QR codes: {total}** | Activity: {activity} | Session: {session_display}")
 
     search = st.text_input("Search resident name", placeholder="Type name...")
     items = [l for l in st.session_state.whatsapp_links if search.lower() in l['name'].lower()] if search else st.session_state.whatsapp_links
 
+    # NEW: Show All toggle
+    show_all = st.toggle("Show All QR Codes", value=False, key="qr_show_all")
+    display_items = items if show_all else items[:20]
+    st.caption(f"Showing {len(display_items)} of {len(items)} QR codes {'(all)' if show_all else '(first 20 — toggle above to show all)'}")
+
     cols = st.columns(4)
-    for i, item in enumerate(items[:20]):
+    for i, item in enumerate(display_items):
         with cols[i % 4]:
             qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={urllib.parse.quote(item['link'])}"
             st.markdown(f"**{item['name']}**")
-            st.markdown(f"<span style='color: #666; font-size: 12px;'>{item.get('session', 'Auto Check-in')}</span>", unsafe_allow_html=True)
+            st.markdown(f'<span style="color: #666; font-size: 12px;">{item.get("session", "Auto Check-in")}</span>', unsafe_allow_html=True)
             st.image(qr_url, width=200)
             st.caption(f"[WhatsApp]({item['whatsapp']})")
 

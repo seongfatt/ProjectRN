@@ -224,8 +224,16 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**Session Times**")
-    st.markdown("1st: 7:00 PM - 8:00 PM")
-    st.markdown("2nd: 8:00 PM - 9:00 PM")
+    # Dynamic session times from selected activity
+    acts_data = st.session_state.activities
+    sel_act_name = st.session_state.selected_activity
+    act_info = next((a for a in acts_data if a['name'] == sel_act_name), None)
+    if act_info:
+        st.markdown(f"1st: {act_info.get('session_1_label', 'Session 1')}")
+        st.markdown(f"2nd: {act_info.get('session_2_label', 'Session 2')}")
+    else:
+        st.markdown("1st: 7:00 PM - 8:00 PM")
+        st.markdown("2nd: 8:00 PM - 9:00 PM")
     active_count = len([p for p in st.session_state.participants if p.get('active', True)])
     st.metric("Active Members", active_count)
 
@@ -240,19 +248,21 @@ from tab_import import show_import
 from tab_garden import show_garden
 from tab_residents import show_residents
 from tab_admin_scan import show_admin_scan
+from tab_meeting import show_meeting
 
 # Re-run to load tabs after imports
 if st.session_state.is_authenticated:
     if st.session_state.user_role == "admin":
-        tabs = st.tabs(["Check-In", "QR/Links", "Admin Scan", "Reports", "Manage", "Import", "Garden", "Residents"])
+        tabs = st.tabs(["Check-In", "QR/Links", "Admin Scan", "Reports", "Meeting", "Manage", "Import", "Garden", "Residents"])
         with tabs[0]: show_checkin(selected_date)
         with tabs[1]: show_qr_links(selected_date)
         with tabs[2]: show_admin_scan(selected_date)
         with tabs[3]: show_reports(selected_date)
-        with tabs[4]: show_manage(selected_date)
-        with tabs[5]: show_import(selected_date)
-        with tabs[6]: show_garden()
-        with tabs[7]: show_residents()
+        with tabs[4]: show_meeting(selected_date)
+        with tabs[5]: show_manage(selected_date)
+        with tabs[6]: show_import(selected_date)
+        with tabs[7]: show_garden()
+        with tabs[8]: show_residents()
     else:
         tabs = st.tabs(["Check-In", "QR/Links", "Admin Scan", "Reports", "Garden"])
         with tabs[0]: show_checkin(selected_date)
@@ -264,4 +274,4 @@ else:
     st.info("Login to access features")
 
 st.divider()
-st.caption("Woodlands Zone 6 Community Hub | PDPA Compliant | v2.0")
+st.caption("Woodlands Zone 6 Community Hub | PDPA Compliant | v2.1")
