@@ -155,6 +155,53 @@ if params.get("mode") == "checkin":
                 st.error("Error saving. Contact admin.")
     st.stop()
 
+# ===== VOLUNTEER REGISTRATION MODE (Public Link / No Login) =====
+if params.get("mode") == "register":
+    if not DB_CONNECTED or supabase is None:
+        st.error("Database not connected."); st.stop()
+
+    st.title("📝 New Resident Registration")
+    st.markdown("<h3 style='text-align:center;color:#0066CC;'>Woodlands Zone 6 Community Hub</h3>", unsafe_allow_html=True)
+    st.info("Register a new community member. All fields required.")
+    st.divider()
+
+    with st.form("public_register", clear_on_submit=True):
+        name = st.text_input("Full Name *", placeholder="e.g., AHMAD BIN ISMAIL")
+        contact = st.text_input("Contact Number *", placeholder="e.g., 91234567")
+        indemnity = st.checkbox("Indemnity Form Signed", value=False)
+
+        st.caption("By registering, you confirm the resident has agreed to participate in community activities.")
+
+        submitted = st.form_submit_button("Register Resident", type="primary", use_container_width=True)
+
+        if submitted:
+            if not name.strip():
+                st.error("Name is required")
+            elif not contact.strip():
+                st.error("Contact is required")
+            else:
+                try:
+                    new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
+                    supabase.table('participants').insert({
+                        "id": new_id,
+                        "name": name.strip().upper(),
+                        "contact": contact.strip(),
+                        "indemnity": indemnity,
+                        "is_new": True,
+                        "active": True,
+                        "registration_date": datetime.now().strftime("%Y-%m-%d")
+                    }).execute()
+                    st.success(f"✅ {name.strip().upper()} registered successfully!")
+                    st.balloons()
+                    st.info(f"Resident ID: `{new_id}`")
+                    st.caption("They can now use the check-in QR for attendance.")
+                except Exception as e:
+                    st.error(f"Registration failed: {e}")
+
+    st.divider()
+    st.caption("Woodlands Zone 6 Community Hub | Volunteer Registration")
+    st.stop()
+
 # ===== MAIN APP =====
 st.title("Woodlands Zone 6 - Community Hub")
 st.markdown("<div class='pdpa-notice'><strong>PDPA Compliant:</strong> Phone numbers masked for privacy</div>", unsafe_allow_html=True)
@@ -249,27 +296,30 @@ from tab_garden import show_garden
 from tab_residents import show_residents
 from tab_admin_scan import show_admin_scan
 from tab_meeting import show_meeting
+from tab_volunteer import show_volunteer
 
 # Re-run to load tabs after imports
 if st.session_state.is_authenticated:
     if st.session_state.user_role == "admin":
-        tabs = st.tabs(["Check-In", "QR/Links", "Admin Scan", "Reports", "Meeting", "Manage", "Import", "Garden", "Residents"])
+        tabs = st.tabs(["Check-In", "QR/Links", "Admin Scan", "Reports", "Meeting", "Volunteer", "Manage", "Import", "Garden", "Residents"])
         with tabs[0]: show_checkin(selected_date)
         with tabs[1]: show_qr_links(selected_date)
         with tabs[2]: show_admin_scan(selected_date)
         with tabs[3]: show_reports(selected_date)
         with tabs[4]: show_meeting(selected_date)
-        with tabs[5]: show_manage(selected_date)
-        with tabs[6]: show_import(selected_date)
-        with tabs[7]: show_garden()
-        with tabs[8]: show_residents()
+        with tabs[5]: show_volunteer()
+        with tabs[6]: show_manage(selected_date)
+        with tabs[7]: show_import(selected_date)
+        with tabs[8]: show_garden()
+        with tabs[9]: show_residents()
     else:
-        tabs = st.tabs(["Check-In", "QR/Links", "Admin Scan", "Reports", "Garden"])
+        tabs = st.tabs(["Check-In", "QR/Links", "Admin Scan", "Reports", "Volunteer", "Garden"])
         with tabs[0]: show_checkin(selected_date)
         with tabs[1]: show_qr_links(selected_date)
         with tabs[2]: show_admin_scan(selected_date)
         with tabs[3]: show_reports(selected_date)
-        with tabs[4]: show_garden()
+        with tabs[4]: show_volunteer()
+        with tabs[5]: show_garden()
 else:
     st.info("Login to access features")
 

@@ -120,3 +120,30 @@ def show_qr_links(selected_date):
         df = pd.DataFrame(links_data)
         csv = df.to_csv(index=False).encode('utf-8')
         st.download_button("Download Links CSV", csv, f"links_{date_str}.csv", "text/csv")
+
+
+    st.divider()
+    st.subheader("📝 Volunteer Registration QR")
+    st.caption("Share this QR with volunteers to let them register new residents on their phones — no login needed!")
+
+    reg_link = f"{APP_URL}/?mode=register"
+    reg_qr = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={urllib.parse.quote(reg_link)}"
+
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        st.image(reg_qr, width=250)
+        st.caption("Scan to open registration form")
+    with c2:
+        st.markdown("""
+        <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; border-radius: 4px; color: #1a1a1a;">
+            <strong>Volunteer Registration</strong><br>
+            • No login required — open link and register<br>
+            • Perfect for outreach events or walk-ins<br>
+            • New residents marked as "New" automatically<br>
+            • Works on any phone or tablet
+        </div>
+        """, unsafe_allow_html=True)
+        st.text_input("Registration Link (copy & share)", value=reg_link, key="reg_link_share")
+
+    st.divider()
+    st.subheader("Export")
