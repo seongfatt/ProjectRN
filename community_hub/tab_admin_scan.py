@@ -4,32 +4,27 @@ from config import supabase, DB_CONNECTED, load_activities
 from utils import verify_token
 
 def show_admin_scan(selected_date):
-    st.header("📷 Admin QR Scanner")
+    st.header("Admin QR Scanner")
 
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); 
-                color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-        <h3 style="color: white; margin-top: 0;">📖 How to Scan Resident QR</h3>
+    <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+        <h3 style="color: white; margin-top: 0;">How to Scan Resident QR</h3>
         <ol style="margin: 10px 0; padding-left: 20px;">
             <li>Resident shows their <strong>personal QR card</strong></li>
             <li>Admin scans with this page using <strong>phone camera or webcam</strong></li>
             <li>System auto-identifies resident and <strong>marks attendance</strong></li>
         </ol>
-        <p style="margin-bottom: 0; font-size: 14px;">
-            Residents who don't have smartphones can use printed QR cards!
-        </p>
+        <p style="margin-bottom: 0; font-size: 14px;">Residents who don't have smartphones can use printed QR cards!</p>
     </div>
     """, unsafe_allow_html=True)
 
     if not DB_CONNECTED:
         st.error("Database not connected"); return
 
-    # Activity selection
     acts = load_activities()
     act_names = [a['name'] for a in acts]
-    activity = st.selectbox("🎯 Activity", act_names, index=0, key="scan_act")
+    activity = st.selectbox("Activity", act_names, index=0, key="scan_act")
 
-    # Session selection
     session_option = st.radio("Session", ["Both", "Session 1", "Session 2"], horizontal=True, key="scan_session")
     s1 = session_option in ["Both", "Session 1"]
     s2 = session_option in ["Both", "Session 2"]
@@ -38,22 +33,18 @@ def show_admin_scan(selected_date):
 
     st.divider()
 
-    # ===== METHOD 1: Camera Scan (using streamlit-camera-input or QR decoder) =====
     st.subheader("Method 1: Camera Scan")
     st.caption("Use phone camera or webcam to scan resident's QR card")
 
-    # For now, use text input to paste the scanned URL
-    # In production, you could use streamlit-webrtc or similar for camera access
-    scanned_url = st.text_input("📷 Paste scanned QR content (URL)", 
+    scanned_url = st.text_input("Paste scanned QR content (URL)", 
                                   placeholder="https://your-app.hf.space/?mode=auto&pid=...",
                                   key="scanned_url")
 
-    if scanned_url and st.button("✅ Process Scan & Mark Attendance", type="primary", use_container_width=True):
+    if scanned_url and st.button("Process Scan & Mark Attendance", type="primary", use_container_width=True):
         process_scan(scanned_url, selected_date, activity, s1, s2)
 
     st.divider()
 
-    # ===== METHOD 2: Manual ID Entry (fallback) =====
     st.subheader("Method 2: Manual ID Entry")
     st.caption("Type resident ID if QR scan doesn't work")
 
@@ -62,17 +53,16 @@ def show_admin_scan(selected_date):
         manual_id = st.text_input("Resident ID / Name", placeholder="e.g., 20260128143935 or ABDUL", key="manual_id")
     with col2:
         st.write(" "); st.write(" ")
-        if st.button("🔍 Find & Mark", type="primary", use_container_width=True):
+        if st.button("Find & Mark", type="primary", use_container_width=True):
             process_manual_entry(manual_id, selected_date, activity, s1, s2)
 
     st.divider()
 
-    # ===== METHOD 3: Quick Select from List =====
     st.subheader("Method 3: Quick Select")
     st.caption("Fastest for known regulars — just click name")
 
     participants = st.session_state.participants
-    search = st.text_input("🔍 Filter names", placeholder="Type to filter...", key="quick_search")
+    search = st.text_input("Filter names", placeholder="Type to filter...", key="quick_search")
 
     filtered = [p for p in participants if p.get('active', True)]
     if search:
@@ -83,15 +73,13 @@ def show_admin_scan(selected_date):
         st.info("No residents found")
         return
 
-    # Show as clickable cards
     cols = st.columns(3)
-    for i, p in enumerate(filtered[:12]):  # Limit to 12 for performance
+    for i, p in enumerate(filtered[:12]):
         with cols[i % 3]:
             with st.container():
                 st.markdown(f"**{p['name']}**")
                 st.caption(f"ID: {p['id'][:15]}...")
 
-                # Check if already attended
                 try:
                     existing = supabase.table('attendance').select("*")                        .eq('participant_id', p['id'])                        .eq('date', str(selected_date))                        .eq('source', activity)                        .execute()
                     already_done = bool(existing.data)
@@ -99,16 +87,14 @@ def show_admin_scan(selected_date):
                     already_done = False
 
                 if already_done:
-                    st.success("✅ Done")
+                    st.success("Done")
                 else:
                     if st.button(f"Mark Present", key=f"mark_{p['id']}", use_container_width=True):
                         mark_attendance(p['id'], p['name'], selected_date, activity, s1, s2)
                         st.rerun()
 
 def process_scan(scanned_url, selected_date, activity, s1, s2):
-    """Parse QR URL and mark attendance"""
     try:
-        # Extract parameters from URL
         from urllib.parse import urlparse, parse_qs
         parsed = urlparse(scanned_url)
         params = parse_qs(parsed.query)
@@ -116,38 +102,31 @@ def process_scan(scanned_url, selected_date, activity, s1, s2):
         pid = params.get('pid', [None])[0]
         date_str = params.get('date', [None])[0]
         token = params.get('tk', [None])[0]
-        act_from_url = params.get('act', [activity])[0]
 
         if not pid or not token:
-            st.error("❌ Invalid QR code. Missing ID or token.")
+            st.error("Invalid QR code. Missing ID or token.")
             return
 
-        # Verify token
         if not verify_token(pid, date_str or datetime.now().strftime("%Y%m%d"), token):
-            st.error("❌ Invalid or expired QR code.")
+            st.error("Invalid or expired QR code.")
             return
 
-        # Get resident info
         try:
             p = supabase.table('participants').select("*").eq('id', pid).execute().data[0]
         except:
-            st.error("❌ Resident not found in database.")
+            st.error("Resident not found in database.")
             return
 
-        # Mark attendance
         mark_attendance(pid, p['name'], selected_date, activity, s1, s2)
 
     except Exception as e:
-        st.error(f"❌ Error processing scan: {e}")
+        st.error(f"Error processing scan: {e}")
 
 def process_manual_entry(query, selected_date, activity, s1, s2):
-    """Find resident by ID or name and mark attendance"""
     try:
-        # Try exact ID match first
         result = supabase.table('participants').select("*").eq('id', query).execute()
 
         if not result.data:
-            # Try name match (partial)
             all_p = supabase.table('participants').select("*").ilike('name', f'%{query}%').execute()
             if all_p.data and len(all_p.data) == 1:
                 result = all_p
@@ -158,32 +137,28 @@ def process_manual_entry(query, selected_date, activity, s1, s2):
                 return
 
         if not result.data:
-            st.error("❌ No resident found. Check ID or name.")
+            st.error("No resident found. Check ID or name.")
             return
 
         p = result.data[0]
         mark_attendance(p['id'], p['name'], selected_date, activity, s1, s2)
 
     except Exception as e:
-        st.error(f"❌ Error: {e}")
+        st.error(f"Error: {e}")
 
 def mark_attendance(pid, name, selected_date, activity, s1, s2):
-    """Core function to mark attendance in database"""
     try:
-        # Check if already exists
         existing = supabase.table('attendance').select("*")            .eq('participant_id', pid)            .eq('date', str(selected_date))            .eq('source', activity)            .execute()
 
         if existing.data:
-            # Update existing record
             record = existing.data[0]
             updates = {"timestamp": datetime.now(timezone.utc).isoformat()}
             if s1: updates["session_1"] = True
             if s2: updates["session_2"] = True
 
             supabase.table('attendance').update(updates).eq('id', record['id']).execute()
-            st.success(f"✅ Updated attendance for {name}!")
+            st.success(f"Updated attendance for {name}!")
         else:
-            # Insert new record
             supabase.table('attendance').insert({
                 "participant_id": pid,
                 "name": name,
@@ -194,8 +169,8 @@ def mark_attendance(pid, name, selected_date, activity, s1, s2):
                 "self_checkin": False,
                 "source": activity
             }).execute()
-            st.success(f"✅ Attendance marked for {name}!")
+            st.success(f"Attendance marked for {name}!")
             st.balloons()
 
     except Exception as e:
-        st.error(f"❌ Error saving attendance: {e}")
+        st.error(f"Error saving attendance: {e}")

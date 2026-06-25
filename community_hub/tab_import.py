@@ -4,25 +4,25 @@ from datetime import datetime, timezone
 from config import supabase, DB_CONNECTED, refresh_data, load_activities
 
 def show_import(selected_date):
-    st.header("📥 Import from WhatsApp Poll")
+    st.header("Import from WhatsApp Poll")
 
     acts = load_activities()
     act_names = [a['name'] for a in acts]
-    activity = st.selectbox("🎯 Activity", act_names, index=0)
+    activity = st.selectbox("Activity", act_names, index=0)
 
-    st.info(f"Date: **{selected_date}** | Participants: **{len(st.session_state.participants)}**")
+    st.info(f"Date: {selected_date} | Participants: {len(st.session_state.participants)}")
 
-    if st.button("🧪 Test DB"):
+    if st.button("Test DB"):
         try:
             t = supabase.table('attendance').select("count", count="exact").execute()
-            st.success(f"✅ DB OK! Total: {t.count}")
-        except Exception as e: st.error(f"❌ {e}")
+            st.success(f"DB OK! Total: {t.count}")
+        except Exception as e: st.error(f"{e}")
 
     c1, c2 = st.columns(2)
     with c1: s1_text = st.text_area("Session 1 Names", height=150, key="s1_imp", placeholder="abdul\njohn\ntan...")
     with c2: s2_text = st.text_area("Session 2 Names", height=150, key="s2_imp", placeholder="abdul\nmary...")
 
-    if st.button("🔍 Analyze & Match", type="primary", use_container_width=True):
+    if st.button("Analyze & Match", type="primary", use_container_width=True):
         if not s1_text.strip() and not s2_text.strip():
             st.warning("Please paste names")
         else:
@@ -66,7 +66,7 @@ def match_names(s1_text, s2_text, participants):
 
 def display_results(selected_date, activity):
     results = st.session_state.import_results
-    st.divider(); st.success(f"🎯 {len(results)} matches!")
+    st.divider(); st.success(f"{len(results)} matches!")
 
     c1, c2, c3 = st.columns(3)
     c1.metric("High", sum(1 for r in results if r['score'] >= 0.8))
@@ -87,7 +87,7 @@ def display_results(selected_date, activity):
     confirmed = [r for r in results if r.get('confirmed')]
     if confirmed:
         st.write(f"**{len(confirmed)} selected**")
-        if st.button(f"✅ IMPORT TO DB", type="primary", use_container_width=True):
+        if st.button(f"IMPORT TO DB", type="primary", use_container_width=True):
             do_import(confirmed, selected_date, activity)
 
 def do_import(confirmed_list, selected_date, activity):
@@ -100,7 +100,7 @@ def do_import(confirmed_list, selected_date, activity):
         try:
             existing = supabase.table('attendance').select('id').eq('participant_id', pid).eq('date', str(selected_date)).eq('source', activity).execute()
             if existing.data:
-                st.write(f"⏭️ {name} - exists"); skipped += 1; continue
+                st.write(f"⏭ {name} - exists"); skipped += 1; continue
             supabase.table('attendance').insert({
                 "participant_id": pid, "name": name, "date": str(selected_date),
                 "session_1": bool(item['s1']), "session_2": bool(item['s2']),
@@ -110,9 +110,9 @@ def do_import(confirmed_list, selected_date, activity):
         except Exception as e:
             st.error(f"❌ {name}: {e}")
     prog.empty()
-    st.success(f"🎉 Done! Imported: {success}, Skipped: {skipped}")
+    st.success(f"Done! Imported: {success}, Skipped: {skipped}")
     verify = supabase.table('attendance').select('count', count="exact").eq('date', str(selected_date)).eq('source', activity).execute()
-    st.info(f"📊 Total for {selected_date}: {verify.count}")
+    st.info(f"Total for {selected_date}: {verify.count}")
     refresh_data()
     del st.session_state.import_results
     st.balloons()

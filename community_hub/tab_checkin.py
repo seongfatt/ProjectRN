@@ -18,14 +18,14 @@ def get_today_attendees(selected_date, activity="Cardio Drumming"):
         return {}
 
 def show_checkin(selected_date):
-    st.header("📝 Mark Attendance")
+    st.header("Mark Attendance")
     activity = st.session_state.get('selected_activity', 'Cardio Drumming')
     acts = load_activities()
     act_data = next((a for a in acts if a['name'] == activity), None)
     s1_label = act_data['session_1_label'] if act_data else "Session 1"
     s2_label = act_data['session_2_label'] if act_data else "Session 2"
 
-    st.info(f"🎯 Activity: **{activity}**")
+    st.info(f"Activity: {activity}")
 
     participants = st.session_state.participants
     seen = set()
@@ -33,7 +33,7 @@ def show_checkin(selected_date):
 
     today_attendees = get_today_attendees(selected_date, activity)
 
-    search = st.text_input("🔍 Search name or last 4 digits", placeholder="Type name or last 4 digits...")
+    search = st.text_input("Search name or last 4 digits", placeholder="Type name or last 4 digits...")
     filter_type = st.selectbox("Filter", ["All", "New Only", "Regular Only", "Unsigned Indemnity"], label_visibility="collapsed")
 
     active = [p for p in participants if p.get('active', True)]
@@ -58,18 +58,17 @@ def show_checkin(selected_date):
         is_attended = attended is not None
 
         if is_attended:
-            st.markdown(f"""<div style='background:linear-gradient(135deg,#d4edda,#c3e6cb);border-left:5px solid #28a745;padding:10px;border-radius:8px;margin-bottom:8px;'><strong style='color:#155724;'>🎉 ATTENDED: {', '.join(attended['sessions'])}</strong></div>""", unsafe_allow_html=True)
+            st.markdown(f"<div style='background:linear-gradient(135deg,#d4edda,#c3e6cb);border-left:5px solid #28a745;padding:10px;border-radius:8px;margin-bottom:8px;'><strong style='color:#155724;'>ATTENDED: {', '.join(attended['sessions'])}</strong></div>", unsafe_allow_html=True)
 
         status = "🟢" if p.get('indemnity') else "🔴"
         badge = "🆕" if p.get('is_new') else "⭐"
         st.write(f"### {status} {badge} {p['name']}")
-        st.caption(f"📞 {mask_phone(p.get('contact','No phone'))}")
+        st.caption(f"Phone: {mask_phone(p.get('contact','No phone'))}")
 
         if p.get('is_new'):
             c = get_attendance_count(pid)
             if c > 0: st.progress(min(c/3, 1.0), text=f"{c}/3 to Regular")
 
-        # Session 1
         s1_key = f"s1_{pid}_{idx}_{activity}"
         if st.checkbox(s1_label, key=s1_key):
             if not st.session_state.get(f"s1_saved_{pid}_{selected_date}_{activity}", False):
@@ -85,12 +84,11 @@ def show_checkin(selected_date):
                         }).execute()
                     st.session_state[f"s1_saved_{pid}_{selected_date}_{activity}"] = True
                     msg = check_and_convert_status(pid, p['name'])
-                    st.success(f"✅ {msg}" if msg else f"✅ {s1_label} saved for {p['name']}!")
+                    st.success(f"{msg}" if msg else f"{s1_label} saved for {p['name']}!")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"❌ Error: {e}")
+                    st.error(f"Error: {e}")
 
-        # Session 2
         s2_key = f"s2_{pid}_{idx}_{activity}"
         if st.checkbox(s2_label, key=s2_key):
             if not st.session_state.get(f"s2_saved_{pid}_{selected_date}_{activity}", False):
@@ -106,10 +104,10 @@ def show_checkin(selected_date):
                         }).execute()
                     st.session_state[f"s2_saved_{pid}_{selected_date}_{activity}"] = True
                     msg = check_and_convert_status(pid, p['name'])
-                    st.success(f"✅ {msg}" if msg else f"✅ {s2_label} saved for {p['name']}!")
+                    st.success(f"{msg}" if msg else f"{s2_label} saved for {p['name']}!")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"❌ Error: {e}")
+                    st.error(f"Error: {e}")
         st.divider()
 
 def get_attendance_count(pid):

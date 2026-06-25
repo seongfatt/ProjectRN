@@ -22,7 +22,6 @@ def verify_password(pwd, role):
     return False
 
 # ===== AUTO CHECK-IN MODE (QR / Link) =====
-# URL format: ?mode=auto&pid=ID&date=YYYYMMDD&tk=TOKEN&act=ACTIVITY&session=1 (or 2, or both)
 params = st.query_params
 if params.get("mode") == "auto":
     if not DB_CONNECTED or supabase is None:
@@ -32,7 +31,7 @@ if params.get("mode") == "auto":
     date_str = params.get("date", datetime.now().strftime("%Y%m%d"))
     token = params.get("tk")
     act = params.get("act", "Cardio Drumming")
-    session_param = params.get("session", "both")  # 1, 2, or both
+    session_param = params.get("session", "both")
 
     if not verify_token(pid, date_str, token):
         st.error("Invalid or expired link."); st.stop()
@@ -42,7 +41,6 @@ if params.get("mode") == "auto":
     except:
         st.error("Participant not found"); st.stop()
 
-    # Check if already checked in today for this activity
     try:
         existing = supabase.table('attendance').select("*")\
             .eq('participant_id', pid)\
@@ -51,7 +49,6 @@ if params.get("mode") == "auto":
             .execute()
 
         if existing.data:
-            # Already checked in - show status
             record = existing.data[0]
             s1_done = record.get('session_1', False)
             s2_done = record.get('session_2', False)
@@ -66,7 +63,6 @@ if params.get("mode") == "auto":
             elif s1_done:
                 st.write("Session 1: Confirmed")
                 if session_param in ['2', 'both'] and not s2_done:
-                    # Auto-add session 2
                     supabase.table('attendance').update({"session_2": True}).eq('id', record['id']).execute()
                     st.balloons()
                     st.success("Session 2 added! Both sessions confirmed!")
@@ -78,9 +74,8 @@ if params.get("mode") == "auto":
                     st.success("Session 1 added! Both sessions confirmed!")
             st.stop()
     except Exception as e:
-        pass  # No existing record, continue to auto-register
+        pass
 
-    # AUTO REGISTER - No user interaction needed!
     if not st.session_state.auto_checkin_done:
         try:
             s1 = session_param in ['1', 'both']
@@ -95,15 +90,12 @@ if params.get("mode") == "auto":
             }).execute()
 
             st.session_state.auto_checkin_done = True
-
-            # Auto-convert New to Regular if needed
-            msg = check_and_convert_status(pid, p['name'])
+            check_and_convert_status(pid, p['name'])
 
         except Exception as e:
             st.error(f"Error saving: {e}")
             st.stop()
 
-    # Show success page
     st.title(f"{act}")
     st.balloons()
     st.success(f"Welcome {p['name']}!")
@@ -119,7 +111,7 @@ if params.get("mode") == "auto":
     st.caption("Thank you for joining! See you at Woodlands Zone 6!")
     st.stop()
 
-# ===== LEGACY CHECK-IN MODE (with checkbox - keep for backward compatibility) =====
+# ===== LEGACY CHECK-IN MODE (with checkbox) =====
 if params.get("mode") == "checkin":
     if not DB_CONNECTED or supabase is None:
         st.error("Database not connected."); st.stop()
@@ -255,12 +247,12 @@ if st.session_state.is_authenticated:
         tabs = st.tabs(["Check-In", "QR/Links", "Admin Scan", "Reports", "Manage", "Import", "Garden", "Residents"])
         with tabs[0]: show_checkin(selected_date)
         with tabs[1]: show_qr_links(selected_date)
-        with tabs[2]: show_reports(selected_date)
-        with tabs[3]: show_manage(selected_date)
-        with tabs[4]: show_import(selected_date)
         with tabs[2]: show_admin_scan(selected_date)
-        with tabs[5]: show_garden()
-        with tabs[6]: show_residents()
+        with tabs[3]: show_reports(selected_date)
+        with tabs[4]: show_manage(selected_date)
+        with tabs[5]: show_import(selected_date)
+        with tabs[6]: show_garden()
+        with tabs[7]: show_residents()
     else:
         tabs = st.tabs(["Check-In", "QR/Links", "Admin Scan", "Reports", "Garden"])
         with tabs[0]: show_checkin(selected_date)

@@ -15,45 +15,42 @@ PLOT_LAYOUTS = {
 }
 
 def show_garden():
-    st.header("🌿 Roof Top Garden")
+    st.header("Roof Top Garden")
 
     if not DB_CONNECTED:
-        st.error("⚠️ Database not connected"); return
+        st.error("Database not connected"); return
 
     plots = load_plots()
     occupied = get_occupied_count()
     pct = occupied / TOTAL_PLOTS
 
     st.progress(pct)
-    st.subheader(f"📊 **{occupied} / {TOTAL_PLOTS} occupied** ({pct:.1%})")
+    st.subheader(f"{occupied} / {TOTAL_PLOTS} occupied ({pct:.1%})")
 
-    # Legend
     cols = st.columns(4)
     for i, (tk, ti) in enumerate(PLOT_TYPES.items()):
         with cols[i]:
             st.markdown(f'<div style="background:{ti["colour"]};color:white;padding:8px;border-radius:6px;text-align:center;font-weight:bold;font-size:12px;">Type {tk}<br/>{ti["area"]} m²</div>', unsafe_allow_html=True)
     st.markdown("---")
 
-    # User section
-    st.markdown("## 👤 Your Account")
+    st.markdown("## Your Account")
     user_id = st.text_input("Your User ID", value=st.session_state.get('user_id', ''), placeholder="Enter nickname/ID", key="garden_user_id")
     if user_id:
         st.session_state.user_id = user_id.strip()
         user_plot = get_user_plot(user_id)
         if user_plot:
-            st.success(f"✅ You have Plot {user_plot['plot_number']} (Type {user_plot['plot_type']})")
+            st.success(f"You have Plot {user_plot['plot_number']} (Type {user_plot['plot_type']})")
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("🗓️ Release My Plot", type="secondary", use_container_width=True):
+                if st.button("Release My Plot", type="secondary", use_container_width=True):
                     if update_plot(user_plot['plot_number'], {'occupied': False, 'user_id': None, 'user_name': None, 'contact': None, 'change_log': f"Released by {user_id}"}):
                         st.success("Released!"); st.rerun()
             with c2:
-                if st.button("🔄 Refresh", use_container_width=True):
+                if st.button("Refresh", use_container_width=True):
                     st.rerun()
 
-    # Plot Grid
-    st.markdown("### 📍 All 76 Garden Plots")
-    st.caption("✅ Bright = Available | ❌ Faded/X = Taken")
+    st.markdown("### All 76 Garden Plots")
+    st.caption("Bright = Available | Faded/X = Taken")
 
     plots_dict = {p['plot_number']: p for p in plots}
 
@@ -83,7 +80,7 @@ def show_garden():
                     bd = "gold" if is_my else ("#00FFFF" if sel else color)
                     bw = "3px" if (is_my or sel) else "2px"
 
-                    st.markdown(f"""<div style="background:{color};color:white;border:{bw} solid {bd};border-radius:6px;padding:8px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:14px;opacity:{op};position:relative;">{pn}{x_mark}</div>""", unsafe_allow_html=True)
+                    st.markdown(f'<div style="background:{color};color:white;border:{bw} solid {bd};border-radius:6px;padding:8px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:14px;opacity:{op};position:relative;">{pn}{x_mark}</div>', unsafe_allow_html=True)
 
                     if occ:
                         did = str(owner)[:10]
@@ -98,17 +95,16 @@ def show_garden():
                     else:
                         st.markdown('<div style="text-align:center;font-size:9px;color:#888;margin-top:-3px;">available</div>', unsafe_allow_html=True)
 
-    # Request form
     if st.session_state.get('selected_plot'):
         pn = st.session_state.selected_plot
         pd = get_plot(pn)
         if not pd or pd.get('occupied'):
-            st.error(f"❌ Plot {pn} not available"); st.session_state.selected_plot = None; st.rerun()
+            st.error(f"Plot {pn} not available"); st.session_state.selected_plot = None; st.rerun()
         else:
             ptype = TYPE_MAP[pn]
             area = PLOT_TYPES[ptype]["area"]
             color = PLOT_TYPES[ptype]["colour"]
-            st.markdown(f"""<div style="background:{color};color:white;padding:15px;border-radius:8px;text-align:center;margin:10px 0;"><div style="font-size:20px;font-weight:bold;">Plot {pn}</div><div>Type {ptype} ({area} m²)</div><div style="font-size:12px;margin-top:5px;">✅ Available</div></div>""", unsafe_allow_html=True)
+            st.markdown(f'<div style="background:{color};color:white;padding:15px;border-radius:8px;text-align:center;margin:10px 0;"><div style="font-size:20px;font-weight:bold;">Plot {pn}</div><div>Type {ptype} ({area} m²)</div><div style="font-size:12px;margin-top:5px;">Available</div></div>', unsafe_allow_html=True)
 
             with st.form("plot_req", clear_on_submit=True):
                 req_id = user_id or st.text_input("Your User ID:", key="req_uid")
@@ -116,21 +112,20 @@ def show_garden():
                 req_contact = st.text_input("Contact:", key="req_contact")
                 req_notes = st.text_area("Notes:", key="req_notes")
 
-                if st.form_submit_button("📨 Submit Request", type="primary", use_container_width=True):
+                if st.form_submit_button("Submit Request", type="primary", use_container_width=True):
                     if req_id:
                         existing = get_user_plot(req_id)
                         if existing:
-                            st.error(f"❌ You already have Plot {existing['plot_number']}!")
+                            st.error(f"You already have Plot {existing['plot_number']}!")
                         else:
                             result = create_request(pn, req_id, req_name, req_contact, req_notes)
                             if result:
-                                st.success(f"✅ Request for Plot {pn} submitted!")
+                                st.success(f"Request for Plot {pn} submitted!")
                                 st.session_state.selected_plot = None
                                 st.rerun()
 
-    # Statistics
     st.markdown("---")
-    st.markdown("## 📈 Statistics")
+    st.markdown("## Statistics")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Total", TOTAL_PLOTS); c2.metric("Available", TOTAL_PLOTS - occupied)
     c3.metric("Occupied", occupied); c4.metric("Rate", f"{pct:.1%}")
@@ -143,12 +138,11 @@ def show_garden():
             pc = (to / ti["total"]) * 100 if ti["total"] > 0 else 0
             st.markdown(f'<div style="background:{ti["colour"]};color:white;padding:10px;border-radius:8px;text-align:center;"><div style="font-size:14px;font-weight:bold;">Type {tk}</div><div style="font-size:20px;margin:3px 0;">{to}/{ti["total"]}</div><div>{ti["area"]} m²</div><div>({pc:.1f}%)</div></div>', unsafe_allow_html=True)
 
-    # Admin Panel
     st.markdown("---")
-    with st.expander("🔐 Admin Panel"):
+    with st.expander("Admin Panel"):
         if st.session_state.get('is_admin'):
-            st.success("✅ Admin mode")
-            at1, at2, at3 = st.tabs(["📝 Requests", "🛠️ Direct", "🚪 Logout"])
+            st.success("Admin mode")
+            at1, at2, at3 = st.tabs(["Requests", "Direct", "Logout"])
 
             with at1:
                 reqs = get_pending_requests()
@@ -165,13 +159,13 @@ def show_garden():
                             with c2:
                                 plot_data = get_plot(req['plot_number'])
                                 if plot_data and not plot_data.get('occupied'):
-                                    if st.button(f"✅ Approve", key=f"app_{req['id']}", type="primary"):
+                                    if st.button(f"Approve", key=f"app_{req['id']}", type="primary"):
                                         if update_plot(req['plot_number'], {'occupied': True, 'user_id': req['user_id'], 'user_name': req.get('user_name', ''), 'contact': req.get('contact', ''), 'change_log': f"Approved #{req['id']}"}):
                                             update_request_status(req['id'], 'approved')
                                             st.success("Approved!"); st.rerun()
                                 else:
                                     st.warning("Plot unavailable")
-                                if st.button(f"❌ Reject", key=f"rej_{req['id']}"):
+                                if st.button(f"Reject", key=f"rej_{req['id']}"):
                                     update_request_status(req['id'], 'rejected')
                                     st.rerun()
                 else: st.info("No pending requests")
@@ -182,7 +176,7 @@ def show_garden():
                 with c1: ap = st.number_input("Plot #", 1, TOTAL_PLOTS, 1, key="admin_ap")
                 with c2: au = st.text_input("User ID", key="admin_au")
                 with c3: an = st.text_input("User Name", key="admin_an")
-                if st.button("📝 Assign", type="primary"):
+                if st.button("Assign", type="primary"):
                     if au:
                         if update_plot(ap, {'occupied': True, 'user_id': au, 'user_name': an, 'change_log': "Direct admin assign"}):
                             st.success(f"Plot {ap} assigned!"); st.rerun()
@@ -190,17 +184,17 @@ def show_garden():
                 st.markdown("---")
                 st.markdown("### Force Release")
                 rp = st.number_input("Plot to release", 1, TOTAL_PLOTS, 1, key="admin_rp")
-                if st.button("🗑️ Force Release", type="secondary"):
+                if st.button("Force Release", type="secondary"):
                     if update_plot(rp, {'occupied': False, 'user_id': None, 'user_name': None, 'contact': None, 'change_log': "Force released by admin"}):
                         st.success(f"Plot {rp} released!"); st.rerun()
 
             with at3:
-                if st.button("🚪 Logout", type="primary", use_container_width=True):
+                if st.button("Logout", type="primary", use_container_width=True):
                     st.session_state.is_admin = False; st.rerun()
         else:
             ap = st.text_input("Admin Password:", type="password", key="garden_admin_pass")
             if st.button("Login", type="primary"):
                 from config import ADMIN_PASSWORD
                 if ap == ADMIN_PASSWORD:
-                    st.session_state.is_admin = True; st.success("✅ Admin!"); st.rerun()
-                else: st.error("❌ Wrong password")
+                    st.session_state.is_admin = True; st.success("Admin!"); st.rerun()
+                else: st.error("Wrong password")

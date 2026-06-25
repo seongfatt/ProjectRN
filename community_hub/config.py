@@ -2,20 +2,26 @@ import streamlit as st
 from supabase import create_client
 import os
 
+# ========== DATABASE CONFIG ==========
 SUPABASE_URL = "https://nqmvsjubgsghjpzojaxm.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xbXZzanViZ3NnaGpwem9qYXhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NzQ3ODMsImV4cCI6MjA4NTE1MDc4M30.OukUcFvR1J5-DJVoPGmgjf34dBv7lrB1198YCp_uRIw"
 
+# ========== APP URL - UPDATE THIS! ==========
+# Local development: "http://localhost:8501"
+# Hugging Face: "https://wrnz6-community-hub.hf.space"
+APP_URL = os.getenv("APP_URL", "https://wrnz6-community-hub.hf.space")
+
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 CHECKER_PASSWORD = os.getenv("CHECKER_PASSWORD", "checker123")
-APP_URL = os.getenv("APP_URL", "https://your-app.hf.space")
 
 @st.cache_resource
 def get_db():
     try:
-        c = create_client(SUPABASE_URL, SUPABASE_KEY)
-        c.table('participants').select("id").limit(1).execute()
-        return c, True
-    except:
+        client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        client.table('participants').select("id").limit(1).execute()
+        return client, True
+    except Exception as e:
+        st.error(f"Database connection failed: {e}")
         return None, False
 
 supabase, DB_CONNECTED = get_db()

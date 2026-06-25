@@ -4,16 +4,15 @@ from config import supabase, DB_CONNECTED, load_activities
 from utils import mask_phone, get_attendance_count, get_user_plot
 
 def show_residents():
-    st.header("👥 Resident Network & Entitlements")
+    st.header("Resident Network & Entitlements")
 
     if not DB_CONNECTED:
-        st.error("⚠️ Database not connected"); return
+        st.error("Database not connected"); return
 
     participants = st.session_state.participants
     plots = st.session_state.plots
     acts = load_activities()
 
-    # Summary stats
     total = len(participants)
     active = len([p for p in participants if p.get('active', True)])
     newbies = len([p for p in participants if p.get('is_new')])
@@ -22,30 +21,26 @@ def show_residents():
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Total Residents", total)
     c2.metric("Active", active)
-    c3.metric("🆕 New", newbies)
-    c4.metric("⭐ Regular", regular)
+    c3.metric("New", newbies)
+    c4.metric("Regular", regular)
     st.divider()
 
-    # Resident list with entitlements
-    st.subheader("📋 Resident Directory")
+    st.subheader("Resident Directory")
 
-    search = st.text_input("🔍 Search resident", placeholder="Name or last 4 digits...")
+    search = st.text_input("Search resident", placeholder="Name or last 4 digits...")
     filter_status = st.selectbox("Filter", ["All", "Active Only", "New Only", "Regular Only", "Has Garden Plot", "No Garden Plot"])
 
-    # Build display data
     plot_dict = {p.get('user_id', '').lower().strip(): p for p in plots if p.get('occupied')}
 
     display_data = []
     for p in participants:
         if not p.get('active', True): continue
 
-        # Search filter
         if search:
             s = search.lower()
             if s not in p['name'].lower() and s not in p.get('contact', '')[-4:]:
                 continue
 
-        # Status filter
         if filter_status == "New Only" and not p.get('is_new'): continue
         if filter_status == "Regular Only" and p.get('is_new'): continue
 
@@ -55,7 +50,6 @@ def show_residents():
         if filter_status == "Has Garden Plot" and not has_plot: continue
         if filter_status == "No Garden Plot" and has_plot: continue
 
-        # Get attendance counts per activity
         attendance_info = []
         for act in acts:
             try:
@@ -74,8 +68,8 @@ def show_residents():
             "ID": pid,
             "Name": p['name'],
             "Contact": mask_phone(p.get('contact', 'N/A')),
-            "Status": "🆕 New" if p.get('is_new') else "⭐ Regular",
-            "Indemnity": "✅" if p.get('indemnity') else "❌",
+            "Status": "New" if p.get('is_new') else "Regular",
+            "Indemnity": "Yes" if p.get('indemnity') else "No",
             "Garden Plot": plot_info if plot_info else "—",
             "Activities": ", ".join(attendance_info) if attendance_info else "—",
             "Total Attendance": get_attendance_count(pid)
@@ -88,18 +82,15 @@ def show_residents():
     df = pd.DataFrame(display_data)
     st.dataframe(df, use_container_width=True, hide_index=True)
 
-    # Export
     st.divider()
     csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button("📥 Export Resident List (CSV)", csv, f"residents_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv")
+    st.download_button("Export Resident List (CSV)", csv, f"residents_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv")
 
-    # Activity participation summary
     st.divider()
-    st.subheader("📊 Activity Participation Summary")
+    st.subheader("Activity Participation Summary")
 
     for act in acts:
         try:
-            # Get unique participants for this activity
             r = supabase.table('attendance').select('participant_id').eq('source', act['name']).execute()
             unique_participants = len(set(x['participant_id'] for x in r.data)) if r.data else 0
             total_records = len(r.data) if r.data else 0
@@ -111,9 +102,8 @@ def show_residents():
         except:
             pass
 
-    # Garden plot summary
     st.divider()
-    st.subheader("🌿 Garden Plot Entitlements")
+    st.subheader("Garden Plot Entitlements")
 
     plot_owners = [p for p in plots if p.get('occupied')]
     c1, c2, c3 = st.columns(3)
@@ -121,11 +111,9 @@ def show_residents():
     c2.metric("Occupied", len(plot_owners))
     c3.metric("Available", 76 - len(plot_owners))
 
-    # Show plot owners table
     if plot_owners:
         owner_data = []
         for plot in plot_owners:
-            # Find resident details
             resident = next((p for p in participants if p['id'].lower().strip() == str(plot.get('user_id', '')).lower().strip()), None)
             owner_data.append({
                 "Plot #": plot['plot_number'],
@@ -133,15 +121,14 @@ def show_residents():
                 "Owner ID": plot.get('user_id', 'N/A'),
                 "Owner Name": plot.get('user_name', resident['name'] if resident else 'N/A'),
                 "Contact": mask_phone(plot.get('contact', resident.get('contact', 'N/A') if resident else 'N/A')),
-                "Paid": "✅" if plot.get('paid', False) else "❌"
+                "Paid": "Yes" if plot.get('paid', False) else "No"
             })
 
         owner_df = pd.DataFrame(owner_data)
         st.dataframe(owner_df, use_container_width=True, hide_index=True)
 
-        # Admin: Toggle payment status
         if st.session_state.get('is_admin'):
-            st.markdown("### 💰 Payment Management")
+            st.markdown("### Payment Management")
             st.info("Admin can mark plots as paid/unpaid")
 
             for plot in plot_owners:
@@ -149,7 +136,7 @@ def show_residents():
                 cols[0].write(f"Plot {plot['plot_number']}")
                 cols[1].write(plot.get('user_name', 'N/A'))
                 is_paid = plot.get('paid', False)
-                cols[2].write("✅ Paid" if is_paid else "❌ Unpaid")
+                cols[2].write("Yes" if is_paid else "No")
 
                 btn_label = "Mark Unpaid" if is_paid else "Mark Paid"
                 if cols[3].button(btn_label, key=f"pay_{plot['plot_number']}"):

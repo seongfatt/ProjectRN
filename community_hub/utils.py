@@ -1,6 +1,7 @@
 import streamlit as st
-from config import supabase, DB_CONNECTED
+from config import supabase, DB_CONNECTED, SUPABASE_KEY
 from datetime import datetime
+import hashlib
 
 def mask_phone(phone):
     if not phone: return "N/A"
@@ -27,7 +28,6 @@ def check_and_convert_status(pid, name):
     except: return None
 
 def generate_token(pid, date_str):
-    import hashlib
     return hashlib.sha256(f"{pid}{date_str}{SUPABASE_KEY[:20]}".encode()).hexdigest()[:16]
 
 def verify_token(pid, date_str, token):
@@ -95,5 +95,3 @@ def get_occupied_count():
     try:
         return supabase.table('garden_plots').select('*', count="exact").eq('occupied', True).execute().count
     except: return 0
-
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xbXZzanViZ3NnaGpwem9qYXhtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk1NzQ3ODMsImV4cCI6MjA4NTE1MDc4M30.OukUcFvR1J5-DJVoPGmgjf34dBv7lrB1198YCp_uRIw"
