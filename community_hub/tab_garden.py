@@ -1,5 +1,7 @@
 import streamlit as st
 from datetime import datetime
+import tempfile
+import os
 from config import supabase, PLOT_TYPES, TOTAL_PLOTS, TYPE_MAP, DB_CONNECTED
 from utils import mask_phone, get_plot, update_plot, get_user_plot, create_request, get_pending_requests, update_request_status, get_occupied_count, load_plots
 import matplotlib
@@ -261,26 +263,6 @@ def show_garden():
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Total", TOTAL_PLOTS); c2.metric("Available", TOTAL_PLOTS - occupied)
     c3.metric("Occupied", occupied); c4.metric("Rate", f"{pct:.1%}")
-
-    # Export garden plot layout image
-    st.divider()
-    st.subheader("Export Garden Plot Layout")
-    if st.button("Generate Plot Layout Image", type="primary", use_container_width=True):
-        with st.spinner("Generating layout image..."):
-            fig = create_garden_plot_image(plots)
-            img_path = '/tmp/garden_layout.png'
-            fig.savefig(img_path, dpi=200, bbox_inches='tight',
-                       facecolor='#f8f9fa', edgecolor='none')
-            plt.close(fig)
-
-            with open(img_path, 'rb') as img_file:
-                st.download_button(
-                    label="Download Garden Layout (PNG)",
-                    data=img_file,
-                    file_name=f"garden_layout_{datetime.now().strftime('%Y%m%d')}.png",
-                    mime="image/png"
-                )
-            st.image(img_path, caption="Garden Plot Layout - All 76 Plots", use_container_width=True)
 
     st.markdown("### By Type")
     tc = st.columns(4)

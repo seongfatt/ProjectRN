@@ -86,28 +86,54 @@ def show_residents():
     csv = df.to_csv(index=False).encode('utf-8')
     st.download_button("Export Resident Directory (CSV)", csv, f"residents_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv")
 
-    # ═══════════════════════════════════════════
-    #  GARDEN PLOT ENTITLEMENTS — Visual Display
-    # ═══════════════════════════════════════════
+    # GARDEN PLOT ENTITLEMENTS — Visual Display with Type Colors
     st.divider()
     st.subheader("Garden Plot Entitlements")
-    st.caption("Occupied = Red | Available = Green")
 
+    # # Type color legend
+    # st.caption("Plot Type Colors")
+    # legend_cols = st.columns(4)
+    # for i, (tk, ti) in enumerate(PLOT_TYPES.items()):
+    #     with legend_cols[i]:
+    #         st.markdown(
+    #             f'<div style="background:{ti["colour"]};color:white;padding:6px;border-radius:4px;text-align:center;font-weight:bold;font-size:11px;">'
+    #             f'Type {tk}<br/>{ti["area"]} m\u00B2</div>',
+    #             unsafe_allow_html=True
+    #         )
+
+    
     all_plots = load_plots()
     plots_dict = {p['plot_number']: p for p in all_plots}
 
-    # Summary metrics
+        # Summary metrics
     plot_owners = [p for p in plots if p.get('occupied')]
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Plots", 76)
     c2.metric("Occupied", len(plot_owners))
     c3.metric("Available", 76 - len(plot_owners))
 
-    # Visual grid display
+    # By Type summary cards (same style as tab_garden.py)
+    st.markdown("#### By Type")
+    tc = st.columns(4)
+    for i, (tk, ti) in enumerate(PLOT_TYPES.items()):
+        with tc[i]:
+            to = len([p for p in plots if p['plot_type'] == tk and p.get('occupied')])
+            pc = (to / ti["total"]) * 100 if ti["total"] > 0 else 0
+            st.markdown(
+                f'<div style="background:{ti["colour"]};color:white;padding:10px;border-radius:8px;text-align:center;">'
+                f'<div style="font-size:14px;font-weight:bold;">Type {tk}</div>'
+                f'<div style="font-size:20px;margin:3px 0;">{to}/{ti["total"]}</div>'
+                f'<div>{ti["area"]} m\u00B2</div>'
+                f'<div>({pc:.1f}%)</div></div>',
+                unsafe_allow_html=True
+            )
+    
+    # Visual grid display — PRIVACY: no names or contacts shown
+        # Visual grid display — PRIVACY: no names or contacts shown
     st.markdown("#### Plot Status Grid")
-    st.caption("Red = Occupied | Green = Available | Click plot for details")
+    st.caption("Occupied = Dimmed + Red X | Available = Bright | Green border = Available, Red border = Occupied")
 
-    # Display in rows of 10
+    # Display in rows of 10 with actual type colors
     for row_start in range(1, 77, 10):
         cols = st.columns(10)
         for i, pn in enumerate(range(row_start, min(row_start + 10, 77))):
@@ -117,26 +143,26 @@ def show_residents():
             is_occ = plot and plot.get('occupied', False)
 
             with cols[i]:
-                # Border color: red for occupied, green for available
-                border_color = "#ff4444" if is_occ else "#44ff44"
-                border_width = "3px" if is_occ else "2px"
-                opacity = "0.7" if is_occ else "1.0"
-
-                st.markdown(
-                    f'<div style="background:{color};color:white;border:{border_width} solid {border_color};'
-                    f'border-radius:6px;padding:6px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:12px;'
-                    f'opacity:{opacity};">{pn}</div>',
-                    unsafe_allow_html=True
-                )
                 if is_occ:
-                    owner = str(plot.get('user_id', ''))[:8]
-                    st.caption(f"{owner}...")
+                    # Occupied - dimmed color, red border, X mark, NO name/contact
+                    st.markdown(
+                        f'<div style="background:{color};opacity:0.4;border:2px solid #ff4444;border-radius:6px;padding:6px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:12px;color:#ccc;">'
+                        f'{pn}</div>'
+                        f'<div style="text-align:center;font-size:12px;color:#ff4444;margin-top:-2px;font-weight:bold;">X</div>',
+                        unsafe_allow_html=True
+                    )
                 else:
-                    st.caption("Free")
+                    # Available - bright color, green border, display only (NO button, NO dropdown)
+                    st.markdown(
+                        f'<div style="background:{color};border:2px solid #44ff44;border-radius:6px;padding:6px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:12px;color:white;">'
+                        f'{pn}</div>'
+                        f'<div style="text-align:center;font-size:9px;color:#44ff44;margin-top:-2px;">Type {ptype}</div>',
+                        unsafe_allow_html=True
+                    )
 
-    # Detailed table with payment status (admin view)
+    # Detailed table with payment status (admin view only)
     if st.session_state.get('is_authenticated') and st.session_state.get('user_role') == 'admin':
-        st.markdown("#### Payment Management")
+        st.markdown("#### Payment Management (Admin Only)")
         st.info("Admin can mark plots as paid/unpaid")
 
         for plot in plot_owners:
@@ -155,10 +181,7 @@ def show_residents():
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-    # ═══════════════════════════════════════════
-    #  EXPORT GARDEN PLOT ENTITLEMENTS (CSV)
-    #  Uses text labels instead of emojis to prevent encoding issues
-    # ═══════════════════════════════════════════
+    # EXPORT GARDEN PLOT ENTITLEMENTS (CSV)
     st.divider()
     st.subheader("Export Garden Plot Entitlements")
     st.caption("CSV uses text labels: [OCCUPIED] / [AVAILABLE] to avoid encoding issues")
@@ -174,7 +197,7 @@ def show_residents():
                 "Plot Number": pn,
                 "Plot Type": ptype,
                 "Area (sqm)": area,
-                "Status": "[OCCUPIED]",  # Text label, not emoji
+                "Status": "[OCCUPIED]",
                 "Owner ID": plot.get('user_id', ''),
                 "Owner Name": plot.get('user_name', resident['name'] if resident else ''),
                 "Contact": plot.get('contact', resident.get('contact', '') if resident else ''),
@@ -185,7 +208,7 @@ def show_residents():
                 "Plot Number": pn,
                 "Plot Type": ptype,
                 "Area (sqm)": area,
-                "Status": "[AVAILABLE]",  # Text label, not emoji
+                "Status": "[AVAILABLE]",
                 "Owner ID": "",
                 "Owner Name": "",
                 "Contact": "",
