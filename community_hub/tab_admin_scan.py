@@ -92,7 +92,6 @@ def show_admin_scan(selected_date):
     st.caption(f"Showing {len(display_filtered)} of {len(filtered)} residents {'(all)' if show_all else '(first 12 — toggle above to show all)'}")
 
     # Mobile: 2 columns on small screens, 3 on larger
-    import streamlit as st
     cols = st.columns(2)
     for i, p in enumerate(display_filtered):
         with cols[i % 2]:

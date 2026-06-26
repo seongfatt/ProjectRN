@@ -310,6 +310,7 @@ if params.get("mode") == "volunteer":
 
 # ===== VOLUNTEER REGISTRATION MODE (Token-protected, time-limited) =====
 if params.get("mode") == "register":
+    import random
     if not DB_CONNECTED or supabase is None:
         st.error("Database not connected."); st.stop()
 
@@ -382,8 +383,16 @@ if params.get("mode") == "register":
     st.stop()
 
 # ===== MAIN APP =====
-st.title("Woodlands Zone 6 - Community Hub")
-st.markdown("<div class='pdpa-notice'><strong>PDPA Compliant:</strong> Phone numbers masked for privacy</div>", unsafe_allow_html=True)
+# RN Logo + Title
+c1, c2 = st.columns([1, 4])
+with c1:
+    try:
+        st.image("logo.png", width=80)
+    except:
+        st.markdown("🏘️")
+with c2:
+    st.title("Woodlands Zone 6 - Community Hub")
+    st.markdown("<div class='pdpa-notice'><strong>PDPA Compliant:</strong> Phone numbers masked for privacy</div>", unsafe_allow_html=True)
 
 if not DB_CONNECTED or supabase is None:
     st.error("Database Not Connected"); st.stop()
@@ -396,17 +405,17 @@ if not st.session_state.plots:
 if not st.session_state.activities:
     st.session_state.activities = load_activities()
 
-# Auth UI
-col1, col2, col3 = st.columns([2,1,1])
-with col1: st.subheader("Admin Dashboard")
-with col2: st.caption(f"{datetime.now().strftime('%d %b %Y')}")
-with col3:
-    if st.session_state.is_authenticated:
+# Auth UI — simplified, no top login button
+if st.session_state.is_authenticated:
+    col1, col2 = st.columns([3,1])
+    with col1: st.subheader("Admin Dashboard")
+    with col2:
+        st.caption(f"{datetime.now().strftime('%d %b %Y')}")
         if st.button("Logout", use_container_width=True):
             st.session_state.is_authenticated = False; st.session_state.user_role = None; st.rerun()
-    else:
-        if st.button("Login", use_container_width=True):
-            st.session_state.show_login = True
+else:
+    st.subheader("Admin Dashboard")
+    st.caption(f"{datetime.now().strftime('%d %b %Y')}")
 
 if not st.session_state.is_authenticated and st.session_state.show_login:
     st.divider(); st.subheader("Login")
@@ -431,7 +440,42 @@ if st.session_state.is_authenticated:
 else:
     st.info("Please login to access admin features")
 
-# Sidebar — collapsible on mobile
+# Top bar for mobile — date, activity, refresh
+st.markdown("""
+<style>
+@media(max-width:768px){
+    [data-testid="stSidebar"]{display:none!important;}
+    [data-testid="stSidebarCollapseButton"]{display:none!important;}
+    .mobile-topbar{background:#1a1a2e;padding:10px;border-radius:8px;margin-bottom:10px;}
+}
+@media(min-width:769px){
+    .mobile-topbar{display:none;}
+}
+</style>
+""", unsafe_allow_html=True)
+
+# Mobile top bar
+with st.container():
+    st.markdown('<div class="mobile-topbar">', unsafe_allow_html=True)
+    m1, m2, m3 = st.columns([2, 2, 1])
+    with m1:
+        selected_date = st.date_input("📅 Date", value=st.session_state.today_date, key="mobile_date")
+    with m2:
+        if st.session_state.activities:
+            act_names = [a['name'] for a in st.session_state.activities]
+            selected_act = st.selectbox("🎯 Activity", act_names, index=0, key="mobile_act")
+            st.session_state.selected_activity = selected_act
+        else:
+            st.session_state.selected_activity = "Cardio Drumming"
+    with m3:
+        st.write(""); st.write("")
+        if st.button("🔄", key="mobile_refresh"):
+            refresh_data(); st.session_state.participants = load_participants()
+            st.session_state.plots = load_plots(); st.session_state.activities = load_activities()
+            st.success("Refreshed!"); st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# Desktop sidebar (hidden on mobile via CSS)
 with st.sidebar:
     st.title("⚙️ Quick Actions")
 
@@ -481,26 +525,24 @@ from tab_volunteer_access import show_volunteer_access
 # Re-run to load tabs after imports
 if st.session_state.is_authenticated:
     if st.session_state.user_role == "admin":
-        tabs = st.tabs(["Check-In", "QR/Links", "Admin Scan", "Reports", "Meeting", "Volunteer", "Volunteer Access", "Manage", "Import", "Garden", "Residents"])
-        with tabs[0]: show_checkin(selected_date)
-        with tabs[1]: show_qr_links(selected_date)
-        with tabs[2]: show_admin_scan(selected_date)
-        with tabs[3]: show_reports(selected_date)
-        with tabs[4]: show_meeting(selected_date)
-        with tabs[5]: show_volunteer()
-        with tabs[6]: show_volunteer_access()
-        with tabs[7]: show_manage(selected_date)
-        with tabs[8]: show_import(selected_date)
-        with tabs[9]: show_garden()
-        with tabs[10]: show_residents()
-    else:
-        tabs = st.tabs(["Check-In", "QR/Links", "Admin Scan", "Reports", "Volunteer", "Garden"])
-        with tabs[0]: show_checkin(selected_date)
-        with tabs[1]: show_qr_links(selected_date)
-        with tabs[2]: show_admin_scan(selected_date)
-        with tabs[3]: show_reports(selected_date)
+        tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Meeting", "Volunteer", "Volunteer Access", "Manage", "Import", "Garden", "Residents"])
+        with tabs[0]: show_qr_links(selected_date)
+        with tabs[1]: show_admin_scan(selected_date)
+        with tabs[2]: show_reports(selected_date)
+        with tabs[3]: show_meeting(selected_date)
         with tabs[4]: show_volunteer()
-        with tabs[5]: show_garden()
+        with tabs[5]: show_volunteer_access()
+        with tabs[6]: show_manage(selected_date)
+        with tabs[7]: show_import(selected_date)
+        with tabs[8]: show_garden()
+        with tabs[9]: show_residents()
+    else:
+        tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Volunteer", "Garden"])
+        with tabs[0]: show_qr_links(selected_date)
+        with tabs[1]: show_admin_scan(selected_date)
+        with tabs[2]: show_reports(selected_date)
+        with tabs[3]: show_volunteer()
+        with tabs[4]: show_garden()
 else:
     st.info("Login to access features")
 

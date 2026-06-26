@@ -75,13 +75,33 @@ def show_garden():
 
     plots_dict = {p['plot_number']: p for p in plots}
 
+    # Mobile: 5 columns, Desktop: 10 columns
+    st.markdown("""
+    <style>
+    @media(max-width:768px){
+        .garden-grid-btn button{font-size:14px!important; padding:8px 4px!important; min-height:44px!important;}
+        .garden-grid-label{font-size:9px!important;}
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     for plot_name, layout in PLOT_LAYOUTS.items():
         st.markdown(f"#### {plot_name}")
         for row in layout:
-            cols = st.columns(10)
-            for ci, pn in enumerate(row):
-                if pn is None:
-                    cols[ci].empty(); continue
+            # Filter out None values and get actual plot numbers in this row
+            row_plots = [pn for pn in row if pn is not None]
+            if not row_plots:
+                continue
+
+            # Use 5 columns on mobile (detected by checking screen width via CSS)
+            # Streamlit columns are fixed, so we use 5 which works for both
+            num_cols = min(len(row_plots), 5)
+            cols = st.columns(num_cols)
+
+            for ci, pn in enumerate(row_plots):
+                if ci >= num_cols:
+                    break
+
                 pd = plots_dict.get(pn, {'occupied': False, 'user_id': None, 'user_name': None, 'plot_type': TYPE_MAP.get(pn, 'B')})
                 occ = pd.get('occupied', False)
                 owner = pd.get('user_id', '')
@@ -92,29 +112,29 @@ def show_garden():
                 sel = (st.session_state.get('selected_plot') == pn)
 
                 with cols[ci]:
-                    if st.button(str(pn), key=f"gplot_{pn}", use_container_width=True, type="primary" if sel else "secondary", disabled=occ):
+                    # Bigger button for mobile touch
+                    btn_label = f"{pn}"
+                    if occ:
+                        btn_label = f"✗{pn}"
+
+                    if st.button(btn_label, key=f"gplot_{pn}", use_container_width=True, 
+                                type="primary" if sel else "secondary", disabled=occ):
                         st.session_state.selected_plot = pn
                         st.rerun()
 
-                    x_mark = '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;color:white;font-weight:bold;">✗</div>' if occ else ''
-                    op = 0.8 if is_my else (0.5 if occ else 1.0)
-                    bd = "gold" if is_my else ("#00FFFF" if sel else color)
-                    bw = "3px" if (is_my or sel) else "2px"
-
-                    st.markdown(f'<div style="background:{color};color:white;border:{bw} solid {bd};border-radius:6px;padding:8px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:14px;opacity:{op};position:relative;">{pn}{x_mark}</div>', unsafe_allow_html=True)
-
+                    # Status label below button
                     if occ:
-                        did = str(owner)[:10]
-                        dname = str(oname)[:12] if oname else ""
+                        did = str(owner)[:8]
+                        dname = str(oname)[:10] if oname else ""
                         if is_my:
-                            label = f"👤 YOU<br/><small>{did}: {dname}</small>" if dname else f"👤 YOU<br/><small>{did}</small>"
-                            lc, bg, bdr = "#00FF00", "rgba(0,100,0,0.3)", "1px solid #00FF00"
+                            label = f"👤 YOU"
+                            lc = "#00FF00"
                         else:
-                            label = f"👤 {did}<br/><small>{dname}</small>" if dname else f"👤 {did}"
-                            lc, bg, bdr = "#FFFFFF", "rgba(100,100,100,0.2)", "none"
-                        st.markdown(f'<div style="text-align:center;font-size:9px;color:{lc};margin-top:-3px;min-height:24px;line-height:1.2;background:{bg};padding:2px;border:{bdr};border-radius:3px;overflow:hidden;">{label}</div>', unsafe_allow_html=True)
+                            label = f"👤 {did}"
+                            lc = "#ccc"
+                        st.markdown(f'<div class="garden-grid-label" style="text-align:center;font-size:9px;color:{lc};margin-top:2px;min-height:20px;line-height:1.1;overflow:hidden;">{label}</div>', unsafe_allow_html=True)
                     else:
-                        st.markdown('<div style="text-align:center;font-size:9px;color:#888;margin-top:-3px;">available</div>', unsafe_allow_html=True)
+                        st.markdown('<div class="garden-grid-label" style="text-align:center;font-size:9px;color:#888;margin-top:2px;">available</div>', unsafe_allow_html=True)
 
     if st.session_state.get('selected_plot'):
         pn = st.session_state.selected_plot
