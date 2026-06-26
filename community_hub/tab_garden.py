@@ -21,36 +21,36 @@ PLOT_LAYOUTS = {
 
 def create_garden_plot_image(plots_data):
     """Generate garden layout image matching PLOT_LAYOUTS structure with correct occupied/available indicators."""
-    fig, ax = plt.subplots(1, 1, figsize=(20, 24))
+    fig, ax = plt.subplots(1, 1, figsize=(20, 26))
     fig.patch.set_facecolor('#f8f9fa')
     ax.set_facecolor('#f8f9fa')
 
-    ax.text(0.5, 0.98, 'Woodlands Zone 6 - Roof Top Garden Layout',
+    ax.text(0.5, 0.99, 'Woodlands Zone 6 - Roof Top Garden Layout',
             transform=ax.transAxes, fontsize=28, fontweight='bold',
             ha='center', va='top', color='#1a1a2e')
-    ax.text(0.5, 0.965, 'All 76 Garden Plots - Type, Size & Availability',
+    ax.text(0.5, 0.985, 'All 76 Garden Plots - Type, Size & Availability',
             transform=ax.transAxes, fontsize=14, ha='center', va='top', color='#666')
 
     plots_dict = {p['plot_number']: p for p in plots_data}
 
     # Use PLOT_LAYOUTS to render sections exactly as defined
-    y_pos = 0.94
+    y_pos = 0.96
     section_names = list(PLOT_LAYOUTS.keys())
 
     for section_name in section_names:
         layout = PLOT_LAYOUTS[section_name]
         ax.text(0.02, y_pos, section_name, transform=ax.transAxes,
-                fontsize=12, fontweight='bold', color='#333')
-        y_pos -= 0.015
+                fontsize=13, fontweight='bold', color='#333')
+        y_pos -= 0.012
 
         # Calculate grid dimensions
         rows = len(layout)
         max_cols = max(len(row) for row in layout) if layout else 10
 
-        box_w = 0.075
-        box_h = 0.018
-        gap_x = 0.006
-        gap_y = 0.004
+        box_w = 0.072
+        box_h = 0.016
+        gap_x = 0.005
+        gap_y = 0.003
         x_start = 0.02
 
         for row_idx, row in enumerate(layout):
@@ -84,22 +84,22 @@ def create_garden_plot_image(plots_data):
                        transform=ax.transAxes, fontsize=7, fontweight=weight,
                        ha='center', va='center', color=text_color)
 
-                # Occupied indicator (small dot or X)
+                # Occupied indicator (small X) - no name/contact for privacy
                 if occ:
-                    ax.text(x + box_w - 0.005, y + box_h - 0.003, '✗',
-                           transform=ax.transAxes, fontsize=5, color='#ff4444',
+                    ax.text(x + box_w - 0.004, y + box_h - 0.002, 'X',
+                           transform=ax.transAxes, fontsize=6, color='#ff4444',
                            ha='right', va='top', fontweight='bold')
 
         # Advance y_pos based on rows in this section
-        y_pos -= (rows * (box_h + gap_y)) + 0.025
+        y_pos -= (rows * (box_h + gap_y)) + 0.022
 
     # Legend
     legend_elements = []
     for tk, ti in PLOT_TYPES.items():
         legend_elements.append(mpatches.Patch(facecolor=ti['colour'], edgecolor='white',
-                                              label=f'Type {tk} ({ti["area"]} m²) - {ti["total"]} plots'))
+                                              label=f'Type {tk} ({ti["area"]} m\u00B2) - {ti["total"]} plots'))
     legend_elements.append(mpatches.Patch(facecolor='#999999', edgecolor='#333', alpha=0.35,
-                                          label='Darker/Muted = Occupied'))
+                                          label='Darker = Occupied'))
     legend_elements.append(mpatches.Patch(facecolor='#ffffff', edgecolor='#333', alpha=0.95,
                                           label='Bright = Available'))
 
@@ -132,10 +132,11 @@ def show_garden():
     st.progress(pct)
     st.subheader(f"{occupied} / {TOTAL_PLOTS} occupied ({pct:.1%})")
 
+    # Type legend at top
     cols = st.columns(4)
     for i, (tk, ti) in enumerate(PLOT_TYPES.items()):
         with cols[i]:
-            st.markdown(f'<div style="background:{ti["colour"]};color:white;padding:8px;border-radius:6px;text-align:center;font-weight:bold;font-size:12px;">Type {tk}<br/>{ti["area"]} m²</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background:{ti["colour"]};color:white;padding:8px;border-radius:6px;text-align:center;font-weight:bold;font-size:12px;">Type {tk}<br/>{ti["area"]} m\u00B2</div>', unsafe_allow_html=True)
     st.markdown("---")
 
     st.markdown("## Your Account")
@@ -155,50 +156,76 @@ def show_garden():
                     st.rerun()
 
     st.markdown("### All 76 Garden Plots")
-    st.caption("Bright = Available | Faded/Dark = Occupied")
+    st.caption("Bright = Available | Faded/Dark with X = Occupied")
 
     plots_dict = {p['plot_number']: p for p in plots}
 
+    # Render each section using PLOT_LAYOUTS exactly with COLORS
     for plot_name, layout in PLOT_LAYOUTS.items():
         st.markdown(f"#### {plot_name}")
         for row in layout:
+            # Count actual plots in this row to determine columns
+            actual_plots = [pn for pn in row if pn is not None]
+            if not actual_plots:
+                continue
+
+            # Use 10 columns max, but only render for actual plot positions
             cols = st.columns(10)
             for ci, pn in enumerate(row):
                 if pn is None:
-                    cols[ci].empty(); continue
+                    cols[ci].empty()
+                    continue
+
                 pd = plots_dict.get(pn, {'occupied': False, 'user_id': None, 'user_name': None, 'plot_type': TYPE_MAP.get(pn, 'B')})
                 occ = pd.get('occupied', False)
                 owner = pd.get('user_id', '')
-                oname = pd.get('user_name', '')
                 ptype = pd.get('plot_type', TYPE_MAP.get(pn, 'B'))
                 is_my = user_id and owner and str(owner).strip().lower() == str(user_id).strip().lower()
                 color = PLOT_TYPES[ptype]["colour"]
                 sel = (st.session_state.get('selected_plot') == pn)
 
                 with cols[ci]:
-                    if st.button(str(pn), key=f"gplot_{pn}", use_container_width=True, type="primary" if sel else "secondary", disabled=occ):
-                        st.session_state.selected_plot = pn
-                        st.rerun()
+                    # Calculate opacity: occupied = dimmed, available = bright
+                    opacity = 0.4 if occ else 1.0
 
-                    x_mark = '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:20px;color:white;font-weight:bold;">✗</div>' if occ else ''
-                    op = 0.8 if is_my else (0.5 if occ else 1.0)
-                    bd = "gold" if is_my else ("#00FFFF" if sel else color)
-                    bw = "3px" if (is_my or sel) else "2px"
+                    # Border: gold for selected, white for normal
+                    border_color = "#FFD700" if sel else "#ffffff"
+                    border_width = "3px" if sel else "1px"
 
-                    st.markdown(f'<div style="background:{color};color:white;border:{bw} solid {bd};border-radius:6px;padding:8px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:14px;opacity:{op};position:relative;">{pn}{x_mark}</div>', unsafe_allow_html=True)
+                    # Determine if button should be disabled
+                    btn_disabled = occ and not is_my
 
+                    # Use HTML div with actual color instead of Streamlit button for color display
+                    # But keep button functionality for available plots
                     if occ:
-                        did = str(owner)[:10]
-                        dname = str(oname)[:12] if oname else ""
+                        # Occupied plot - show as colored div with X, not clickable (except own)
                         if is_my:
-                            label = f"👤 YOU<br/><small>{did}: {dname}</small>" if dname else f"👤 YOU<br/><small>{did}</small>"
-                            lc, bg, bdr = "#00FF00", "rgba(0,100,0,0.3)", "1px solid #00FF00"
+                            # My plot - clickable to release
+                            if st.button(str(pn), key=f"gplot_{pn}", use_container_width=True, type="secondary"):
+                                st.session_state.selected_plot = pn
+                                st.rerun()
+                            st.markdown(
+                                f'<div style="background:{color};opacity:0.6;border:2px solid #00FF00;border-radius:6px;padding:6px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:14px;color:white;">{pn}</div>'
+                                '<div style="text-align:center;font-size:10px;color:#00FF00;margin-top:-2px;font-weight:bold;">YOU</div>',
+                                unsafe_allow_html=True
+                            )
                         else:
-                            label = f"👤 {did}<br/><small>{dname}</small>" if dname else f"👤 {did}"
-                            lc, bg, bdr = "#FFFFFF", "rgba(100,100,100,0.2)", "none"
-                        st.markdown(f'<div style="text-align:center;font-size:9px;color:{lc};margin-top:-3px;min-height:24px;line-height:1.2;background:{bg};padding:2px;border:{bdr};border-radius:3px;overflow:hidden;">{label}</div>', unsafe_allow_html=True)
+                            # Other occupied - not clickable, just display
+                            st.markdown(
+                                f'<div style="background:{color};opacity:0.4;border:1px solid #666;border-radius:6px;padding:8px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:14px;color:#ccc;">{pn}</div>'
+                                '<div style="text-align:center;font-size:14px;color:#ff4444;margin-top:-2px;font-weight:bold;">X</div>',
+                                unsafe_allow_html=True
+                            )
                     else:
-                        st.markdown('<div style="text-align:center;font-size:9px;color:#888;margin-top:-3px;">available</div>', unsafe_allow_html=True)
+                        # Available plot - clickable with full color
+                        if st.button(str(pn), key=f"gplot_{pn}", use_container_width=True, type="secondary"):
+                            st.session_state.selected_plot = pn
+                            st.rerun()
+                        st.markdown(
+                            f'<div style="background:{color};border:{border_width} solid {border_color};border-radius:6px;padding:8px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:14px;color:white;">{pn}</div>'
+                            '<div style="text-align:center;font-size:10px;color:#888;margin-top:-2px;">available</div>',
+                            unsafe_allow_html=True
+                        )
 
     if st.session_state.get('selected_plot'):
         pn = st.session_state.selected_plot
@@ -209,7 +236,7 @@ def show_garden():
             ptype = TYPE_MAP[pn]
             area = PLOT_TYPES[ptype]["area"]
             color = PLOT_TYPES[ptype]["colour"]
-            st.markdown(f'<div style="background:{color};color:white;padding:15px;border-radius:8px;text-align:center;margin:10px 0;"><div style="font-size:20px;font-weight:bold;">Plot {pn}</div><div>Type {ptype} ({area} m²)</div><div style="font-size:12px;margin-top:5px;">Available</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background:{color};color:white;padding:15px;border-radius:8px;text-align:center;margin:10px 0;"><div style="font-size:20px;font-weight:bold;">Plot {pn}</div><div>Type {ptype} ({area} m\u00B2)</div><div style="font-size:12px;margin-top:5px;">Available</div></div>', unsafe_allow_html=True)
 
             with st.form("plot_req", clear_on_submit=True):
                 req_id = user_id or st.text_input("Your User ID:", key="req_uid")
@@ -261,16 +288,15 @@ def show_garden():
         with tc[i]:
             to = len([p for p in plots if p['plot_type'] == tk and p['occupied']])
             pc = (to / ti["total"]) * 100 if ti["total"] > 0 else 0
-            st.markdown(f'<div style="background:{ti["colour"]};color:white;padding:10px;border-radius:8px;text-align:center;"><div style="font-size:14px;font-weight:bold;">Type {tk}</div><div style="font-size:20px;margin:3px 0;">{to}/{ti["total"]}</div><div>{ti["area"]} m²</div><div>({pc:.1f}%)</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background:{ti["colour"]};color:white;padding:10px;border-radius:8px;text-align:center;"><div style="font-size:14px;font-weight:bold;">Type {tk}</div><div style="font-size:20px;margin:3px 0;">{to}/{ti["total"]}</div><div>{ti["area"]} m\u00B2</div><div>({pc:.1f}%)</div></div>', unsafe_allow_html=True)
 
-    # ═══════════════════════════════════════════
-    #  ADMIN PANEL — No password needed (already logged in as admin)
-    # ═══════════════════════════════════════════
+    # ADMIN PANEL - No password needed (already logged in as admin)
+    # Admin sees full details in the Requests/Direct tabs only
     st.divider()
-    st.subheader("🛠️ Admin Panel")
+    st.subheader("Admin Panel")
     st.caption("Manage garden plot requests and direct assignments")
 
-    at1, at2 = st.tabs(["📋 Requests", "⚡ Direct Assignment"])
+    at1, at2 = st.tabs(["Requests", "Direct Assignment"])
 
     with at1:
         reqs = get_pending_requests()
@@ -288,13 +314,13 @@ def show_garden():
                     with c2:
                         plot_data = get_plot(req['plot_number'])
                         if plot_data and not plot_data.get('occupied'):
-                            if st.button(f"✅ Approve", key=f"app_{req['id']}", type="primary"):
+                            if st.button(f"Approve", key=f"app_{req['id']}", type="primary"):
                                 if update_plot(req['plot_number'], {'occupied': True, 'user_id': req['user_id'], 'user_name': req.get('user_name', ''), 'contact': req.get('contact', ''), 'change_log': f"Approved #{req['id']}"}):
                                     update_request_status(req['id'], 'approved')
                                     st.success("Approved!"); st.rerun()
                         else:
-                            st.warning("⚠️ Plot unavailable")
-                        if st.button(f"❌ Reject", key=f"rej_{req['id']}", type="secondary"):
+                            st.warning("Plot unavailable")
+                        if st.button(f"Reject", key=f"rej_{req['id']}", type="secondary"):
                             update_request_status(req['id'], 'rejected')
                             st.rerun()
         else:

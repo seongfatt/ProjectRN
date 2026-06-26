@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from config import supabase, DB_CONNECTED, load_activities, TYPE_MAP, PLOT_TYPES
-from utils import mask_phone, get_attendance_count, get_user_plot
+from utils import mask_phone, get_attendance_count, get_user_plot, load_plots
 
 def show_residents():
     st.header("Resident Network & Entitlements")

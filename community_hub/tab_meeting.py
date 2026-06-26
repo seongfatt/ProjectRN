@@ -237,6 +237,7 @@ def generate_excel_report(start_date, end_date, occupied, available, occupancy_r
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils.dataframe import dataframe_to_rows
+    from openpyxl.utils import get_column_letter
 
     wb = Workbook()
     thin_border = Border(
@@ -408,11 +409,11 @@ def generate_excel_report(start_date, end_date, occupied, available, occupancy_r
         row += 1
         ws1[f'A{row}'] = "Resident data unavailable."
 
-    # Auto-fit columns
-    for col in ws1.columns:
+    # Auto-fit columns using get_column_letter (avoids MergedCell issue)
+    for col_idx in range(1, ws1.max_column + 1):
         max_length = 0
-        column = col[0].column_letter
-        for cell in col:
+        column = get_column_letter(col_idx)
+        for cell in ws1[column]:
             try:
                 if cell.value and len(str(cell.value)) > max_length:
                     max_length = len(str(cell.value))
@@ -490,11 +491,11 @@ def generate_excel_report(start_date, end_date, occupied, available, occupancy_r
             ws2.cell(row=row, column=c).alignment = Alignment(horizontal='center')
         row += 1
 
-    # Auto-fit columns for sheet 2
-    for col in ws2.columns:
+    # Auto-fit columns for sheet 2 using get_column_letter
+    for col_idx in range(1, ws2.max_column + 1):
         max_length = 0
-        column = col[0].column_letter
-        for cell in col:
+        column = get_column_letter(col_idx)
+        for cell in ws2[column]:
             try:
                 if cell.value and len(str(cell.value)) > max_length:
                     max_length = len(str(cell.value))
@@ -516,6 +517,19 @@ def generate_excel_report(start_date, end_date, occupied, available, occupancy_r
                     ws3.cell(row=r_idx, column=c_idx).alignment = Alignment(horizontal='center')
                 else:
                     ws3.cell(row=r_idx, column=c_idx).border = thin_border
+
+        # Auto-fit columns for sheet 3
+        for col_idx in range(1, ws3.max_column + 1):
+            max_length = 0
+            column = get_column_letter(col_idx)
+            for cell in ws3[column]:
+                try:
+                    if cell.value and len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws3.column_dimensions[column].width = adjusted_width
 
     # Save to buffer
     buffer = io.BytesIO()
