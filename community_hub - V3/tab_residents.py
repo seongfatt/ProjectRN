@@ -86,95 +86,21 @@ def show_residents():
     csv = df.to_csv(index=False).encode('utf-8')
     st.download_button("Export Resident Directory (CSV)", csv, f"residents_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv")
 
-    # ═══════════════════════════════════════════
-    #  GARDEN PLOT ENTITLEMENTS — Visual Display
-    # ═══════════════════════════════════════════
-    st.divider()
-    st.subheader("Garden Plot Entitlements")
-    st.caption("Occupied = Red | Available = Green")
-
-    all_plots = load_plots()
-    plots_dict = {p['plot_number']: p for p in all_plots}
-
-    # Summary metrics
-    plot_owners = [p for p in plots if p.get('occupied')]
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Plots", 76)
-    c2.metric("Occupied", len(plot_owners))
-    c3.metric("Available", 76 - len(plot_owners))
-
-    # Visual grid display
-    st.markdown("#### Plot Status Grid")
-    st.caption("Red = Occupied | Green = Available | Click plot for details")
-
-    # Display in rows of 10
-    for row_start in range(1, 77, 10):
-        cols = st.columns(10)
-        for i, pn in enumerate(range(row_start, min(row_start + 10, 77))):
-            plot = plots_dict.get(pn)
-            ptype = TYPE_MAP.get(pn, 'B')
-            color = PLOT_TYPES[ptype]["colour"]
-            is_occ = plot and plot.get('occupied', False)
-
-            with cols[i]:
-                # Border color: red for occupied, green for available
-                border_color = "#ff4444" if is_occ else "#44ff44"
-                border_width = "3px" if is_occ else "2px"
-                opacity = "0.7" if is_occ else "1.0"
-
-                st.markdown(
-                    f'<div style="background:{color};color:white;border:{border_width} solid {border_color};'
-                    f'border-radius:6px;padding:6px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:12px;'
-                    f'opacity:{opacity};">{pn}</div>',
-                    unsafe_allow_html=True
-                )
-                if is_occ:
-                    owner = str(plot.get('user_id', ''))[:8]
-                    st.caption(f"{owner}...")
-                else:
-                    st.caption("Free")
-
-    # Detailed table with payment status (admin view)
-    if st.session_state.get('is_authenticated') and st.session_state.get('user_role') == 'admin':
-        st.markdown("#### Payment Management")
-        st.info("Admin can mark plots as paid/unpaid")
-
-        for plot in plot_owners:
-            cols = st.columns([2, 2, 1, 1])
-            cols[0].write(f"Plot {plot['plot_number']}")
-            cols[1].write(plot.get('user_name', 'N/A'))
-            is_paid = plot.get('paid', False)
-            cols[2].write("Yes" if is_paid else "No")
-
-            btn_label = "Mark Unpaid" if is_paid else "Mark Paid"
-            if cols[3].button(btn_label, key=f"pay_{plot['plot_number']}"):
-                try:
-                    supabase.table('garden_plots').update({'paid': not is_paid}).eq('plot_number', plot['plot_number']).execute()
-                    st.success(f"Plot {plot['plot_number']} updated!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-    # ═══════════════════════════════════════════
-    #  EXPORT GARDEN PLOT ENTITLEMENTS (CSV)
-    #  Uses text labels instead of emojis to prevent encoding issues
-    # ═══════════════════════════════════════════
+    # Export Garden Plot Entitlements
     st.divider()
     st.subheader("Export Garden Plot Entitlements")
-    st.caption("CSV uses text labels: [OCCUPIED] / [AVAILABLE] to avoid encoding issues")
-
     plot_export_data = []
     for pn in range(1, 77):
         ptype = TYPE_MAP.get(pn, 'B')
         area = PLOT_TYPES[ptype]["area"]
-        plot = plots_dict.get(pn)
+        plot = next((p for p in plots if p['plot_number'] == pn), None)
         if plot and plot.get('occupied'):
             resident = next((p for p in participants if p['id'].lower().strip() == str(plot.get('user_id', '')).lower().strip()), None)
             plot_export_data.append({
                 "Plot Number": pn,
                 "Plot Type": ptype,
                 "Area (sqm)": area,
-                "Status": "[OCCUPIED]",  # Text label, not emoji
+                "Status": "Occupied",
                 "Owner ID": plot.get('user_id', ''),
                 "Owner Name": plot.get('user_name', resident['name'] if resident else ''),
                 "Contact": plot.get('contact', resident.get('contact', '') if resident else ''),
@@ -185,7 +111,7 @@ def show_residents():
                 "Plot Number": pn,
                 "Plot Type": ptype,
                 "Area (sqm)": area,
-                "Status": "[AVAILABLE]",  # Text label, not emoji
+                "Status": "Available",
                 "Owner ID": "",
                 "Owner Name": "",
                 "Contact": "",
@@ -193,8 +119,6 @@ def show_residents():
             })
 
     plot_df = pd.DataFrame(plot_export_data)
-    st.dataframe(plot_df, use_container_width=True, hide_index=True)
-
     plot_csv = plot_df.to_csv(index=False).encode('utf-8')
     st.download_button("Export Garden Plot Entitlements (CSV)", plot_csv, f"garden_plots_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv")
 
@@ -213,3 +137,48 @@ def show_residents():
             c3.metric("Participation Rate", f"{(unique_participants / active * 100):.1f}%" if active > 0 else "0%")
         except:
             pass
+
+    st.divider()
+    st.subheader("Garden Plot Entitlements")
+
+    plot_owners = [p for p in plots if p.get('occupied')]
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Plots", 76)
+    c2.metric("Occupied", len(plot_owners))
+    c3.metric("Available", 76 - len(plot_owners))
+
+    if plot_owners:
+        owner_data = []
+        for plot in plot_owners:
+            resident = next((p for p in participants if p['id'].lower().strip() == str(plot.get('user_id', '')).lower().strip()), None)
+            owner_data.append({
+                "Plot #": plot['plot_number'],
+                "Type": plot['plot_type'],
+                "Owner ID": plot.get('user_id', 'N/A'),
+                "Owner Name": plot.get('user_name', resident['name'] if resident else 'N/A'),
+                "Contact": mask_phone(plot.get('contact', resident.get('contact', 'N/A') if resident else 'N/A')),
+                "Paid": "Yes" if plot.get('paid', False) else "No"
+            })
+
+        owner_df = pd.DataFrame(owner_data)
+        st.dataframe(owner_df, use_container_width=True, hide_index=True)
+
+        if st.session_state.get('is_admin'):
+            st.markdown("### Payment Management")
+            st.info("Admin can mark plots as paid/unpaid")
+
+            for plot in plot_owners:
+                cols = st.columns([2, 2, 1, 1])
+                cols[0].write(f"Plot {plot['plot_number']}")
+                cols[1].write(plot.get('user_name', 'N/A'))
+                is_paid = plot.get('paid', False)
+                cols[2].write("Yes" if is_paid else "No")
+
+                btn_label = "Mark Unpaid" if is_paid else "Mark Paid"
+                if cols[3].button(btn_label, key=f"pay_{plot['plot_number']}"):
+                    try:
+                        supabase.table('garden_plots').update({'paid': not is_paid}).eq('plot_number', plot['plot_number']).execute()
+                        st.success(f"Plot {plot['plot_number']} updated!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")

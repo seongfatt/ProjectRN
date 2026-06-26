@@ -20,95 +20,82 @@ PLOT_LAYOUTS = {
 }
 
 def create_garden_plot_image(plots_data):
-    """Generate garden layout image matching PLOT_LAYOUTS structure with correct occupied/available indicators."""
-    fig, ax = plt.subplots(1, 1, figsize=(20, 24))
+    fig, ax = plt.subplots(1, 1, figsize=(18, 22))
     fig.patch.set_facecolor('#f8f9fa')
     ax.set_facecolor('#f8f9fa')
 
-    ax.text(0.5, 0.98, 'Woodlands Zone 6 - Roof Top Garden Layout',
-            transform=ax.transAxes, fontsize=28, fontweight='bold',
+    ax.text(0.5, 0.98, 'Woodlands Zone 6 - Roof Top Garden Layout', 
+            transform=ax.transAxes, fontsize=26, fontweight='bold',
             ha='center', va='top', color='#1a1a2e')
-    ax.text(0.5, 0.965, 'All 76 Garden Plots - Type, Size & Availability',
+    ax.text(0.5, 0.965, 'All 76 Garden Plots - Type, Size & Availability', 
             transform=ax.transAxes, fontsize=14, ha='center', va='top', color='#666')
 
     plots_dict = {p['plot_number']: p for p in plots_data}
 
-    # Use PLOT_LAYOUTS to render sections exactly as defined
+    sections = [
+        ('Section A', list(range(1, 11))),
+        ('Section B', list(range(11, 21))),
+        ('Section C', list(range(21, 31))),
+        ('Section D', list(range(31, 41))),
+        ('Section E', list(range(41, 51))),
+        ('Section F', list(range(51, 61))),
+        ('Section G', list(range(61, 71))),
+        ('Section H', list(range(71, 77))),
+    ]
+
     y_pos = 0.94
-    section_names = list(PLOT_LAYOUTS.keys())
+    for section_name, plot_nums in sections:
+        ax.text(0.02, y_pos, section_name, transform=ax.transAxes, 
+                fontsize=11, fontweight='bold', color='#333')
+        y_pos -= 0.018
 
-    for section_name in section_names:
-        layout = PLOT_LAYOUTS[section_name]
-        ax.text(0.02, y_pos, section_name, transform=ax.transAxes,
-                fontsize=12, fontweight='bold', color='#333')
-        y_pos -= 0.015
-
-        # Calculate grid dimensions
-        rows = len(layout)
-        max_cols = max(len(row) for row in layout) if layout else 10
-
-        box_w = 0.075
-        box_h = 0.018
-        gap_x = 0.006
-        gap_y = 0.004
         x_start = 0.02
+        box_w = 0.085
+        box_h = 0.022
+        gap = 0.008
 
-        for row_idx, row in enumerate(layout):
-            for col_idx, pn in enumerate(row):
-                if pn is None:
-                    continue
+        for i, pn in enumerate(plot_nums):
+            ptype = TYPE_MAP.get(pn, 'B')
+            color = PLOT_TYPES[ptype]["colour"]
+            plot = plots_dict.get(pn)
+            occ = plot.get('occupied', False) if plot else False
 
-                ptype = TYPE_MAP.get(pn, 'B')
-                color = PLOT_TYPES[ptype]["colour"]
-                plot = plots_dict.get(pn)
-                occ = plot.get('occupied', False) if plot else False
+            alpha = 0.4 if occ else 0.95
+            edge = '#333' if occ else 'white'
+            lw = 2 if occ else 1.5
 
-                # Occupied = darker/muted, Available = bright
-                alpha = 0.35 if occ else 0.95
-                edge = '#333333' if occ else '#ffffff'
-                lw = 2.5 if occ else 1.0
-                text_color = '#ffffff' if not occ else '#eeeeee'
-                weight = 'bold' if not occ else 'normal'
+            row = i // 10
+            col = i % 10
+            x = x_start + col * (box_w + gap)
+            y = y_pos - row * (box_h + gap * 0.5)
 
-                x = x_start + col_idx * (box_w + gap_x)
-                y = y_pos - row_idx * (box_h + gap_y)
+            rect = FancyBboxPatch((x, y), box_w, box_h,
+                                  boxstyle="round,pad=0.003",
+                                  facecolor=color, edgecolor=edge, linewidth=lw,
+                                  transform=ax.transAxes, alpha=alpha)
+            ax.add_patch(rect)
 
-                rect = FancyBboxPatch((x, y), box_w, box_h,
-                                      boxstyle="round,pad=0.003",
-                                      facecolor=color, edgecolor=edge, linewidth=lw,
-                                      transform=ax.transAxes, alpha=alpha)
-                ax.add_patch(rect)
+            text_color = 'white' if not occ else '#fff'
+            weight = 'bold' if not occ else 'normal'
+            ax.text(x + box_w/2, y + box_h/2, str(pn), 
+                   transform=ax.transAxes, fontsize=7, fontweight=weight,
+                   ha='center', va='center', color=text_color)
 
-                # Plot number
-                ax.text(x + box_w/2, y + box_h/2, str(pn),
-                       transform=ax.transAxes, fontsize=7, fontweight=weight,
-                       ha='center', va='center', color=text_color)
+        y_pos -= 0.055 if len(plot_nums) <= 10 else 0.075
 
-                # Occupied indicator (small dot or X)
-                if occ:
-                    ax.text(x + box_w - 0.005, y + box_h - 0.003, '✗',
-                           transform=ax.transAxes, fontsize=5, color='#ff4444',
-                           ha='right', va='top', fontweight='bold')
-
-        # Advance y_pos based on rows in this section
-        y_pos -= (rows * (box_h + gap_y)) + 0.025
-
-    # Legend
     legend_elements = []
     for tk, ti in PLOT_TYPES.items():
-        legend_elements.append(mpatches.Patch(facecolor=ti['colour'], edgecolor='white',
-                                              label=f'Type {tk} ({ti["area"]} m²) - {ti["total"]} plots'))
-    legend_elements.append(mpatches.Patch(facecolor='#999999', edgecolor='#333', alpha=0.35,
-                                          label='Darker/Muted = Occupied'))
-    legend_elements.append(mpatches.Patch(facecolor='#ffffff', edgecolor='#333', alpha=0.95,
-                                          label='Bright = Available'))
+        legend_elements.append(mpatches.Patch(facecolor=ti['colour'], edgecolor='white', 
+                                              label=f'Type {tk} ({ti["area"]} m2) - {ti["total"]} plots'))
+    legend_elements.append(mpatches.Patch(facecolor='gray', edgecolor='#333', alpha=0.4,
+                                          label='Darker = Occupied'))
 
     ax.legend(handles=legend_elements, loc='lower center', bbox_to_anchor=(0.5, -0.01),
               ncol=3, fontsize=10, frameon=True, fancybox=True, shadow=True)
 
     occupied = sum(1 for p in plots_data if p.get('occupied'))
     available = 76 - occupied
-    ax.text(0.98, 0.01, f'Total: 76 | Occupied: {occupied} | Available: {available}',
+    ax.text(0.98, 0.01, f'Total: 76 | Occupied: {occupied} | Available: {available}', 
             transform=ax.transAxes, fontsize=11, ha='right', va='bottom',
             bbox=dict(boxstyle='round', facecolor='white', alpha=0.9, edgecolor='#ccc'))
 
@@ -117,7 +104,6 @@ def create_garden_plot_image(plots_data):
     ax.axis('off')
     plt.tight_layout()
     return fig
-
 
 def show_garden():
     st.header("Roof Top Garden")
@@ -155,7 +141,7 @@ def show_garden():
                     st.rerun()
 
     st.markdown("### All 76 Garden Plots")
-    st.caption("Bright = Available | Faded/Dark = Occupied")
+    st.caption("Bright = Available | Faded/X = Taken")
 
     plots_dict = {p['plot_number']: p for p in plots}
 
@@ -242,7 +228,7 @@ def show_garden():
         with st.spinner("Generating layout image..."):
             fig = create_garden_plot_image(plots)
             img_path = '/tmp/garden_layout.png'
-            fig.savefig(img_path, dpi=200, bbox_inches='tight',
+            fig.savefig(img_path, dpi=200, bbox_inches='tight', 
                        facecolor='#f8f9fa', edgecolor='none')
             plt.close(fig)
 
@@ -263,57 +249,63 @@ def show_garden():
             pc = (to / ti["total"]) * 100 if ti["total"] > 0 else 0
             st.markdown(f'<div style="background:{ti["colour"]};color:white;padding:10px;border-radius:8px;text-align:center;"><div style="font-size:14px;font-weight:bold;">Type {tk}</div><div style="font-size:20px;margin:3px 0;">{to}/{ti["total"]}</div><div>{ti["area"]} m²</div><div>({pc:.1f}%)</div></div>', unsafe_allow_html=True)
 
-    # ═══════════════════════════════════════════
-    #  ADMIN PANEL — No password needed (already logged in as admin)
-    # ═══════════════════════════════════════════
-    st.divider()
-    st.subheader("🛠️ Admin Panel")
-    st.caption("Manage garden plot requests and direct assignments")
+    st.markdown("---")
+    with st.expander("Admin Panel"):
+        if st.session_state.get('is_admin'):
+            st.success("Admin mode")
+            at1, at2, at3 = st.tabs(["Requests", "Direct", "Logout"])
 
-    at1, at2 = st.tabs(["📋 Requests", "⚡ Direct Assignment"])
+            with at1:
+                reqs = get_pending_requests()
+                if reqs:
+                    for req in reqs:
+                        with st.expander(f"#{req['id']}: Plot {req['plot_number']} - {req['user_id']}"):
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                st.write(f"**ID:** {req['user_id']}")
+                                st.write(f"**Name:** {req.get('user_name', 'N/A')}")
+                                st.write(f"**Contact:** {req.get('contact', 'N/A')}")
+                                st.write(f"**Plot:** {req['plot_number']}")
+                                st.write(f"**Notes:** {req.get('notes', 'N/A')}")
+                            with c2:
+                                plot_data = get_plot(req['plot_number'])
+                                if plot_data and not plot_data.get('occupied'):
+                                    if st.button(f"Approve", key=f"app_{req['id']}", type="primary"):
+                                        if update_plot(req['plot_number'], {'occupied': True, 'user_id': req['user_id'], 'user_name': req.get('user_name', ''), 'contact': req.get('contact', ''), 'change_log': f"Approved #{req['id']}"}):
+                                            update_request_status(req['id'], 'approved')
+                                            st.success("Approved!"); st.rerun()
+                                else:
+                                    st.warning("Plot unavailable")
+                                if st.button(f"Reject", key=f"rej_{req['id']}"):
+                                    update_request_status(req['id'], 'rejected')
+                                    st.rerun()
+                else: st.info("No pending requests")
 
-    with at1:
-        reqs = get_pending_requests()
-        if reqs:
-            st.write(f"**{len(reqs)} pending request(s)**")
-            for req in reqs:
-                with st.expander(f"#{req['id']}: Plot {req['plot_number']} - {req['user_id']}"):
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.write(f"**ID:** {req['user_id']}")
-                        st.write(f"**Name:** {req.get('user_name', 'N/A')}")
-                        st.write(f"**Contact:** {req.get('contact', 'N/A')}")
-                        st.write(f"**Plot:** {req['plot_number']}")
-                        st.write(f"**Notes:** {req.get('notes', 'N/A')}")
-                    with c2:
-                        plot_data = get_plot(req['plot_number'])
-                        if plot_data and not plot_data.get('occupied'):
-                            if st.button(f"✅ Approve", key=f"app_{req['id']}", type="primary"):
-                                if update_plot(req['plot_number'], {'occupied': True, 'user_id': req['user_id'], 'user_name': req.get('user_name', ''), 'contact': req.get('contact', ''), 'change_log': f"Approved #{req['id']}"}):
-                                    update_request_status(req['id'], 'approved')
-                                    st.success("Approved!"); st.rerun()
-                        else:
-                            st.warning("⚠️ Plot unavailable")
-                        if st.button(f"❌ Reject", key=f"rej_{req['id']}", type="secondary"):
-                            update_request_status(req['id'], 'rejected')
-                            st.rerun()
+            with at2:
+                st.markdown("### Direct Assignment")
+                c1, c2, c3 = st.columns(3)
+                with c1: ap = st.number_input("Plot #", 1, TOTAL_PLOTS, 1, key="admin_ap")
+                with c2: au = st.text_input("User ID", key="admin_au")
+                with c3: an = st.text_input("User Name", key="admin_an")
+                if st.button("Assign", type="primary"):
+                    if au:
+                        if update_plot(ap, {'occupied': True, 'user_id': au, 'user_name': an, 'change_log': "Direct admin assign"}):
+                            st.success(f"Plot {ap} assigned!"); st.rerun()
+
+                st.markdown("---")
+                st.markdown("### Force Release")
+                rp = st.number_input("Plot to release", 1, TOTAL_PLOTS, 1, key="admin_rp")
+                if st.button("Force Release", type="secondary"):
+                    if update_plot(rp, {'occupied': False, 'user_id': None, 'user_name': None, 'contact': None, 'change_log': "Force released by admin"}):
+                        st.success(f"Plot {rp} released!"); st.rerun()
+
+            with at3:
+                if st.button("Logout", type="primary", use_container_width=True):
+                    st.session_state.is_admin = False; st.rerun()
         else:
-            st.info("No pending requests")
-
-    with at2:
-        st.markdown("### Direct Assignment")
-        c1, c2, c3 = st.columns(3)
-        with c1: ap = st.number_input("Plot #", 1, TOTAL_PLOTS, 1, key="admin_ap")
-        with c2: au = st.text_input("User ID", key="admin_au")
-        with c3: an = st.text_input("User Name", key="admin_an")
-        if st.button("Assign", type="primary", use_container_width=True):
-            if au:
-                if update_plot(ap, {'occupied': True, 'user_id': au, 'user_name': an, 'change_log': "Direct admin assign"}):
-                    st.success(f"Plot {ap} assigned!"); st.rerun()
-
-        st.markdown("---")
-        st.markdown("### Force Release")
-        rp = st.number_input("Plot to release", 1, TOTAL_PLOTS, 1, key="admin_rp")
-        if st.button("Force Release", type="secondary", use_container_width=True):
-            if update_plot(rp, {'occupied': False, 'user_id': None, 'user_name': None, 'contact': None, 'change_log': "Force released by admin"}):
-                st.success(f"Plot {rp} released!"); st.rerun()
+            ap = st.text_input("Admin Password:", type="password", key="garden_admin_pass")
+            if st.button("Login", type="primary"):
+                from config import ADMIN_PASSWORD
+                if ap == ADMIN_PASSWORD:
+                    st.session_state.is_admin = True; st.success("Admin!"); st.rerun()
+                else: st.error("Wrong password")
