@@ -123,27 +123,21 @@ def show_qr_links(selected_date):
 
 
     st.divider()
-    st.subheader("📝 Volunteer Registration QR")
-    st.caption("Share this QR with volunteers to let them register new residents on their phones — no login needed!")
+    st.subheader("📝 Volunteer Registration")
+    st.caption("Time-limited volunteer links are now managed in the Volunteer Access tab")
 
-    reg_link = f"{APP_URL}/?mode=register"
-    reg_qr = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={urllib.parse.quote(reg_link)}"
+    st.markdown("""
+    <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; border-radius: 4px; color: #1a1a1a;">
+        <strong>🔐 Controlled Volunteer Access</strong><br>
+        • Go to <strong>Volunteer Access</strong> tab to generate time-limited links<br>
+        • Each link has a unique token that auto-expires<br>
+        • Two types: Full Access (check-in + register) or Registration-Only<br>
+        • Perfect for outreach events — no permanent backdoor<br>
+        • Admin can revoke links instantly
+    </div>
+    """, unsafe_allow_html=True)
 
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        st.image(reg_qr, width=250)
-        st.caption("Scan to open registration form")
-    with c2:
-        st.markdown("""
-        <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; border-radius: 4px; color: #1a1a1a;">
-            <strong>Volunteer Registration</strong><br>
-            • No login required — open link and register<br>
-            • Perfect for outreach events or walk-ins<br>
-            • New residents marked as "New" automatically<br>
-            • Works on any phone or tablet
-        </div>
-        """, unsafe_allow_html=True)
-        st.text_input("Registration Link (copy & share)", value=reg_link, key="reg_link_share")
+    st.info("💡 For ad-hoc outreach: Generate a link in Volunteer Access → set duration → share QR or link with temporary helpers")
 
     st.divider()
     st.subheader("Export")

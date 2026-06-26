@@ -155,14 +155,193 @@ if params.get("mode") == "checkin":
                 st.error("Error saving. Contact admin.")
     st.stop()
 
-# ===== VOLUNTEER REGISTRATION MODE (Public Link / No Login) =====
+# ===== VOLUNTEER CHECK-IN MODE (Time-limited, no login) =====
+if params.get("mode") == "volunteer":
+    if not DB_CONNECTED or supabase is None:
+        st.error("Database not connected."); st.stop()
+
+    token = params.get("tk")
+    if not token:
+        st.error("❌ Invalid volunteer link. No token provided."); st.stop()
+
+    # Validate token
+    from tab_volunteer_access import validate_volunteer_token
+    is_valid, msg = validate_volunteer_token(token)
+    if not is_valid:
+        st.error(f"❌ {msg}")
+        st.markdown("""
+        <div style="background: #ffebee; border-left: 4px solid #f44336; padding: 20px; border-radius: 8px; color: #1a1a1a; text-align: center;">
+            <h3>⏰ Access Expired</h3>
+            <p>This volunteer link is no longer valid.</p>
+            <p>Please contact the admin for a new link.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+
+    # Volunteer is valid — show check-in + registration interface
+    st.title("🤝 Volunteer Check-In & Registration")
+    st.markdown("<h4 style='text-align:center;'>Woodlands Zone 6 Community Hub</h4>", unsafe_allow_html=True)
+    st.success("✅ Volunteer access active — link expires automatically")
+    st.divider()
+
+    # Load participants
+    try:
+        all_participants = supabase.table('participants').select("*").eq('active', True).execute().data
+    except:
+        all_participants = []
+
+    # Get activities
+    acts = load_activities()
+    act_names = [a['name'] for a in acts] if acts else ["Cardio Drumming"]
+
+    selected_activity = st.selectbox("Activity", act_names, index=0, key="vol_act")
+    selected_date = st.date_input("Date", value=datetime.now().date(), key="vol_date")
+
+    # Dynamic session options based on activity config
+    act_config = next((a for a in acts if a['name'] == selected_activity), None)
+    s1_label = act_config.get('session_1_label', 'Session 1') if act_config else 'Session 1'
+    s2_label = act_config.get('session_2_label', 'Session 2') if act_config else 'Session 2'
+    has_s2 = bool(s2_label and s2_label.strip())
+
+    if has_s2:
+        session_options = ["Both", s1_label, s2_label]
+        session_option = st.radio("Session", session_options, horizontal=True, key="vol_session")
+        s1 = session_option in ["Both", s1_label]
+        s2 = session_option in ["Both", s2_label]
+    else:
+        st.info(f"This activity has only one session: {s1_label}")
+        session_option = s1_label
+        s1 = True
+        s2 = False
+
+    st.divider()
+
+    # ── CHECK-IN EXISTING RESIDENTS ──
+    st.subheader("Check-In Existing Residents")
+    search = st.text_input("Search resident name", placeholder="Type to filter...", key="vol_search")
+    filtered = [p for p in all_participants if p.get('active', True)]
+    if search:
+        s = search.lower()
+        filtered = [p for p in filtered if s in p['name'].lower() or s in p.get('contact', '')[-4:]]
+
+    if not filtered:
+        st.info("No residents found")
+    else:
+        show_all = st.toggle("Show All", value=False, key="vol_show_all")
+        display = filtered if show_all else filtered[:12]
+        st.caption(f"Showing {len(display)} of {len(filtered)} residents")
+
+        cols = st.columns(3)
+        for i, p in enumerate(display):
+            with cols[i % 3]:
+                st.markdown(f"**{p['name']}**")
+                st.caption(f"ID: {p['id'][:15]}...")
+                try:
+                    existing = supabase.table('attendance').select("*")                         .eq('participant_id', p['id'])                         .eq('date', str(selected_date))                         .eq('source', selected_activity)                         .execute()
+                    already_done = bool(existing.data)
+                except:
+                    already_done = False
+
+                if already_done:
+                    st.success("✅ Done")
+                else:
+                    if st.button(f"Mark Present", key=f"vol_mark_{p['id']}", use_container_width=True):
+                        try:
+                            supabase.table('attendance').insert({
+                                "participant_id": p['id'],
+                                "name": p['name'],
+                                "date": str(selected_date),
+                                "session_1": s1,
+                                "session_2": s2,
+                                "timestamp": datetime.now().isoformat(),
+                                "self_checkin": False,
+                                "source": selected_activity
+                            }).execute()
+                            st.success(f"{p['name']} checked in!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+
+    st.divider()
+
+    # ── REGISTER NEW RESIDENT ──
+    st.subheader("Register New Resident")
+    with st.form("volunteer_register", clear_on_submit=True):
+        new_name = st.text_input("Full Name *", placeholder="e.g., AHMAD BIN ISMAIL")
+        new_contact = st.text_input("Contact Number *", placeholder="e.g., 91234567")
+        new_indemnity = st.checkbox("Indemnity Signed", value=False)
+        if st.form_submit_button("Register & Check-In", type="primary", use_container_width=True):
+            if not new_name.strip():
+                st.error("Name is required")
+            elif not new_contact.strip():
+                st.error("Contact is required")
+            else:
+                try:
+                    import random
+                    new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
+                    supabase.table('participants').insert({
+                        "id": new_id,
+                        "name": new_name.strip().upper(),
+                        "contact": new_contact.strip(),
+                        "indemnity": new_indemnity,
+                        "is_new": True,
+                        "active": True,
+                        "registration_date": str(selected_date)
+                    }).execute()
+                    # Also check them in immediately
+                    supabase.table('attendance').insert({
+                        "participant_id": new_id,
+                        "name": new_name.strip().upper(),
+                        "date": str(selected_date),
+                        "session_1": s1,
+                        "session_2": s2,
+                        "timestamp": datetime.now().isoformat(),
+                        "self_checkin": False,
+                        "source": selected_activity
+                    }).execute()
+                    st.success(f"✅ {new_name.strip().upper()} registered & checked in!")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    st.divider()
+    st.caption("Woodlands Zone 6 Community Hub | Volunteer Access | Link expires automatically")
+    st.stop()
+
+# ===== VOLUNTEER REGISTRATION MODE (Token-protected, time-limited) =====
 if params.get("mode") == "register":
     if not DB_CONNECTED or supabase is None:
         st.error("Database not connected."); st.stop()
 
+    token = params.get("tk")
+    if not token:
+        st.error("❌ Invalid registration link. No token provided.")
+        st.markdown("""
+        <div style="background: #ffebee; border-left: 4px solid #f44336; padding: 20px; border-radius: 8px; color: #1a1a1a; text-align: center;">
+            <h3>🔗 Invalid Link</h3>
+            <p>This registration link is missing a security token.</p>
+            <p>Please contact the admin for a valid volunteer link.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+
+    # Validate token
+    from tab_volunteer_access import validate_volunteer_token
+    is_valid, msg = validate_volunteer_token(token)
+    if not is_valid:
+        st.error(f"❌ {msg}")
+        st.markdown("""
+        <div style="background: #ffebee; border-left: 4px solid #f44336; padding: 20px; border-radius: 8px; color: #1a1a1a; text-align: center;">
+            <h3>⏰ Access Expired</h3>
+            <p>This registration link is no longer valid.</p>
+            <p>Please contact the admin for a new volunteer link.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+
     st.title("📝 New Resident Registration")
-    st.markdown("<h3 style='text-align:center;color:#0066CC;'>Woodlands Zone 6 Community Hub</h3>", unsafe_allow_html=True)
-    st.info("Register a new community member. All fields required.")
+    st.markdown("<h4 style='text-align:center;'>Woodlands Zone 6 Community Hub</h4>", unsafe_allow_html=True)
+    st.success("✅ Registration access active — link expires automatically")
     st.divider()
 
     with st.form("public_register", clear_on_submit=True):
@@ -199,7 +378,7 @@ if params.get("mode") == "register":
                     st.error(f"Registration failed: {e}")
 
     st.divider()
-    st.caption("Woodlands Zone 6 Community Hub | Volunteer Registration")
+    st.caption("Woodlands Zone 6 Community Hub | Volunteer Registration | Time-limited access")
     st.stop()
 
 # ===== MAIN APP =====
@@ -297,21 +476,23 @@ from tab_residents import show_residents
 from tab_admin_scan import show_admin_scan
 from tab_meeting import show_meeting
 from tab_volunteer import show_volunteer
+from tab_volunteer_access import show_volunteer_access
 
 # Re-run to load tabs after imports
 if st.session_state.is_authenticated:
     if st.session_state.user_role == "admin":
-        tabs = st.tabs(["Check-In", "QR/Links", "Admin Scan", "Reports", "Meeting", "Volunteer", "Manage", "Import", "Garden", "Residents"])
+        tabs = st.tabs(["Check-In", "QR/Links", "Admin Scan", "Reports", "Meeting", "Volunteer", "Volunteer Access", "Manage", "Import", "Garden", "Residents"])
         with tabs[0]: show_checkin(selected_date)
         with tabs[1]: show_qr_links(selected_date)
         with tabs[2]: show_admin_scan(selected_date)
         with tabs[3]: show_reports(selected_date)
         with tabs[4]: show_meeting(selected_date)
         with tabs[5]: show_volunteer()
-        with tabs[6]: show_manage(selected_date)
-        with tabs[7]: show_import(selected_date)
-        with tabs[8]: show_garden()
-        with tabs[9]: show_residents()
+        with tabs[6]: show_volunteer_access()
+        with tabs[7]: show_manage(selected_date)
+        with tabs[8]: show_import(selected_date)
+        with tabs[9]: show_garden()
+        with tabs[10]: show_residents()
     else:
         tabs = st.tabs(["Check-In", "QR/Links", "Admin Scan", "Reports", "Volunteer", "Garden"])
         with tabs[0]: show_checkin(selected_date)

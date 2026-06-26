@@ -25,9 +25,22 @@ def show_admin_scan(selected_date):
     act_names = [a['name'] for a in acts]
     activity = st.selectbox("Activity", act_names, index=0, key="scan_act")
 
-    session_option = st.radio("Session", ["Both", "Session 1", "Session 2"], horizontal=True, key="scan_session")
-    s1 = session_option in ["Both", "Session 1"]
-    s2 = session_option in ["Both", "Session 2"]
+    # Dynamic session options based on activity config
+    act_config = next((a for a in acts if a['name'] == activity), None)
+    s1_label = act_config.get('session_1_label', 'Session 1') if act_config else 'Session 1'
+    s2_label = act_config.get('session_2_label', 'Session 2') if act_config else 'Session 2'
+    has_s2 = bool(s2_label and s2_label.strip())
+
+    if has_s2:
+        session_options = ["Both", s1_label, s2_label]
+        session_option = st.radio("Session", session_options, horizontal=True, key="scan_session")
+        s1 = session_option in ["Both", s1_label]
+        s2 = session_option in ["Both", s2_label]
+    else:
+        st.info(f"This activity has only one session: {s1_label}")
+        session_option = s1_label
+        s1 = True
+        s2 = False
 
     st.info(f"Scanning for: **{activity}** | Date: **{selected_date}** | Session: **{session_option}**")
 
