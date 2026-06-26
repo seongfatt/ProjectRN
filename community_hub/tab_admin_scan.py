@@ -91,12 +91,19 @@ def show_admin_scan(selected_date):
     display_filtered = filtered if show_all else filtered[:12]
     st.caption(f"Showing {len(display_filtered)} of {len(filtered)} residents {'(all)' if show_all else '(first 12 — toggle above to show all)'}")
 
-    cols = st.columns(3)
+    # Mobile: 2 columns on small screens, 3 on larger
+    import streamlit as st
+    cols = st.columns(2)
     for i, p in enumerate(display_filtered):
-        with cols[i % 3]:
+        with cols[i % 2]:
             with st.container():
-                st.markdown(f"**{p['name']}**")
-                st.caption(f"ID: {p['id'][:15]}...")
+                # Compact card for mobile
+                st.markdown(f"""
+                <div style='background:#f8f9fa;border:1px solid #dee2e6;padding:10px;border-radius:8px;margin-bottom:8px;text-align:center;'>
+                    <div style='font-weight:bold;font-size:15px;color:#1a1a1a;'>{p['name']}</div>
+                    <div style='font-size:11px;color:#666;margin-top:2px;'>ID: {p['id'][:10]}...</div>
+                </div>
+                """, unsafe_allow_html=True)
 
                 try:
                     existing = supabase.table('attendance').select("*")                         .eq('participant_id', p['id'])                         .eq('date', str(selected_date))                         .eq('source', activity)                         .execute()
@@ -105,9 +112,9 @@ def show_admin_scan(selected_date):
                     already_done = False
 
                 if already_done:
-                    st.success("Done")
+                    st.success("✅ Done", icon="✅")
                 else:
-                    if st.button(f"Mark Present", key=f"mark_{p['id']}", use_container_width=True):
+                    if st.button(f"Mark Present", key=f"mark_{p['id']}", use_container_width=True, type="primary"):
                         mark_attendance(p['id'], p['name'], selected_date, activity, s1, s2)
                         st.rerun()
 

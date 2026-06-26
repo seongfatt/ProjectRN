@@ -52,6 +52,27 @@ def show_garden():
     st.markdown("### All 76 Garden Plots")
     st.caption("Bright = Available | Faded/X = Taken")
 
+    # Mobile view toggle
+    view_mode = st.segmented_control("View", ["Grid", "List"], default="Grid", key="garden_view_mode")
+
+    if view_mode == "List":
+        # Mobile-friendly list view
+        plots_dict = {p['plot_number']: p for p in plots}
+        list_data = []
+        for pn in range(1, TOTAL_PLOTS + 1):
+            ptype = TYPE_MAP.get(pn, 'B')
+            pd = plots_dict.get(pn, {'occupied': False, 'user_id': None, 'user_name': None, 'plot_type': ptype})
+            occ = pd.get('occupied', False)
+            list_data.append({
+                "Plot": pn,
+                "Type": f"Type {ptype}",
+                "Status": "🔴 Occupied" if occ else "🟢 Available",
+                "Owner": pd.get('user_name', pd.get('user_id', '—')) if occ else "—"
+            })
+        import pandas as pd
+        st.dataframe(pd.DataFrame(list_data), use_container_width=True, hide_index=True)
+        st.stop()
+
     plots_dict = {p['plot_number']: p for p in plots}
 
     for plot_name, layout in PLOT_LAYOUTS.items():

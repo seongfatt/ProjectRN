@@ -60,8 +60,130 @@ TYPE_MAP = {1:"B",2:"B",3:"D",4:"D",5:"A",6:"B",7:"A",8:"D",9:"D",10:"B",
     71:"D",72:"B",73:"C",74:"A",75:"C",76:"C"}
 
 MOBILE_CSS = """<style>
-.block-container{padding:1rem!important;}
-@media(max-width:768px){.block-container{padding:0.5rem!important;}h1{font-size:22px!important;}h2{font-size:18px!important;}}
-.stButton>button{width:100%!important;font-size:16px!important;padding:12px!important;}
+/* Viewport fix for mobile */
+meta[name="viewport"]{content:"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no";}
+
+/* Base mobile-friendly padding */
+.block-container{padding:1rem!important; max-width:100%!important;}
+
+/* Prevent horizontal scroll */
+body{overflow-x:hidden!important;}
+.main{overflow-x:hidden!important;}
+
+/* Mobile-specific overrides */
+@media(max-width:768px){
+    .block-container{padding:0.4rem!important; max-width:100vw!important;}
+    h1{font-size:18px!important; margin-bottom:6px!important;}
+    h2{font-size:16px!important; margin-bottom:4px!important;}
+    h3{font-size:14px!important;}
+    p, li, td, th{font-size:13px!important;}
+
+    /* Bigger touch targets */
+    .stButton>button{
+        width:100%!important;
+        font-size:16px!important;
+        padding:16px!important;
+        min-height:52px!important;
+        border-radius:10px!important;
+        margin:6px 0!important;
+    }
+
+    /* Form inputs */
+    .stTextInput>div>div>input,
+    .stNumberInput>div>div>input,
+    .stSelectbox>div>div>select,
+    .stTextArea>div>div>textarea{
+        font-size:16px!important;
+        padding:14px!important;
+        min-height:52px!important;
+        border-radius:8px!important;
+    }
+
+    /* Checkboxes and radios */
+    .stCheckbox>label,
+    .stRadio>div{
+        font-size:15px!important;
+    }
+    .stRadio [role="radiogroup"]{
+        flex-direction:column!important;
+    }
+    .stRadio [role="radiogroup"] label{
+        margin:4px 0!important;
+        padding:8px!important;
+    }
+
+    /* Dataframes/tables — horizontal scroll */
+    .stDataFrame{
+        font-size:12px!important;
+        overflow-x:auto!important;
+    }
+    .stDataFrame > div{
+        overflow-x:auto!important;
+    }
+
+    /* Expander headers */
+    .streamlit-expanderHeader{
+        font-size:14px!important;
+        padding:12px!important;
+    }
+
+    /* Tabs — smaller, scrollable */
+    .stTabs [data-baseweb="tab-list"]{
+        overflow-x:auto!important;
+        flex-wrap:nowrap!important;
+    }
+    .stTabs [data-baseweb="tab-list"] button{
+        font-size:12px!important;
+        padding:8px 10px!important;
+        white-space:nowrap!important;
+    }
+
+    /* Metrics */
+    .stMetric{
+        padding:6px!important;
+    }
+    .stMetric label{
+        font-size:11px!important;
+    }
+    .stMetric .css-1xarl3l{
+        font-size:18px!important;
+    }
+
+    /* Sidebar — full width on mobile */
+    [data-testid="stSidebar"]{
+        width:100vw!important;
+        max-width:100vw!important;
+    }
+    [data-testid="stSidebar"] .block-container{
+        padding:0.5rem!important;
+    }
+
+    /* Images/QR codes — responsive */
+    img{
+        max-width:100%!important;
+        height:auto!important;
+    }
+
+    /* Columns stack */
+    .stColumns > div{
+        width:100%!important;
+        flex:0 0 100%!important;
+        max-width:100%!important;
+    }
+
+    /* Container padding */
+    .stContainer{
+        padding:8px!important;
+    }
+}
+
+/* PDPA notice */
 .pdpa-notice{background:#fff3cd;border-left:4px solid #ffc107;padding:10px;border-radius:4px;margin:8px 0;font-size:13px;}
+
+/* Custom button styles for better mobile UX */
+.mobile-big-btn{
+    font-size:18px!important;
+    padding:16px!important;
+    min-height:56px!important;
+}
 </style>"""

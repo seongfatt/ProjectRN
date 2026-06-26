@@ -64,6 +64,7 @@ def show_meeting(selected_date):
         })
     type_df = pd.DataFrame(type_rows).set_index("Plot Type")
     st.bar_chart(type_df[["Occupied", "Available"]], use_container_width=True, color=["#d62728", "#2ca02c"])
+    st.caption("Red = Occupied | Green = Available")
 
     # Type summary table
     st.dataframe(

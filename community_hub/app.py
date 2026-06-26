@@ -9,7 +9,7 @@ from utils import (mask_phone, get_attendance_count, check_and_convert_status,
     update_plot, get_user_plot, create_request, get_pending_requests, 
     update_request_status, get_occupied_count)
 
-st.set_page_config(page_title="Woodlands Zone 6 - Community Hub", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Woodlands Zone 6 - Community Hub", layout="centered", initial_sidebar_state="collapsed")
 st.markdown(MOBILE_CSS, unsafe_allow_html=True)
 
 for k in ['is_authenticated','user_role','show_login','participants','plots','activities','today_date','selected_plot','selected_activity','auto_checkin_done']:
@@ -431,26 +431,26 @@ if st.session_state.is_authenticated:
 else:
     st.info("Please login to access admin features")
 
-# Sidebar
+# Sidebar — collapsible on mobile
 with st.sidebar:
-    st.title("Quick Actions")
-    if st.button("Refresh Data", use_container_width=True):
+    st.title("⚙️ Quick Actions")
+
+    if st.button("🔄 Refresh Data", use_container_width=True):
         refresh_data(); st.session_state.participants = load_participants()
         st.session_state.plots = load_plots(); st.session_state.activities = load_activities()
         st.success("Refreshed!"); st.rerun()
 
-    selected_date = st.date_input("Session Date", value=st.session_state.today_date)
+    selected_date = st.date_input("📅 Session Date", value=st.session_state.today_date)
 
     if st.session_state.activities:
         act_names = [a['name'] for a in st.session_state.activities]
-        selected_act = st.selectbox("Activity", act_names, index=0)
+        selected_act = st.selectbox("🎯 Activity", act_names, index=0)
         st.session_state.selected_activity = selected_act
     else:
         st.session_state.selected_activity = "Cardio Drumming"
 
     st.divider()
-    st.markdown("**Session Times**")
-    # Dynamic session times from selected activity
+    st.markdown("**⏰ Session Times**")
     acts_data = st.session_state.activities
     sel_act_name = st.session_state.selected_activity
     act_info = next((a for a in acts_data if a['name'] == sel_act_name), None)
@@ -461,7 +461,7 @@ with st.sidebar:
         st.markdown("1st: 7:00 PM - 8:00 PM")
         st.markdown("2nd: 8:00 PM - 9:00 PM")
     active_count = len([p for p in st.session_state.participants if p.get('active', True)])
-    st.metric("Active Members", active_count)
+    st.metric("👥 Active Members", active_count)
 
 
 
