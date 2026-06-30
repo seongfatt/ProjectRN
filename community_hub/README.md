@@ -1,3 +1,8 @@
+---
+license: mit
+title: Woodlands Zone 6 - Community Hub
+sdk: streamlit
+---
 # 🏘️ Woodlands Zone 6 - Community Hub
 
 A unified Streamlit application for managing senior community activities, event attendance, and rooftop garden plot rentals — all connected to a single Supabase database.

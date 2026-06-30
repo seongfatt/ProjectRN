@@ -14,7 +14,7 @@ APP_URL = os.getenv("APP_URL", "https://wrnz6-community-hub.hf.space")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 CHECKER_PASSWORD = os.getenv("CHECKER_PASSWORD", "checker123")
 
-@st.cache_resource
+# @st.cache_resource
 def get_db():
     try:
         client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -60,8 +60,85 @@ TYPE_MAP = {1:"B",2:"B",3:"D",4:"D",5:"A",6:"B",7:"A",8:"D",9:"D",10:"B",
     71:"D",72:"B",73:"C",74:"A",75:"C",76:"C"}
 
 MOBILE_CSS = """<style>
-.block-container{padding:1rem!important;}
-@media(max-width:768px){.block-container{padding:0.5rem!important;}h1{font-size:22px!important;}h2{font-size:18px!important;}}
-.stButton>button{width:100%!important;font-size:16px!important;padding:12px!important;}
-.pdpa-notice{background:#fff3cd;border-left:4px solid #ffc107;padding:10px;border-radius:4px;margin:8px 0;font-size:13px;}
+/* Force viewport on mobile */
+@media(max-width:768px){
+    body{min-width:100vw!important; max-width:100vw!important; overflow-x:hidden!important;}
+    .main .block-container{padding:0.3rem!important; max-width:100vw!important; width:100vw!important;}
+
+    /* Hide sidebar completely on mobile */
+    [data-testid="stSidebar"]{display:none!important;}
+    [data-testid="stSidebarCollapseButton"]{display:none!important;}
+    [data-testid="collapsedControl"]{display:none!important;}
+
+    /* Full width everything */
+    .element-container{width:100%!important; max-width:100%!important;}
+    .stMarkdown{width:100%!important;}
+
+    /* Headers */
+    h1{font-size:17px!important; margin:4px 0!important;}
+    h2{font-size:15px!important; margin:3px 0!important;}
+    h3{font-size:13px!important;}
+    p, li{font-size:13px!important; line-height:1.4!important;}
+
+    /* Buttons full width and big */
+    .stButton>button{
+        width:100%!important;
+        font-size:15px!important;
+        padding:14px!important;
+        min-height:48px!important;
+        border-radius:8px!important;
+        margin:4px 0!important;
+    }
+
+    /* Inputs */
+    .stTextInput>div>div>input,
+    .stNumberInput>div>div>input,
+    .stSelectbox>div>div>select,
+    .stTextArea>div>div>textarea{
+        font-size:16px!important;
+        padding:12px!important;
+        min-height:48px!important;
+    }
+
+    /* Radio buttons vertical */
+    .stRadio [role="radiogroup"]{flex-direction:column!important;}
+    .stRadio [role="radiogroup"] label{margin:3px 0!important; padding:6px!important;}
+
+    /* Tabs scrollable */
+    .stTabs [data-baseweb="tab-list"]{overflow-x:auto!important; flex-wrap:nowrap!important;}
+    .stTabs [data-baseweb="tab-list"] button{font-size:11px!important; padding:6px 8px!important; white-space:nowrap!important;}
+
+    /* Columns stack */
+    .stColumns{flex-direction:column!important;}
+    .stColumns > div{width:100%!important; flex:none!important; max-width:100%!important; margin:2px 0!important;}
+
+    /* Metrics */
+    .stMetric{padding:4px!important;}
+    .stMetric label{font-size:10px!important;}
+    .stMetric .css-1xarl3l{font-size:16px!important;}
+
+    /* Dataframes */
+    .stDataFrame{font-size:11px!important;}
+    .stDataFrame > div{overflow-x:auto!important;}
+
+    /* Images */
+    img{max-width:100%!important; height:auto!important;}
+
+    /* Expanders */
+    .streamlit-expanderHeader{font-size:13px!important; padding:10px!important;}
+
+    /* Remove extra margins */
+    .main > div{padding-left:0!important; padding-right:0!important;}
+}
+
+/* PDPA notice */
+.pdpa-notice{
+    background: #1a1a2e;
+    border-left: 4px solid #ffc107;
+    color: #ffffff;
+    padding: 10px;
+    border-radius: 4px;
+    margin: 8px 0;
+    font-size: 13px;
+}
 </style>"""

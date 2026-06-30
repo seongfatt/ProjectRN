@@ -64,10 +64,11 @@ def show_meeting(selected_date):
         })
     type_df = pd.DataFrame(type_rows).set_index("Plot Type")
     st.bar_chart(type_df[["Occupied", "Available"]], use_container_width=True, color=["#d62728", "#2ca02c"])
+    st.caption("Red = Occupied | Green = Available")
 
     # Type summary table
     st.dataframe(
-        type_df.reset_index().rename(columns={"Rate": "Occupancy %"}),
+        type_df.reset_index().rename(columns={"Rate": "Occupancy %}"}),
         use_container_width=True, hide_index=True
     )
 
@@ -183,7 +184,6 @@ def show_meeting(selected_date):
         for i, act in enumerate(acts):
             with act_cols[i % 4]:
                 status = "🟢 Active" if act.get('active') else "⚪ Inactive"
-                # Build session labels safely — handle missing/empty session 2
                 s1 = act.get('session_1_label', 'Session 1') or 'Session 1'
                 s2 = act.get('session_2_label', '') or ''
                 if s2.strip():
@@ -198,79 +198,341 @@ def show_meeting(selected_date):
     st.divider()
 
     # ═══════════════════════════════════════════
-    #  SECTION 4 — EXPORT
+    #  SECTION 4 — EXCEL EXPORT (replaces HTML report)
     # ═══════════════════════════════════════════
-    st.subheader("📄 Export Meeting Pack")
+    st.subheader("📊 Export Monthly Meeting Report")
 
-    if st.button("📥 Generate Meeting Summary", type="primary", use_container_width=True):
-        summary_lines = [
-            "=" * 50,
-            "  WOODLANDS ZONE 6 COMMUNITY HUB",
-            "  Monthly Meeting Report",
-            "=" * 50,
-            "",
-            f"Period: {start_date.strftime('%d %b %Y')} to {end_date.strftime('%d %b %Y')}",
-            f"Generated: {datetime.now().strftime('%d %b %Y %H:%M')}",
-            "",
-            "─" * 50,
-            "ROOF TOP GARDEN",
-            "─" * 50,
-            f"  Total Plots:     {TOTAL_PLOTS}",
-            f"  Occupied:        {occupied} ({occupancy_rate:.1%})",
-            f"  Available:       {available}",
-            "",
-            "By Type:",
-        ]
-        for _, row in type_df.reset_index().iterrows():
-            summary_lines.append(f"  {row['Plot Type']}: {row['Occupied']}/{row['Occupied'] + row['Available']} ({row['Rate']:.0f}%)")
+    if st.button("📊 Generate Excel Report", type="primary", use_container_width=True):
+        with st.spinner("Generating Excel report..."):
+            excel_buffer = generate_excel_report(start_date, end_date, occupied, available, occupancy_rate, type_rows, all_att, total_records, unique_p, s1_total, s2_total, act_summary, parts, parts_df, new_c, reg_c, unsigned)
+            st.success("Excel report generated!")
+            st.download_button(
+                "📥 Download Excel Report",
+                excel_buffer,
+                f"monthly_meeting_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
-        summary_lines.extend([
-            "",
-            "─" * 50,
-            "ACTIVITY PARTICIPATION",
-            "─" * 50,
-            f"  Total Records:      {len(all_att) if all_att else 0}",
-            f"  Unique Residents:   {att_df['participant_id'].nunique() if all_att else 0}",
-            f"  Session 1 Total:    {s1_total if all_att else 0}",
-            f"  Session 2 Total:    {s2_total if all_att else 0}",
-            "",
-            "By Activity:",
-        ])
-        if act_summary:
-            for row in act_summary:
-                summary_lines.append(f"  {row['Activity']}: {row['Records']} records, {row['Unique Residents']} unique")
-
-        summary_lines.extend([
-            "",
-            "─" * 50,
-            "RESIDENT SNAPSHOT",
-            "─" * 50,
-        ])
-        try:
-            if parts:
-                summary_lines.append(f"  Total Registered:   {len(parts_df)}")
-                summary_lines.append(f"  New:                {new_c}")
-                summary_lines.append(f"  Regular:            {reg_c}")
-                summary_lines.append(f"  Unsigned Indemnity: {unsigned}")
-        except Exception:
-            pass
-
-        summary_lines.extend(["", "=" * 50, "End of Report", "=" * 50])
-        summary_text = "\n".join(summary_lines)
-
+    if all_att:
+        csv = att_df.to_csv(index=False).encode('utf-8')
         st.download_button(
-            "Download Meeting Summary (TXT)",
-            summary_text,
-            f"monthly_meeting_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.txt",
-            "text/plain"
+            "📊 Download Raw Data (CSV)",
+            csv,
+            f"activity_data_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.csv",
+            "text/csv"
         )
 
-        # Also offer CSV of activity data
-        if all_att:
-            csv = att_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                "Download Raw Activity Data (CSV)",
-                csv,
-                f"activity_data_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.csv",
-                "text/csv"
-            )
+
+def _hex_to_arbg(hex_color):
+    """Convert #RRGGBB to aRGB format (00RRGGBB) for openpyxl."""
+    hex_clean = hex_color.replace('#', '').replace('0x', '')
+    if len(hex_clean) == 6:
+        return "00" + hex_clean.upper()
+    return hex_clean.upper()
+
+
+def generate_excel_report(start_date, end_date, occupied, available, occupancy_rate, type_rows, all_att, total_records, unique_p, s1_total, s2_total, act_summary, parts, parts_df, new_c, reg_c, unsigned):
+    """Generate Excel report with multiple sheets matching the dashboard visuals."""
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils.dataframe import dataframe_to_rows
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    thin_border = Border(
+        left=Side(style='thin', color='00CCCCCC'),
+        right=Side(style='thin', color='00CCCCCC'),
+        top=Side(style='thin', color='00CCCCCC'),
+        bottom=Side(style='thin', color='00CCCCCC')
+    )
+
+    # ── Sheet 1: Summary Dashboard ──
+    ws1 = wb.active
+    ws1.title = "Summary"
+
+    # Header
+    ws1.merge_cells('A1:F1')
+    ws1['A1'] = "Woodlands Zone 6 Community Hub - Monthly Meeting Report"
+    ws1['A1'].font = Font(size=18, bold=True, color="00FFFFFF")
+    ws1['A1'].fill = PatternFill(start_color="00667EEA", end_color="00667EEA", fill_type="solid")
+    ws1['A1'].alignment = Alignment(horizontal='center', vertical='center')
+    ws1.row_dimensions[1].height = 30
+
+    ws1.merge_cells('A2:F2')
+    ws1['A2'] = f"Period: {start_date.strftime('%d %b %Y')} to {end_date.strftime('%d %b %Y')}"
+    ws1['A2'].font = Font(size=12, italic=True)
+    ws1['A2'].alignment = Alignment(horizontal='center')
+
+    ws1.merge_cells('A3:F3')
+    ws1['A3'] = f"Generated: {datetime.now().strftime('%d %b %Y, %I:%M %p')}"
+    ws1['A3'].font = Font(size=10, color="00666666")
+    ws1['A3'].alignment = Alignment(horizontal='center')
+
+    # Garden Section
+    row = 5
+    ws1.merge_cells(f'A{row}:F{row}')
+    ws1[f'A{row}'] = "ROOF TOP GARDEN"
+    ws1[f'A{row}'].font = Font(size=14, bold=True, color="00FFFFFF")
+    ws1[f'A{row}'].fill = PatternFill(start_color="002CA02C", end_color="002CA02C", fill_type="solid")
+    ws1[f'A{row}'].alignment = Alignment(horizontal='left', vertical='center')
+    ws1.row_dimensions[row].height = 25
+
+    row += 1
+    garden_metrics = [
+        ["Total Plots", TOTAL_PLOTS],
+        ["Occupied", occupied],
+        ["Available", available],
+        ["Occupancy Rate", f"{occupancy_rate:.1%}"],
+    ]
+    for label, value in garden_metrics:
+        ws1[f'A{row}'] = label
+        ws1[f'B{row}'] = value
+        ws1[f'A{row}'].font = Font(bold=True)
+        ws1[f'B{row}'].font = Font(size=12, color="00667EEA", bold=True)
+        row += 1
+
+    # Plot Types Breakdown
+    row += 1
+    ws1.merge_cells(f'A{row}:F{row}')
+    ws1[f'A{row}'] = "Plot Types Breakdown"
+    ws1[f'A{row}'].font = Font(size=12, bold=True)
+    row += 1
+
+    headers = ["Plot Type", "Occupied", "Available", "Total", "Rate %"]
+    for col, h in enumerate(headers, 1):
+        cell = ws1.cell(row=row, column=col, value=h)
+        cell.font = Font(bold=True, color="00FFFFFF")
+        cell.fill = PatternFill(start_color="00333333", end_color="00333333", fill_type="solid")
+        cell.alignment = Alignment(horizontal='center')
+        cell.border = thin_border
+    row += 1
+
+    for tr in type_rows:
+        parts_type = tr["Plot Type"].split(" ")
+        ptype = parts_type[1] if len(parts_type) > 1 else "B"
+        color_hex = PLOT_TYPES.get(ptype, {}).get('colour', '#667EEA')
+        argb_color = _hex_to_arbg(color_hex)
+
+        ws1.cell(row=row, column=1, value=tr["Plot Type"])
+        ws1.cell(row=row, column=2, value=tr["Occupied"])
+        ws1.cell(row=row, column=3, value=tr["Available"])
+        ws1.cell(row=row, column=4, value=tr["Occupied"] + tr["Available"])
+        ws1.cell(row=row, column=5, value=f"{tr['Rate']:.1f}%")
+        # Color the type cell background with plot type color
+        ws1.cell(row=row, column=1).fill = PatternFill(start_color=argb_color, end_color=argb_color, fill_type="solid")
+        ws1.cell(row=row, column=1).font = Font(color="00FFFFFF", bold=True)
+        for c in range(1, 6):
+            ws1.cell(row=row, column=c).border = thin_border
+            ws1.cell(row=row, column=c).alignment = Alignment(horizontal='center')
+        row += 1
+
+    # Activity Section
+    row += 1
+    ws1.merge_cells(f'A{row}:F{row}')
+    ws1[f'A{row}'] = "ACTIVITY PARTICIPATION"
+    ws1[f'A{row}'].font = Font(size=14, bold=True, color="00FFFFFF")
+    ws1[f'A{row}'].fill = PatternFill(start_color="00764BA2", end_color="00764BA2", fill_type="solid")
+    ws1[f'A{row}'].alignment = Alignment(horizontal='left', vertical='center')
+    ws1.row_dimensions[row].height = 25
+
+    if all_att:
+        row += 1
+        activity_metrics = [
+            ["Total Records", total_records],
+            ["Unique Residents", int(unique_p)],
+            ["Session 1", s1_total],
+            ["Session 2", s2_total],
+        ]
+        for label, value in activity_metrics:
+            ws1[f'A{row}'] = label
+            ws1[f'B{row}'] = value
+            ws1[f'A{row}'].font = Font(bold=True)
+            ws1[f'B{row}'].font = Font(size=12, color="00667EEA", bold=True)
+            row += 1
+
+        if act_summary:
+            row += 1
+            ws1.merge_cells(f'A{row}:F{row}')
+            ws1[f'A{row}'] = "By Activity"
+            ws1[f'A{row}'].font = Font(size=12, bold=True)
+            row += 1
+            act_headers = ["Activity", "Records", "Unique Residents", "Session 1", "Session 2", "Both"]
+            for col, h in enumerate(act_headers, 1):
+                cell = ws1.cell(row=row, column=col, value=h)
+                cell.font = Font(bold=True, color="00FFFFFF")
+                cell.fill = PatternFill(start_color="00333333", end_color="00333333", fill_type="solid")
+                cell.alignment = Alignment(horizontal='center')
+                cell.border = thin_border
+            row += 1
+            for a in act_summary:
+                ws1.cell(row=row, column=1, value=a['Activity'])
+                ws1.cell(row=row, column=2, value=a['Records'])
+                ws1.cell(row=row, column=3, value=a['Unique Residents'])
+                ws1.cell(row=row, column=4, value=a['Session 1'])
+                ws1.cell(row=row, column=5, value=a['Session 2'])
+                ws1.cell(row=row, column=6, value=a['Both'])
+                for c in range(1, 7):
+                    ws1.cell(row=row, column=c).border = thin_border
+                    ws1.cell(row=row, column=c).alignment = Alignment(horizontal='center')
+                row += 1
+    else:
+        row += 1
+        ws1[f'A{row}'] = "No attendance records for this period."
+        ws1[f'A{row}'].font = Font(italic=True, color="00666666")
+
+    # Resident Snapshot
+    row += 1
+    ws1.merge_cells(f'A{row}:F{row}')
+    ws1[f'A{row}'] = "RESIDENT SNAPSHOT"
+    ws1[f'A{row}'].font = Font(size=14, bold=True, color="00FFFFFF")
+    ws1[f'A{row}'].fill = PatternFill(start_color="00FF7F0E", end_color="00FF7F0E", fill_type="solid")
+    ws1[f'A{row}'].alignment = Alignment(horizontal='left', vertical='center')
+    ws1.row_dimensions[row].height = 25
+
+    try:
+        if parts is not None and parts_df is not None:
+            row += 1
+            resident_metrics = [
+                ["Total Registered", len(parts_df)],
+                ["New", new_c],
+                ["Regular", reg_c],
+                ["Unsigned Indemnity", unsigned],
+            ]
+            for label, value in resident_metrics:
+                ws1[f'A{row}'] = label
+                ws1[f'B{row}'] = value
+                ws1[f'A{row}'].font = Font(bold=True)
+                ws1[f'B{row}'].font = Font(size=12, color="00667EEA", bold=True)
+                row += 1
+    except:
+        row += 1
+        ws1[f'A{row}'] = "Resident data unavailable."
+
+    # Auto-fit columns using get_column_letter (avoids MergedCell issue)
+    for col_idx in range(1, ws1.max_column + 1):
+        max_length = 0
+        column = get_column_letter(col_idx)
+        for cell in ws1[column]:
+            try:
+                if cell.value and len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)
+        ws1.column_dimensions[column].width = adjusted_width
+
+    # ── Sheet 2: Garden Plot Entitlements (Visual + Data) ──
+    ws2 = wb.create_sheet("Garden Entitlements")
+
+    ws2.merge_cells('A1:H1')
+    ws2['A1'] = "Garden Plot Entitlements"
+    ws2['A1'].font = Font(size=16, bold=True, color="00FFFFFF")
+    ws2['A1'].fill = PatternFill(start_color="002CA02C", end_color="002CA02C", fill_type="solid")
+    ws2['A1'].alignment = Alignment(horizontal='center', vertical='center')
+    ws2.row_dimensions[1].height = 25
+
+    headers2 = ["Plot Number", "Plot Type", "Area (sqm)", "Status", "Owner ID", "Owner Name", "Contact", "Paid"]
+    for col, h in enumerate(headers2, 1):
+        cell = ws2.cell(row=2, column=col, value=h)
+        cell.font = Font(bold=True, color="00FFFFFF")
+        cell.fill = PatternFill(start_color="00333333", end_color="00333333", fill_type="solid")
+        cell.alignment = Alignment(horizontal='center')
+        cell.border = thin_border
+
+    # Load participants for name lookup
+    try:
+        all_participants = supabase.table('participants').select("*").execute().data
+        part_dict = {p['id'].lower().strip(): p for p in all_participants}
+    except:
+        part_dict = {}
+
+    all_plots = load_plots()
+    plots_dict = {p['plot_number']: p for p in all_plots}
+
+    row = 3
+    for pn in range(1, 77):
+        ptype = TYPE_MAP.get(pn, 'B')
+        area = PLOT_TYPES[ptype]["area"]
+        plot = plots_dict.get(pn)
+
+        if plot and plot.get('occupied'):
+            status_text = "Occupied"
+            owner_id = plot.get('user_id', '')
+            resident = part_dict.get(str(owner_id).lower().strip())
+            owner_name = plot.get('user_name', resident['name'] if resident else '')
+            contact = plot.get('contact', resident.get('contact', '') if resident else '')
+            paid_text = "Yes" if plot.get('paid') else "No"
+            # Visual indicator: light red fill for occupied
+            status_fill = PatternFill(start_color="00FFCCCC", end_color="00FFCCCC", fill_type="solid")
+            status_font = Font(color="00CC0000", bold=True)
+        else:
+            status_text = "Available"
+            owner_id = ""
+            owner_name = ""
+            contact = ""
+            paid_text = ""
+            # Visual indicator: light green fill for available
+            status_fill = PatternFill(start_color="00CCFFCC", end_color="00CCFFCC", fill_type="solid")
+            status_font = Font(color="00006600", bold=True)
+
+        ws2.cell(row=row, column=1, value=pn)
+        ws2.cell(row=row, column=2, value=ptype)
+        ws2.cell(row=row, column=3, value=area)
+        ws2.cell(row=row, column=4, value=status_text)
+        ws2.cell(row=row, column=4).fill = status_fill
+        ws2.cell(row=row, column=4).font = status_font
+        ws2.cell(row=row, column=5, value=owner_id)
+        ws2.cell(row=row, column=6, value=owner_name)
+        ws2.cell(row=row, column=7, value=contact)
+        ws2.cell(row=row, column=8, value=paid_text)
+        for c in range(1, 9):
+            ws2.cell(row=row, column=c).border = thin_border
+            ws2.cell(row=row, column=c).alignment = Alignment(horizontal='center')
+        row += 1
+
+    # Auto-fit columns for sheet 2 using get_column_letter
+    for col_idx in range(1, ws2.max_column + 1):
+        max_length = 0
+        column = get_column_letter(col_idx)
+        for cell in ws2[column]:
+            try:
+                if cell.value and len(str(cell.value)) > max_length:
+                    max_length = len(str(cell.value))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 50)
+        ws2.column_dimensions[column].width = adjusted_width
+
+    # ── Sheet 3: Raw Attendance Data ──
+    if all_att:
+        ws3 = wb.create_sheet("Attendance Data")
+        att_df_export = pd.DataFrame(all_att)
+        for r_idx, row_data in enumerate(dataframe_to_rows(att_df_export, index=False, header=True), 1):
+            for c_idx, value in enumerate(row_data, 1):
+                ws3.cell(row=r_idx, column=c_idx, value=value)
+                if r_idx == 1:
+                    ws3.cell(row=r_idx, column=c_idx).font = Font(bold=True, color="00FFFFFF")
+                    ws3.cell(row=r_idx, column=c_idx).fill = PatternFill(start_color="00333333", end_color="00333333", fill_type="solid")
+                    ws3.cell(row=r_idx, column=c_idx).alignment = Alignment(horizontal='center')
+                else:
+                    ws3.cell(row=r_idx, column=c_idx).border = thin_border
+
+        # Auto-fit columns for sheet 3
+        for col_idx in range(1, ws3.max_column + 1):
+            max_length = 0
+            column = get_column_letter(col_idx)
+            for cell in ws3[column]:
+                try:
+                    if cell.value and len(str(cell.value)) > max_length:
+                        max_length = len(str(cell.value))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws3.column_dimensions[column].width = adjusted_width
+
+    # Save to buffer
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return buffer
