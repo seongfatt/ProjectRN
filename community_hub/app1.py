@@ -317,71 +317,6 @@ if params.get("mode") == "volunteer":
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Access | Link expires automatically")
     st.stop()
 
-    # ===== RSVP MODE (Public link, no login) =====
-    if params.get("mode") == "rsvp":
-        if not DB_CONNECTED or supabase is None:
-            st.error("Database not connected."); st.stop()
-
-        token = params.get("tk")
-        if not token:
-            st.error("❌ Invalid RSVP link."); st.stop()
-
-        try:
-            sessions = supabase.table('sessions').select("*").eq('rsvp_link_token', token).execute().data
-            if not sessions:
-                st.error("❌ Session not found or link expired."); st.stop()
-            sess = sessions[0]
-        except:
-            st.error("❌ Error loading session."); st.stop()
-
-        if sess.get('status') != 'open':
-            st.error("⏰ This session is closed. RSVP no longer accepted."); st.stop()
-
-        st.title(f"📅 {sess['activity_name']}")
-        st.markdown(f"<h3 style='text-align:center;'>{sess['session_date']}</h3>", unsafe_allow_html=True)
-        st.markdown(f"<h4 style='text-align:center;color:#888;'>{sess['session_time']}</h4>", unsafe_allow_html=True)
-        st.divider()
-
-        with st.form("rsvp_form", clear_on_submit=True):
-            st.subheader("Will you be attending?")
-            name = st.text_input("Your Name *", placeholder="e.g., Tan Ah Kow")
-            response = st.radio("Response", ["👍 Attending", "👎 Not Attending", "🤔 Maybe"], horizontal=True)
-
-            if st.form_submit_button("Submit RSVP", type="primary", width='stretch'):
-                if not name.strip():
-                    st.error("Please enter your name")
-                else:
-                    try:
-                        existing = supabase.table('session_rsvp').select("*")\
-                            .eq('session_id', sess['id'])\
-                            .eq('name', name.strip())\
-                            .execute().data
-
-                        resp_map = {"👍 Attending": "attending", "👎 Not Attending": "not_attending", "🤔 Maybe": "maybe"}
-
-                        if existing:
-                            supabase.table('session_rsvp').update({
-                                "response": resp_map[response],
-                                "responded_at": datetime.now().isoformat()
-                            }).eq('id', existing[0]['id']).execute()
-                            st.success(f"✅ RSVP updated: {response}")
-                        else:
-                            supabase.table('session_rsvp').insert({
-                                "session_id": sess['id'],
-                                "name": name.strip(),
-                                "response": resp_map[response],
-                                "responded_at": datetime.now().isoformat(),
-                                "is_walk_in": False
-                            }).execute()
-                            st.success(f"✅ RSVP submitted: {response}")
-                        st.balloons()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-
-        st.divider()
-        st.caption("Woodlands Zone 6 Community Hub | RSVP System")
-        st.stop()
-        
 # ===== VOLUNTEER REGISTRATION MODE (Token-protected, time-limited) =====
 if params.get("mode") == "register":
     import random
@@ -452,7 +387,25 @@ if params.get("mode") == "register":
                 except Exception as e:
                     st.error(f"Registration failed: {e}")
 
-         
+         # ===== RSVP MODE (Public link, no login) =====
+        if params.get("mode") == "rsvp":
+            if not DB_CONNECTED or supabase is None:
+                st.error("Database not connected."); st.stop()
+
+            token = params.get("tk")
+            if not token:
+                st.error("❌ Invalid RSVP link."); st.stop()
+
+            try:
+                sessions = supabase.table('sessions').select("*").eq('rsvp_link_token', token).execute().data
+                if not sessions:
+                    st.error("❌ Session not found or link expired."); st.stop()
+                sess = sessions[0]
+            except:
+                st.error("❌ Error loading session."); st.stop()
+
+            if sess.get('status') != 'open':
+                st.error("⏰ This session is closed. RSVP no longer accepted."); st.stop()
 
             st.title(f"📅 {sess['activity_name']}")
             st.markdown(f"<h3 style='text-align:center;'>{sess['session_date']}</h3>", unsafe_allow_html=True)

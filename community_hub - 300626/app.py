@@ -9,15 +9,6 @@ from utils import (mask_phone, get_attendance_count, check_and_convert_status,
     update_plot, get_user_plot, create_request, get_pending_requests, 
     update_request_status, get_occupied_count)
 
-# Hide sidebar completely on all screen sizes
-st.markdown("""
-<style>
-    [data-testid="stSidebar"] {display: none !important;}
-    [data-testid="stSidebarCollapseButton"] {display: none !important;}
-    [data-testid="collapsedControl"] {display: none !important;}
-</style>
-""", unsafe_allow_html=True)
-
 st.set_page_config(page_title="Woodlands Zone 6 - Community Hub", layout="centered", initial_sidebar_state="collapsed")
 st.markdown(MOBILE_CSS, unsafe_allow_html=True)
 
@@ -317,71 +308,6 @@ if params.get("mode") == "volunteer":
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Access | Link expires automatically")
     st.stop()
 
-    # ===== RSVP MODE (Public link, no login) =====
-    if params.get("mode") == "rsvp":
-        if not DB_CONNECTED or supabase is None:
-            st.error("Database not connected."); st.stop()
-
-        token = params.get("tk")
-        if not token:
-            st.error("❌ Invalid RSVP link."); st.stop()
-
-        try:
-            sessions = supabase.table('sessions').select("*").eq('rsvp_link_token', token).execute().data
-            if not sessions:
-                st.error("❌ Session not found or link expired."); st.stop()
-            sess = sessions[0]
-        except:
-            st.error("❌ Error loading session."); st.stop()
-
-        if sess.get('status') != 'open':
-            st.error("⏰ This session is closed. RSVP no longer accepted."); st.stop()
-
-        st.title(f"📅 {sess['activity_name']}")
-        st.markdown(f"<h3 style='text-align:center;'>{sess['session_date']}</h3>", unsafe_allow_html=True)
-        st.markdown(f"<h4 style='text-align:center;color:#888;'>{sess['session_time']}</h4>", unsafe_allow_html=True)
-        st.divider()
-
-        with st.form("rsvp_form", clear_on_submit=True):
-            st.subheader("Will you be attending?")
-            name = st.text_input("Your Name *", placeholder="e.g., Tan Ah Kow")
-            response = st.radio("Response", ["👍 Attending", "👎 Not Attending", "🤔 Maybe"], horizontal=True)
-
-            if st.form_submit_button("Submit RSVP", type="primary", width='stretch'):
-                if not name.strip():
-                    st.error("Please enter your name")
-                else:
-                    try:
-                        existing = supabase.table('session_rsvp').select("*")\
-                            .eq('session_id', sess['id'])\
-                            .eq('name', name.strip())\
-                            .execute().data
-
-                        resp_map = {"👍 Attending": "attending", "👎 Not Attending": "not_attending", "🤔 Maybe": "maybe"}
-
-                        if existing:
-                            supabase.table('session_rsvp').update({
-                                "response": resp_map[response],
-                                "responded_at": datetime.now().isoformat()
-                            }).eq('id', existing[0]['id']).execute()
-                            st.success(f"✅ RSVP updated: {response}")
-                        else:
-                            supabase.table('session_rsvp').insert({
-                                "session_id": sess['id'],
-                                "name": name.strip(),
-                                "response": resp_map[response],
-                                "responded_at": datetime.now().isoformat(),
-                                "is_walk_in": False
-                            }).execute()
-                            st.success(f"✅ RSVP submitted: {response}")
-                        st.balloons()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-
-        st.divider()
-        st.caption("Woodlands Zone 6 Community Hub | RSVP System")
-        st.stop()
-        
 # ===== VOLUNTEER REGISTRATION MODE (Token-protected, time-limited) =====
 if params.get("mode") == "register":
     import random
@@ -452,53 +378,6 @@ if params.get("mode") == "register":
                 except Exception as e:
                     st.error(f"Registration failed: {e}")
 
-         
-
-            st.title(f"📅 {sess['activity_name']}")
-            st.markdown(f"<h3 style='text-align:center;'>{sess['session_date']}</h3>", unsafe_allow_html=True)
-            st.markdown(f"<h4 style='text-align:center;color:#888;'>{sess['session_time']}</h4>", unsafe_allow_html=True)
-            st.divider()
-
-            with st.form("rsvp_form", clear_on_submit=True):
-                st.subheader("Will you be attending?")
-                name = st.text_input("Your Name *", placeholder="e.g., Tan Ah Kow")
-                response = st.radio("Response", ["👍 Attending", "👎 Not Attending", "🤔 Maybe"], horizontal=True)
-
-                if st.form_submit_button("Submit RSVP", type="primary", use_container_width=True):
-                    if not name.strip():
-                        st.error("Please enter your name")
-                    else:
-                        try:
-                            existing = supabase.table('session_rsvp').select("*")\
-                                .eq('session_id', sess['id'])\
-                                .eq('name', name.strip())\
-                                .execute().data
-
-                            resp_map = {"👍 Attending": "attending", "👎 Not Attending": "not_attending", "🤔 Maybe": "maybe"}
-
-                            if existing:
-                                supabase.table('session_rsvp').update({
-                                    "response": resp_map[response],
-                                    "responded_at": datetime.now().isoformat()
-                                }).eq('id', existing[0]['id']).execute()
-                                st.success(f"✅ RSVP updated: {response}")
-                            else:
-                                supabase.table('session_rsvp').insert({
-                                    "session_id": sess['id'],
-                                    "name": name.strip(),
-                                    "response": resp_map[response],
-                                    "responded_at": datetime.now().isoformat(),
-                                    "is_walk_in": False
-                                }).execute()
-                                st.success(f"✅ RSVP submitted: {response}")
-                            st.balloons()
-                        except Exception as e:
-                            st.error(f"Error: {e}")
-
-            st.divider()
-            st.caption("Woodlands Zone 6 Community Hub | RSVP System")
-            st.stop()
-            
     st.divider()
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Registration | Time-limited access")
     st.stop()
@@ -527,59 +406,39 @@ if not st.session_state.activities:
     st.session_state.activities = load_activities()
 
 # Auth UI — simplified, no top login button
-# Auth UI
 if st.session_state.is_authenticated:
     col1, col2 = st.columns([3,1])
     with col1: st.subheader("Admin Dashboard")
     with col2:
         st.caption(f"{datetime.now().strftime('%d %b %Y')}")
         if st.button("Logout", use_container_width=True):
-            st.session_state.is_authenticated = False
-            st.session_state.user_role = None
-            st.session_state.show_login = False
-            st.rerun()
-    
-    # role_badge = "Admin" if st.session_state.user_role == "admin" else "Checker"
-    # st.success(f"{role_badge} - {'Full Access' if st.session_state.user_role=='admin' else 'Attendance Only'}")
+            st.session_state.is_authenticated = False; st.session_state.user_role = None; st.rerun()
 else:
     st.subheader("Admin Dashboard")
     st.caption(f"{datetime.now().strftime('%d %b %Y')}")
-    
-    if st.session_state.show_login:
-        st.divider(); st.subheader("Login")
-        c1, c2 = st.columns([2,1])
-        with c1:
-            pwd = st.text_input("Password", type="password", key="login_pwd")
-            st.caption("Checker: Attendance only | Admin: Full access")
-        with c2:
-            st.write(" "); st.write(" ")
-            if st.button("Login", type="primary", use_container_width=True):
-                if verify_password(pwd, "admin"):
-                    st.session_state.is_authenticated = True
-                    st.session_state.user_role = "admin"
-                    st.session_state.show_login = False
-                    st.rerun()
-                elif verify_password(pwd, "checker"):
-                    st.session_state.is_authenticated = True
-                    st.session_state.user_role = "checker"
-                    st.session_state.show_login = False
-                    st.rerun()
-                else:
-                    st.error("Invalid password")
-            if st.button("Cancel", use_container_width=True):
-                st.session_state.show_login = False
-                st.rerun()
-    else:
-        st.info("Please login to access admin features")
-        if st.button("Login", type="primary", use_container_width=True):
-            st.session_state.show_login = True
-            st.rerun()
 
-# if st.session_state.is_authenticated:
-#     role_badge = "Admin" if st.session_state.user_role == "admin" else "Checker"
-#     st.success(f"{role_badge} - {'Full Access' if st.session_state.user_role=='admin' else 'Attendance Only'}")
-# else:
-#     st.info("Please login to access admin features")
+if not st.session_state.is_authenticated and st.session_state.show_login:
+    st.divider(); st.subheader("Login")
+    c1, c2 = st.columns([2,1])
+    with c1:
+        pwd = st.text_input("Password", type="password", key="login_pwd")
+        st.caption("Checker: Attendance only | Admin: Full access")
+    with c2:
+        st.write(" "); st.write(" ")
+        if st.button("Login", type="primary", use_container_width=True):
+            if verify_password(pwd, "admin"):
+                st.session_state.is_authenticated = True; st.session_state.user_role = "admin"; st.session_state.show_login = False; st.rerun()
+            elif verify_password(pwd, "checker"):
+                st.session_state.is_authenticated = True; st.session_state.user_role = "checker"; st.session_state.show_login = False; st.rerun()
+            else: st.error("Invalid password")
+        if st.button("Cancel", use_container_width=True):
+            st.session_state.show_login = False; st.rerun()
+
+if st.session_state.is_authenticated:
+    role_badge = "Admin" if st.session_state.user_role == "admin" else "Checker"
+    st.success(f"{role_badge} - {'Full Access' if st.session_state.user_role=='admin' else 'Attendance Only'}")
+else:
+    st.info("Please login to access admin features")
 
 # Top bar for mobile — date, activity, refresh
 st.markdown("""
@@ -616,6 +475,39 @@ with st.container():
             st.success("Refreshed!"); st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
+# Desktop sidebar (hidden on mobile via CSS)
+with st.sidebar:
+    st.title("⚙️ Quick Actions")
+
+    if st.button("🔄 Refresh Data", use_container_width=True):
+        refresh_data(); st.session_state.participants = load_participants()
+        st.session_state.plots = load_plots(); st.session_state.activities = load_activities()
+        st.success("Refreshed!"); st.rerun()
+
+    selected_date = st.date_input("📅 Session Date", value=st.session_state.today_date)
+
+    if st.session_state.activities:
+        act_names = [a['name'] for a in st.session_state.activities]
+        selected_act = st.selectbox("🎯 Activity", act_names, index=0)
+        st.session_state.selected_activity = selected_act
+    else:
+        st.session_state.selected_activity = "Cardio Drumming"
+
+    st.divider()
+    st.markdown("**⏰ Session Times**")
+    acts_data = st.session_state.activities
+    sel_act_name = st.session_state.selected_activity
+    act_info = next((a for a in acts_data if a['name'] == sel_act_name), None)
+    if act_info:
+        st.markdown(f"1st: {act_info.get('session_1_label', 'Session 1')}")
+        st.markdown(f"2nd: {act_info.get('session_2_label', 'Session 2')}")
+    else:
+        st.markdown("1st: 7:00 PM - 8:00 PM")
+        st.markdown("2nd: 8:00 PM - 9:00 PM")
+    active_count = len([p for p in st.session_state.participants if p.get('active', True)])
+    st.metric("👥 Active Members", active_count)
+
+
 
 # Import tab functions
 from tab_checkin import show_checkin
@@ -629,12 +521,11 @@ from tab_admin_scan import show_admin_scan
 from tab_meeting import show_meeting
 from tab_volunteer import show_volunteer
 from tab_volunteer_access import show_volunteer_access
-from tab_sessions import show_sessions
 
 # Re-run to load tabs after imports
 if st.session_state.is_authenticated:
     if st.session_state.user_role == "admin":
-        tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Meeting", "Volunteer", "Volunteer Access", "Manage", "Import", "Garden", "Residents", "Sessions"])
+        tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Meeting", "Volunteer", "Volunteer Access", "Manage", "Import", "Garden", "Residents"])
         with tabs[0]: show_qr_links(selected_date)
         with tabs[1]: show_admin_scan(selected_date)
         with tabs[2]: show_reports(selected_date)
@@ -645,15 +536,13 @@ if st.session_state.is_authenticated:
         with tabs[7]: show_import(selected_date)
         with tabs[8]: show_garden()
         with tabs[9]: show_residents()
-        with tabs[10]: show_sessions(supabase, st.session_state.user_role)
     else:
-        tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Volunteer", "Garden", "Sessions"])
+        tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Volunteer", "Garden"])
         with tabs[0]: show_qr_links(selected_date)
         with tabs[1]: show_admin_scan(selected_date)
         with tabs[2]: show_reports(selected_date)
         with tabs[3]: show_volunteer()
         with tabs[4]: show_garden()
-        with tabs[5]: show_sessions(supabase, st.session_state.user_role)
 else:
     st.info("Login to access features")
 

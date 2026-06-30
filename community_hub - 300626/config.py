@@ -14,7 +14,7 @@ APP_URL = os.getenv("APP_URL", "https://wrnz6-community-hub.hf.space")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 CHECKER_PASSWORD = os.getenv("CHECKER_PASSWORD", "checker123")
 
-@st.cache_resource
+# @st.cache_resource
 def get_db():
     try:
         client = create_client(SUPABASE_URL, SUPABASE_KEY)
