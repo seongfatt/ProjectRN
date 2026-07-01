@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 from config import supabase, DB_CONNECTED, load_activities, TYPE_MAP, PLOT_TYPES
-from utils import mask_phone, get_attendance_count, get_user_plot, load_plots
+from utils import mask_phone, get_user_plot, load_plots
+from collections import defaultdict
 
 def show_residents():
     st.header("Resident Network & Entitlements")
@@ -32,6 +33,21 @@ def show_residents():
 
     plot_dict = {p.get('user_id', '').lower().strip(): p for p in plots if p.get('occupied')}
 
+    # 🚀 SPEED FIX: Pre-calculate all attendance stats in ONE query (Fixes N+1 problem)
+    activity_counts = defaultdict(lambda: defaultdict(int))
+    total_counts = defaultdict(int)
+
+    try:
+        # Fetch only the columns we need to make it ultra-fast and save bandwidth
+        all_att = supabase.table('attendance').select('participant_id, source').execute().data
+        for rec in all_att:
+            pid_att = rec['participant_id']
+            source_att = rec['source']
+            activity_counts[pid_att][source_att] += 1
+            total_counts[pid_att] += 1
+    except Exception:
+        pass
+
     display_data = []
     for p in participants:
         if not p.get('active', True): continue
@@ -50,14 +66,12 @@ def show_residents():
         if filter_status == "Has Garden Plot" and not has_plot: continue
         if filter_status == "No Garden Plot" and has_plot: continue
 
+        # 🚀 SPEED FIX: Use pre-calculated dictionary instead of querying DB
         attendance_info = []
         for act in acts:
-            try:
-                count = supabase.table('attendance').select('*', count='exact').eq('participant_id', pid).eq('source', act['name']).execute().count
-                if count > 0:
-                    attendance_info.append(f"{act['name']}: {count}x")
-            except:
-                pass
+            count = activity_counts[pid][act['name']]
+            if count > 0:
+                attendance_info.append(f"{act['name']}: {count}x")
 
         plot_info = ""
         if has_plot:
@@ -72,7 +86,9 @@ def show_residents():
             "Indemnity": "Yes" if p.get('indemnity') else "No",
             "Garden Plot": plot_info if plot_info else "",
             "Activities": ", ".join(attendance_info) if attendance_info else "",
-            "Total Attendance": get_attendance_count(pid)
+            "Total Attendance": total_counts.get(pid, 0),  # 🚀 SPEED FIX: Instant lookup instead of DB query!
+            # 🔥 PHASE 3: Add Streak Column
+            "Streak": f"🔥 {p.get('streak_weeks', 0)} weeks" if p.get('streak_weeks', 0) >= 3 else f"{p.get('streak_weeks', 0)} weeks"
         })
 
     if not display_data:
@@ -90,22 +106,10 @@ def show_residents():
     st.divider()
     st.subheader("Garden Plot Entitlements")
 
-    # # Type color legend
-    # st.caption("Plot Type Colors")
-    # legend_cols = st.columns(4)
-    # for i, (tk, ti) in enumerate(PLOT_TYPES.items()):
-    #     with legend_cols[i]:
-    #         st.markdown(
-    #             f'<div style="background:{ti["colour"]};color:white;padding:6px;border-radius:4px;text-align:center;font-weight:bold;font-size:11px;">'
-    #             f'Type {tk}<br/>{ti["area"]} m\u00B2</div>',
-    #             unsafe_allow_html=True
-    #         )
-
-    
     all_plots = load_plots()
     plots_dict = {p['plot_number']: p for p in all_plots}
 
-        # Summary metrics
+    # Summary metrics
     plot_owners = [p for p in plots if p.get('occupied')]
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Plots", 76)
@@ -129,7 +133,6 @@ def show_residents():
             )
     
     # Visual grid display — PRIVACY: no names or contacts shown
-        # Visual grid display — PRIVACY: no names or contacts shown
     st.markdown("#### Plot Status Grid")
     st.caption("Occupied = Dimmed + Red X | Available = Bright | Green border = Available, Red border = Occupied")
 
@@ -203,15 +206,14 @@ def show_residents():
     st.divider()
     st.subheader("Activity Participation Summary")
 
+    # 🚀 SPEED FIX: Re-use the pre-calculated dictionaries instead of querying DB again!
     for act in acts:
-        try:
-            r = supabase.table('attendance').select('participant_id').eq('source', act['name']).execute()
-            unique_participants = len(set(x['participant_id'] for x in r.data)) if r.data else 0
-            total_records = len(r.data) if r.data else 0
+        act_name = act['name']
+        # Count unique participants for this activity from our pre-calculated dict
+        unique_participants = sum(1 for pid, counts in activity_counts.items() if counts[act_name] > 0)
+        total_records = sum(counts[act_name] for counts in activity_counts.values())
 
-            c1, c2, c3 = st.columns(3)
-            c1.metric(f"{act['name']}", f"{unique_participants} unique")
-            c2.metric("Total Records", total_records)
-            c3.metric("Participation Rate", f"{(unique_participants / active * 100):.1f}%" if active > 0 else "0%")
-        except:
-            pass
+        c1, c2, c3 = st.columns(3)
+        c1.metric(f"{act_name}", f"{unique_participants} unique")
+        c2.metric("Total Records", total_records)
+        c3.metric("Participation Rate", f"{(unique_participants / active * 100):.1f}%" if active > 0 else "0%")

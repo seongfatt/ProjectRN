@@ -1,8 +1,9 @@
 from config import supabase, refresh_data, PLOT_TYPES, DB_CONNECTED
-from utils import mask_phone
+from utils import mask_phone, log_action
 from datetime import datetime
 import streamlit as st
 import random
+import pandas as pd
 
 def load_all_activities():
     """Load ALL activities (active + inactive) for management"""
@@ -98,10 +99,15 @@ def show_payment_management():
                 btn_type = "secondary" if is_paid else "primary"
                 if st.button(btn_label, key=f"pay_btn_{plot['plot_number']}", type=btn_type, use_container_width=True):
                     try:
+                        new_status = not is_paid
                         supabase.table('garden_plots').update({
-                            'paid': not is_paid,
+                            'paid': new_status,
                             'updated_at': datetime.now().isoformat()
                         }).eq('plot_number', plot['plot_number']).execute()
+
+                        # 🔥 PHASE 4: Log the action!
+                        action_type = "MARK_PAID" if new_status else "MARK_UNPAID"
+                        log_action('admin', action_type, f"Plot {plot['plot_number']} - {owner_name}", str(plot['plot_number']))
                         st.success(f"Plot {plot['plot_number']} updated!")
                         st.rerun()
                     except Exception as e:
@@ -143,7 +149,7 @@ def show_payment_management():
 def show_manage(selected_date):
     st.header("Management")
 
-    tab1, tab2, tab3, tab4 = st.tabs(["Participants", "Activities", "Convert Status", "💰 Payment Status"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["Participants", "Activities", "Convert Status", "💰 Payment Status", "📜 Audit Logs"])
 
     with tab1:
         with st.expander("Register New Participant"):
@@ -277,3 +283,23 @@ def show_manage(selected_date):
 
     with tab4:
         show_payment_management()
+
+    
+    with tab5:
+        st.subheader("📜 System Audit Logs")
+        st.caption("Track critical changes made by Admins (Payments, Deletions, Overrides)")
+        
+        try:
+            logs = supabase.table('audit_logs').select("*").order('timestamp', desc=True).limit(50).execute().data
+            if logs:
+                df_logs = pd.DataFrame(logs)
+                # Clean up the dataframe for display
+                df_logs = df_logs[['timestamp', 'user_role', 'action', 'details']]
+                df_logs['timestamp'] = pd.to_datetime(df_logs['timestamp']).dt.strftime('%d %b %Y, %I:%M %p')
+                df_logs.columns = ['Time', 'Role', 'Action', 'Details']
+                
+                st.dataframe(df_logs, use_container_width=True, hide_index=True)
+            else:
+                st.info("No audit logs recorded yet.")
+        except Exception as e:
+            st.error(f"Error loading logs: {e}")

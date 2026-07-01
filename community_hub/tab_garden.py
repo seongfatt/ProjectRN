@@ -212,10 +212,30 @@ def show_garden():
                                 unsafe_allow_html=True
                             )
                         else:
+                            # 🔥 PHASE 3: Check Renewal Status for visual warning
+                            renewal_date_str = pd.get('renewal_due_date')
+                            is_due_soon = False
+                            warning_icon = "X"
+                            border_style = "1px solid #666"
+                            
+                            if renewal_date_str:
+                                try:
+                                    # Parse the date safely
+                                    renewal_date = datetime.strptime(renewal_date_str[:10], "%Y-%m-%d").date()
+                                    days_left = (renewal_date - datetime.now().date()).days
+                                    
+                                    # If due within 30 days, show warning
+                                    if 0 <= days_left <= 30:
+                                        is_due_soon = True
+                                        border_style = "3px solid #ff4444"  # Thicker red border
+                                        warning_icon = "⚠️"               # Warning emoji
+                                except:
+                                    pass
+                            
                             # Other occupied - not clickable, just display
                             st.markdown(
-                                f'<div style="background:{color};opacity:0.4;border:1px solid #666;border-radius:6px;padding:8px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:14px;color:#ccc;">{pn}</div>'
-                                '<div style="text-align:center;font-size:14px;color:#ff4444;margin-top:-2px;font-weight:bold;">X</div>',
+                                f'<div style="background:{color};opacity:0.4;border:{border_style};border-radius:6px;padding:8px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:14px;color:#ccc;">{pn}</div>'
+                                f'<div style="text-align:center;font-size:14px;color:#ff4444;margin-top:-2px;font-weight:bold;">{warning_icon}</div>',
                                 unsafe_allow_html=True
                             )
                     else:
@@ -308,20 +328,46 @@ def show_garden():
         else:
             st.info("No pending requests")
 
-    with at2:
-        st.markdown("### Direct Assignment")
-        c1, c2, c3 = st.columns(3)
-        with c1: ap = st.number_input("Plot #", 1, TOTAL_PLOTS, 1, key="admin_ap")
-        with c2: au = st.text_input("User ID", key="admin_au")
-        with c3: an = st.text_input("User Name", key="admin_an")
-        if st.button("Assign", type="primary", use_container_width=True):
-            if au:
-                if update_plot(ap, {'occupied': True, 'user_id': au, 'user_name': an, 'change_log': "Direct admin assign"}):
-                    st.success(f"Plot {ap} assigned!"); st.rerun()
+        with at2:
+            st.markdown("### Direct Assignment")
+            c1, c2, c3 = st.columns(3)
+            with c1: ap = st.number_input("Plot #", 1, TOTAL_PLOTS, 1, key="admin_ap")
+            with c2: au = st.text_input("User ID", key="admin_au")
+            with c3: an = st.text_input("User Name", key="admin_an")
+            
+            # 🔥 PHASE 3: Add Renewal Date input
+            st.markdown("**📅 Plot Renewal Tracking**")
+            renewal_date = st.date_input("Renewal Due Date (Optional)", value=None, key="admin_renewal", help="Set a date to trigger a ⚠️ warning 30 days before expiry")
+            
+            if st.button("Assign", type="primary", use_container_width=True):
+                if au:
+                    updates = {
+                        'occupied': True, 
+                        'user_id': au, 
+                        'user_name': an, 
+                        'change_log': "Direct admin assign"
+                    }
+                    
+                    # 🔥 PHASE 3: Save renewal date if provided
+                    if renewal_date:
+                        updates['renewal_due_date'] = str(renewal_date)
+                        updates['renewal_status'] = 'active'
+                        
+                    if update_plot(ap, updates):
+                        st.success(f"Plot {ap} assigned!"); st.rerun()
 
-        st.markdown("---")
-        st.markdown("### Force Release")
-        rp = st.number_input("Plot to release", 1, TOTAL_PLOTS, 1, key="admin_rp")
-        if st.button("Force Release", type="secondary", use_container_width=True):
-            if update_plot(rp, {'occupied': False, 'user_id': None, 'user_name': None, 'contact': None, 'change_log': "Force released by admin"}):
-                st.success(f"Plot {rp} released!"); st.rerun()
+            st.markdown("---")
+            st.markdown("### Force Release")
+            rp = st.number_input("Plot to release", 1, TOTAL_PLOTS, 1, key="admin_rp")
+            if st.button("Force Release", type="secondary", use_container_width=True):
+                # 🔥 PHASE 3: Clear renewal date when releasing
+                if update_plot(rp, {
+                    'occupied': False, 
+                    'user_id': None, 
+                    'user_name': None, 
+                    'contact': None,
+                    'renewal_due_date': None,
+                    'renewal_status': None,
+                    'change_log': "Force released by admin"
+                }):
+                    st.success(f"Plot {rp} released!"); st.rerun()

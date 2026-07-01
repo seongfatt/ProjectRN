@@ -74,10 +74,16 @@ def show_reports(selected_date):
 
     st.subheader("Export")
     prefix = st.text_input("Filename", value=f"attendance_{start.strftime('%Y%m%d')}_{end.strftime('%Y%m%d')}")
+
     if st.button("Export Summary"):
         summary = pd.DataFrame({'Period': [f"{start.strftime('%d %b %Y')} to {end.strftime('%d %b %Y')}"], 'Total': [total], 'Unique': [unique], 'S1': [s1], 'S2': [s2]})
         csv = summary.to_csv(index=False).encode('utf-8')
-        st.download_button("Download CSV", csv, f"{prefix}_summary.csv", "text/csv")
-    if st.button("Export Full Data"):
-        csv = disp.to_csv(index=False).encode('utf-8')
-        st.download_button("Download CSV", csv, f"{prefix}_detailed.csv", "text/csv")
+        st.download_button("Download Summary CSV", csv, f"{prefix}_summary.csv", "text/csv")
+
+    # 🔥 PHASE 4: PDPA Protection - Only Admins can export full PII data
+    if st.session_state.get('user_role') == 'admin':
+        if st.button("Export Full Data (Includes PII)"):
+            csv = disp.to_csv(index=False).encode('utf-8')
+            st.download_button("Download Full CSV", csv, f"{prefix}_detailed.csv", "text/csv")
+    else:
+        st.info("🔒 Full data export is restricted to Admins for PDPA compliance.")
