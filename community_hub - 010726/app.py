@@ -503,115 +503,97 @@ if params.get("mode") == "register":
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Registration | Time-limited access")
     st.stop()
 
-    # ===== PUBLIC RSVP MODE (Simple for residents, expires automatically) =====
-    if params.get("mode") == "rsvp":
-        if not DB_CONNECTED or supabase is None:
-            st.error("Database not connected."); st.stop()
+# ===== PUBLIC RSVP MODE (Simple for residents, expires automatically) =====
+if params.get("mode") == "rsvp":
+    if not DB_CONNECTED or supabase is None:
+        st.error("Database not connected."); st.stop()
+    
+    token = params.get("tk")
+    if not token:
+        st.error("❌ Invalid RSVP link."); st.stop()
         
-        token = params.get("tk")
-        if not token:
-            st.error("❌ Invalid RSVP link."); st.stop()
-            
-        try:
-            sess = supabase.table('sessions').select("*").eq('rsvp_link_token', token).single().execute().data
-        except:
-            sess = None
-            
-        if not sess:
-            st.error("❌ Session not found or link is invalid."); st.stop()
-            
-        # 🔒 CHECK IF SESSION IS LOCKED / EXPIRED (Like Volunteer Access)
-        is_locked = sess.get('status') in ['closed', 'cancelled']
+    try:
+        sess = supabase.table('sessions').select("*").eq('rsvp_link_token', token).single().execute().data
+    except:
+        sess = None
         
-        # Auto-lock if 2 hours past the session start time
-        try:
-            from datetime import timedelta
-            date_str = sess.get('session_date')
-            time_str = sess.get('session_time', '23:59')
-            start_time_str = time_str.split('-')[0].strip()
-            try: start_time = datetime.strptime(start_time_str, "%I:%M %p").time()
-            except: start_time = datetime.strptime(start_time_str, "%H:%M").time()
-            
-            session_dt = datetime.combine(datetime.strptime(date_str, "%Y-%m-%d").date(), start_time)
-            if datetime.now() > session_dt + timedelta(hours=2):
-                is_locked = True
-        except:
-            pass
+    if not sess:
+        st.error("❌ Session not found or link is invalid."); st.stop()
+        
+    # 🔒 CHECK IF SESSION IS LOCKED / EXPIRED (Like Volunteer Access)
+    is_locked = sess.get('status') in ['closed', 'cancelled']
+    
+    # Auto-lock if 2 hours past the session start time
+    try:
+        from datetime import timedelta
+        date_str = sess.get('session_date')
+        time_str = sess.get('session_time', '23:59')
+        start_time_str = time_str.split('-')[0].strip()
+        try: start_time = datetime.strptime(start_time_str, "%I:%M %p").time()
+        except: start_time = datetime.strptime(start_time_str, "%H:%M").time()
+        
+        session_dt = datetime.combine(datetime.strptime(date_str, "%Y-%m-%d").date(), start_time)
+        if datetime.now() > session_dt + timedelta(hours=2):
+            is_locked = True
+    except:
+        pass
 
-        if is_locked:
-            st.markdown("""
-            <div style="background: #ffebee; border-left: 4px solid #f44336; padding: 20px; border-radius: 8px; color: #1a1a1a; text-align: center;">
-                <h3>⏰ Session Closed / Expired</h3>
-                <p>This session has already ended or been closed by the admin.</p>
-                <p><strong>No further RSVPs or check-ins can be recorded.</strong></p>
-                <p>Please contact the admin for a new session link.</p>
-            </div>
-            """, unsafe_allow_html=True)
-            st.stop()
-            
-        # If we reach here, the session is OPEN and active
-            # ... (keep the expiration/lock check code above this) ...
-        
-        st.title(f"📅 {sess['activity_name']}")
-        st.markdown(f"<h3 style='text-align:center;'>{sess['session_date']}</h3>", unsafe_allow_html=True)
-        st.markdown(f"<h4 style='text-align:center;color:#888;'>{sess['session_time']}</h4>", unsafe_allow_html=True)
-        st.divider()
-        
-        with st.form("rsvp_form", clear_on_submit=True):
-            st.subheader("Will you be attending?")
-            name = st.text_input("Your Name *", placeholder="e.g., Tan Ah Kow")
-            response = st.radio("Response", ["👍 Attending", "👎 Not Attending", "⏳ Maybe"], horizontal=True)
-            
-            # 🔥 NEW: Ask which session they are attending
-            acts = load_activities()
-            act_config = next((a for a in acts if a['name'] == sess['activity_name']), None)
-            s1_label = act_config.get('session_1_label', 'Session 1') if act_config else 'Session 1'
-            s2_label = act_config.get('session_2_label', 'Session 2') if act_config else 'Session 2'
-            has_s2 = bool(s2_label and s2_label.strip())
-            
-            s1_attend, s2_attend = True, False # Default fallback
-            if has_s2:
-                session_choice = st.radio("Which session(s) will you attend?", ["Both", s1_label, s2_label], horizontal=True)
-                s1_attend = session_choice in ["Both", s1_label]
-                s2_attend = session_choice in ["Both", s2_label]
-            else:
-                st.info(f"📌 This activity has only one session: {s1_label}")
-                s1_attend, s2_attend = True, False
-                
-            if st.form_submit_button("Submit RSVP", type="primary", use_container_width=True):
-                if not name.strip():
-                    st.error("Please enter your name")
-                else:
-                    try:
-                        import uuid
-                        resp_map = {"👍 Attending": "attending", "👎 Not Attending": "not_attending", "⏳ Maybe": "maybe"}
-                        checked_in = False 
-                        
-                        existing = supabase.table('session_rsvp').select("*").eq('session_id', sess['id']).eq('name', name.strip()).execute().data
-                        
-                        if existing:
-                            supabase.table('session_rsvp').update({
-                                "response": resp_map[response], "checked_in": checked_in,
-                                "session_1": s1_attend, "session_2": s2_attend,
-                                "updated_at": datetime.now().isoformat()
-                            }).eq('id', existing[0]['id']).execute()
-                            st.success(f"✅ RSVP updated: {response}")
-                        else:
-                            supabase.table('session_rsvp').insert({
-                                "id": str(uuid.uuid4()), "session_id": sess['id'],
-                                "name": name.strip(), "response": resp_map[response],
-                                "checked_in": checked_in, "is_walk_in": False,
-                                "session_1": s1_attend, "session_2": s2_attend,
-                                "created_at": datetime.now().isoformat()
-                            }).execute()
-                            st.success(f"✅ RSVP submitted: {response}")
-                        st.balloons()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-                        
-        st.divider()
-        st.caption("Woodlands Zone 6 Community Hub | RSVP System")
+    if is_locked:
+        st.markdown("""
+        <div style="background: #ffebee; border-left: 4px solid #f44336; padding: 20px; border-radius: 8px; color: #1a1a1a; text-align: center;">
+            <h3>⏰ Session Closed / Expired</h3>
+            <p>This session has already ended or been closed by the admin.</p>
+            <p><strong>No further RSVPs or check-ins can be recorded.</strong></p>
+            <p>Please contact the admin for a new session link.</p>
+        </div>
+        """, unsafe_allow_html=True)
         st.stop()
+        
+    # If we reach here, the session is OPEN and active
+    st.title(f"📅 {sess['activity_name']}")
+    st.markdown(f"<h3 style='text-align:center;'>{sess['session_date']}</h3>", unsafe_allow_html=True)
+    st.markdown(f"<h4 style='text-align:center;color:#888;'>{sess['session_time']}</h4>", unsafe_allow_html=True)
+    st.divider()
+    
+    with st.form("rsvp_form", clear_on_submit=True):
+        st.subheader("Will you be attending?")
+        name = st.text_input("Your Name *", placeholder="e.g., Tan Ah Kow")
+        response = st.radio("Response", ["👍 Attending", "👎 Not Attending", "⏳ Maybe"], horizontal=True)
+        
+        if st.form_submit_button("Submit RSVP", type="primary", use_container_width=True):
+            if not name.strip():
+                st.error("Please enter your name")
+            else:
+                try:
+                    import uuid
+                    resp_map = {"👍 Attending": "attending", "👎 Not Attending": "not_attending", "⏳ Maybe": "maybe"}
+                    # Note: Public RSVP is just intent. They get checked in (synced to reports) 
+                    # when the admin marks them 👍 Present at the venue!
+                    checked_in = False 
+                    
+                    existing = supabase.table('session_rsvp').select("*").eq('session_id', sess['id']).eq('name', name.strip()).execute().data
+                    
+                    if existing:
+                        supabase.table('session_rsvp').update({
+                            "response": resp_map[response], "checked_in": checked_in,
+                            "updated_at": datetime.now().isoformat()
+                        }).eq('id', existing[0]['id']).execute()
+                        st.success(f"✅ RSVP updated: {response}")
+                    else:
+                        supabase.table('session_rsvp').insert({
+                            "id": str(uuid.uuid4()), "session_id": sess['id'],
+                            "name": name.strip(), "response": resp_map[response],
+                            "checked_in": checked_in, "is_walk_in": False,
+                            "created_at": datetime.now().isoformat()
+                        }).execute()
+                        st.success(f"✅ RSVP submitted: {response}")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"Error: {e}")
+                    
+    st.divider()
+    st.caption("Woodlands Zone 6 Community Hub | RSVP System")
+    st.stop()
     
 # ===== MAIN APP =====
 # RN Logo + Title
