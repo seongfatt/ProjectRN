@@ -160,27 +160,6 @@ def show_residents():
                         unsafe_allow_html=True
                     )
 
-    # Detailed table with payment status (admin view only)
-    if st.session_state.get('is_authenticated') and st.session_state.get('user_role') == 'admin':
-        st.markdown("#### Payment Management (Admin Only)")
-        st.info("Admin can mark plots as paid/unpaid")
-
-        for plot in plot_owners:
-            cols = st.columns([2, 2, 1, 1])
-            cols[0].write(f"Plot {plot['plot_number']}")
-            cols[1].write(plot.get('user_name', 'N/A'))
-            is_paid = plot.get('paid', False)
-            cols[2].write("Yes" if is_paid else "No")
-
-            btn_label = "Mark Unpaid" if is_paid else "Mark Paid"
-            if cols[3].button(btn_label, key=f"pay_{plot['plot_number']}"):
-                try:
-                    supabase.table('garden_plots').update({'paid': not is_paid}).eq('plot_number', plot['plot_number']).execute()
-                    st.success(f"Plot {plot['plot_number']} updated!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
     # EXPORT GARDEN PLOT ENTITLEMENTS (CSV)
     st.divider()
     st.subheader("Export Garden Plot Entitlements")

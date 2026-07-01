@@ -69,6 +69,60 @@ def _upsert_rsvp(session_id, name, phone, response, checked_in, is_walk_in=False
         data["created_at"] = datetime.now().isoformat()
         supabase.table("session_rsvp").insert(data).execute()
 
+def _sync_to_main_attendance(sup, session, rsvp):
+    """
+    BRIDGE FUNCTION: Syncs a checked-in RSVP to the main 'attendance' table 
+    so it automatically appears in your Monthly Reports and Meeting Dashboard!
+    """
+    if rsvp.get('response') != 'attending' or not rsvp.get('checked_in'):
+        return
+    
+    session_date = session.get('session_date')
+    activity_name = session.get('activity_name')
+    name = rsvp.get('name', '').strip().upper()
+    phone = rsvp.get('phone', '').strip()
+    
+    # 1. Try to find the resident's actual participant_id
+    pid = None
+    try:
+        # Try exact name match first
+        res = sup.table('participants').select('id').eq('name', name).execute()
+        if res.data:
+            pid = res.data[0]['id']
+        elif phone and len(phone) >= 4:
+            # Fallback: match by last 4 digits of phone number
+            all_p = sup.table('participants').select('id', 'contact').execute()
+            for p in all_p.data:
+                if str(p.get('contact', '')).replace(' ', '').endswith(phone[-4:]):
+                    pid = p['id']
+                    break
+    except:
+        pass
+        
+    # If they aren't in the main DB (e.g., a walk-in), use a temporary ID
+    if not pid:
+        pid = f"WALKIN_{rsvp.get('id', 'unknown')}"
+        
+    # 2. Check if they are already in the attendance table for this date/activity
+    try:
+        existing = sup.table('attendance').select('id') \
+            .eq('participant_id', pid).eq('date', session_date).eq('source', activity_name).execute()
+        
+        # 3. If not, insert them into the main attendance table!
+        if not existing.data:
+            sup.table('attendance').insert({
+                "participant_id": pid,
+                "name": name,
+                "date": session_date,
+                "session_1": True,
+                "session_2": False,
+                "timestamp": datetime.now().isoformat(),
+                "self_checkin": False,
+                "source": activity_name
+            }).execute()
+    except Exception as e:
+        print(f"Sync to main attendance error: {e}")
+        
 def _delete_rsvp(rsvp_id):
     supabase.table("session_rsvp").delete().eq("id", rsvp_id).execute()
 
@@ -120,9 +174,12 @@ def _render_live_checkin(session):
                     else:
                         st.caption("⏳ Pending")
             
+            # Inside _render_live_checkin, inside the `for p in active_p:` loop:
             with col2:
                 if st.button("👍", key=f"p_{p['id']}", disabled=is_closed, help="Mark Present"):
                     _upsert_rsvp(session['id'], name, phone, 'attending', True)
+                    # 🔥 SYNC TO MAIN ATTENDANCE TABLE FOR REPORTS!
+                    _sync_to_main_attendance(supabase, session, {'name': name, 'phone': phone, 'response': 'attending', 'checked_in': True, 'id': p['id']})
                     st.rerun()
             with col3:
                 if st.button("👎", key=f"n_{p['id']}", disabled=is_closed, help="Mark No-Show"):
@@ -147,6 +204,8 @@ def _render_live_checkin(session):
         if st.button("➕ Add", disabled=is_closed):
             if walkin_name.strip():
                 _upsert_rsvp(session['id'], walkin_name.strip(), '', 'attending', True, is_walk_in=True)
+                # 🔥 SYNC WALK-INS TO REPORTS TOO!
+                _sync_to_main_attendance(supabase, session, {'name': walkin_name.strip(), 'phone': '', 'response': 'attending', 'checked_in': True, 'id': 'walkin'})
                 st.rerun()
                 
     if walkins:

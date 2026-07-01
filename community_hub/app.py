@@ -520,18 +520,36 @@ if params.get("mode") == "rsvp":
     if not sess:
         st.error("❌ Session not found or link is invalid."); st.stop()
         
-    # Check if session has expired (past start time)
-    from tab_sessions import _is_session_expired
-    if _is_session_expired(sess):
-        st.markdown(f"""
+    # 🔒 CHECK IF SESSION IS LOCKED / EXPIRED (Like Volunteer Access)
+    is_locked = sess.get('status') in ['closed', 'cancelled']
+    
+    # Auto-lock if 2 hours past the session start time
+    try:
+        from datetime import timedelta
+        date_str = sess.get('session_date')
+        time_str = sess.get('session_time', '23:59')
+        start_time_str = time_str.split('-')[0].strip()
+        try: start_time = datetime.strptime(start_time_str, "%I:%M %p").time()
+        except: start_time = datetime.strptime(start_time_str, "%H:%M").time()
+        
+        session_dt = datetime.combine(datetime.strptime(date_str, "%Y-%m-%d").date(), start_time)
+        if datetime.now() > session_dt + timedelta(hours=2):
+            is_locked = True
+    except:
+        pass
+
+    if is_locked:
+        st.markdown("""
         <div style="background: #ffebee; border-left: 4px solid #f44336; padding: 20px; border-radius: 8px; color: #1a1a1a; text-align: center;">
-            <h3>⏰ RSVP Closed</h3>
-            <p>This session has already started or ended.</p>
-            <p><strong>{sess['activity_name']}</strong><br>{sess['session_date']} {sess['session_time']}</p>
+            <h3>⏰ Session Closed / Expired</h3>
+            <p>This session has already ended or been closed by the admin.</p>
+            <p><strong>No further RSVPs or check-ins can be recorded.</strong></p>
+            <p>Please contact the admin for a new session link.</p>
         </div>
         """, unsafe_allow_html=True)
         st.stop()
         
+    # If we reach here, the session is OPEN and active
     st.title(f"📅 {sess['activity_name']}")
     st.markdown(f"<h3 style='text-align:center;'>{sess['session_date']}</h3>", unsafe_allow_html=True)
     st.markdown(f"<h4 style='text-align:center;color:#888;'>{sess['session_time']}</h4>", unsafe_allow_html=True)
@@ -549,7 +567,9 @@ if params.get("mode") == "rsvp":
                 try:
                     import uuid
                     resp_map = {"👍 Attending": "attending", "👎 Not Attending": "not_attending", "⏳ Maybe": "maybe"}
-                    checked_in = (resp_map[response] == 'attending')
+                    # Note: Public RSVP is just intent. They get checked in (synced to reports) 
+                    # when the admin marks them 👍 Present at the venue!
+                    checked_in = False 
                     
                     existing = supabase.table('session_rsvp').select("*").eq('session_id', sess['id']).eq('name', name.strip()).execute().data
                     
