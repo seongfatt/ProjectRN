@@ -98,11 +98,25 @@ def show_meeting(selected_date):
     act_names = [a['name'] for a in acts]
 
     # Load attendance for period
+    # Load attendance for period
     try:
         all_att = supabase.table('attendance').select("*").gte('date', str(start_date)).lte('date', str(end_date)).execute().data
     except Exception:
         all_att = []
 
+    # ── FIX: Initialize defaults in case there is no attendance data ──
+    total_records = 0
+    unique_p = 0
+    s1_total = 0
+    s2_total = 0
+    act_summary = []
+    parts = None
+    parts_df = None
+    new_c = 0
+    reg_c = 0
+    unsigned = 0
+
+    
     if all_att:
         att_df = pd.DataFrame(all_att)
         att_df['date'] = pd.to_datetime(att_df['date'])
