@@ -1,7 +1,10 @@
+import random
+
 import streamlit as st
 from datetime import datetime
 from config import supabase, DB_CONNECTED, refresh_data
 from utils import mask_phone
+from utils import mask_phone, clean_phone_number
 
 def show_volunteer():
     st.header("📝 Volunteer Registration")
@@ -30,18 +33,23 @@ def show_volunteer():
 
         submitted = st.form_submit_button("Register Resident", type="primary", use_container_width=True)
 
-        if submitted:
-            if not name.strip():
-                st.error("Name is required")
-            elif not contact.strip():
-                st.error("Contact is required")
+    if submitted:
+        if not name.strip():
+            st.error("Name is required")
+        elif not contact.strip():
+            st.error("Contact is required")
+        else:
+            clean_contact = clean_phone_number(contact)
+            existing_check = supabase.table('participants').select('*').eq('contact', clean_contact).execute()
+            if existing_check.data:
+                st.warning(f"⚠️ **Resident already exists!** Name: **{existing_check.data[0]['name']}**")
             else:
                 try:
                     new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
                     supabase.table('participants').insert({
-                        "id": new_id,
-                        "name": name.strip().upper(),
-                        "contact": contact.strip(),
+                         "id": new_id,
+                         "name": name.strip().upper(),
+                         "contact": clean_contact,
                         "indemnity": indemnity,
                         "is_new": True,
                         "active": True,

@@ -162,3 +162,46 @@ def log_action(role, action, details="", target_id=""):
         }).execute()
     except Exception as e:
         print(f"Audit log error: {e}")
+
+def clean_phone_number(phone):
+    """Standardizes phone numbers for database matching."""
+    if not phone: return ""
+    p = str(phone).strip().replace(" ", "").replace("-", "").replace("+", "")
+    if p.startswith("65") and len(p) == 10:
+        p = p[2:] # Remove country code for local matching
+    return p
+
+def find_participant_by_phone(phone):
+    """Searches the participants database for an exact phone match."""
+    if not DB_CONNECTED: return None
+    clean = clean_phone_number(phone)
+    if len(clean) < 4: return None
+    
+    try:
+        # Try exact match first
+        res = supabase.table('participants').select("*").eq('contact', clean).execute()
+        if res.data: return res.data[0]
+        
+        # Fallback: match by last 4 digits if they typed it partially
+        res2 = supabase.table('participants').select("*").ilike('contact', f'%{clean[-4:]}%').execute()
+        for p in res2.data:
+            if clean_phone_number(p.get('contact', '')) == clean:
+                return p
+    except:
+        pass
+    return None
+
+def check_returning_guest(phone):
+    """Checks if this phone number was used as a walk-in previously."""
+    if not DB_CONNECTED: return None
+    clean = clean_phone_number(phone)
+    if len(clean) < 4: return None
+    
+    try:
+        # Check session_rsvp for past walk-ins with this phone
+        res = supabase.table('session_rsvp').select("created_at, name").eq('phone', clean).order('created_at', desc=True).limit(1).execute()
+        if res.data: 
+            return res.data[0] 
+    except:
+        pass
+    return None

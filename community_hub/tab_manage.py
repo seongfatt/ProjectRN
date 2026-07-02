@@ -4,6 +4,7 @@ from datetime import datetime
 import streamlit as st
 import random
 import pandas as pd
+from utils import mask_phone, clean_phone_number
 
 def load_all_activities():
     """Load ALL activities (active + inactive) for management"""
@@ -153,16 +154,34 @@ def show_manage(selected_date):
 
     with tab1:
         with st.expander("Register New Participant"):
-            with st.form("new_p"):
+            # 🔥 FIX: Ensure the form context is perfectly maintained
+            with st.form("new_p_form"):
                 name = st.text_input("Full Name")
                 contact = st.text_input("Contact")
                 indemnity = st.checkbox("Indemnity Signed")
+                
                 if st.form_submit_button("Register"):
                     if name and contact:
-                        new_p = {"id": datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99)), "name": name.upper(), "contact": contact,
-                                 "indemnity": indemnity, "is_new": True, "active": True, "registration_date": str(selected_date)}
-                        supabase.table('participants').insert(new_p).execute()
-                        refresh_data(); st.success(f"Added {name}!"); st.rerun()
+                        clean_contact = clean_phone_number(contact)
+                        
+                        # Check for duplicates
+                        existing_check = supabase.table('participants').select('*').eq('contact', clean_contact).execute()
+                        if existing_check.data:
+                            st.warning(f"⚠️ **Resident already exists!** Name: **{existing_check.data[0]['name']}**")
+                        else:
+                            new_p = {
+                                "id": datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99)), 
+                                "name": name.upper(), 
+                                "contact": clean_contact,
+                                "indemnity": indemnity, 
+                                "is_new": True, 
+                                "active": True, 
+                                "registration_date": str(selected_date)
+                            }
+                            supabase.table('participants').insert(new_p).execute()
+                            refresh_data()
+                            st.success(f"Added {name}!")
+                            st.rerun()
 
         with st.expander("Indemnity Status"):
             unsigned = [p for p in st.session_state.participants if not p.get('indemnity') and p.get('active', True)]
