@@ -19,17 +19,12 @@ def check_and_convert_status(pid, name):
     if not DB_CONNECTED: return None
     try:
         c = get_attendance_count(pid)
-        msg = None
         if c >= 3:
             p = supabase.table('participants').select('is_new').eq('id', pid).execute()
             if p.data and p.data[0].get('is_new'):
                 supabase.table('participants').update({'is_new': False}).eq('id', pid).execute()
-                msg = f"🎉 {name} graduated to Regular!"
-        
-        #  PHASE 3: Update their streak!
-        update_attendance_streak(pid)
-        
-        return msg
+                return f"🎉 {name} graduated to Regular!"
+        return None
     except: return None
 
 def generate_token(pid, date_str):
@@ -38,14 +33,12 @@ def generate_token(pid, date_str):
 def verify_token(pid, date_str, token):
     return token == generate_token(pid, date_str)
 
-@st.cache_data(ttl=300)  # 🚀 CACHING: Saves data in memory for 5 minutes (300 seconds)
 def load_participants():
     if not DB_CONNECTED: return []
     try:
         return supabase.table('participants').select("*").execute().data
     except: return []
 
-@st.cache_data(ttl=300)  # 🚀 CACHING: Saves data in memory for 5 minutes (300 seconds)
 def load_plots():
     if not DB_CONNECTED: return []
     try:
@@ -103,52 +96,43 @@ def get_occupied_count():
         return supabase.table('garden_plots').select('*', count="exact").eq('occupied', True).execute().count
     except: return 0
 
-def update_attendance_streak(pid):
-    """Calculates and updates the resident's attendance streak."""
-    if not DB_CONNECTED: return
+# 🔥 PHASE 5: Phone Lookup Functions
+def clean_phone_number(phone):
+    if not phone: return ""
+    p = str(phone).strip().replace(" ", "").replace("-", "").replace("+", "")
+    if p.startswith("65") and len(p) == 10:
+        p = p[2:]
+    return p
+
+def find_participant_by_phone(phone):
+    if not DB_CONNECTED: return None
+    clean = clean_phone_number(phone)
+    if len(clean) < 4: return None
     
     try:
-        # Get current streak data
-        p = supabase.table('participants').select('streak_weeks', 'longest_streak', 'last_attendance_date').eq('id', pid).execute()
-        if not p.data: return
+        res = supabase.table('participants').select("*").eq('contact', clean).execute()
+        if res.data: return res.data[0]
         
-        data = p.data[0]
-        last_date_str = data.get('last_attendance_date')
-        current_streak = data.get('streak_weeks', 0)
-        longest = data.get('longest_streak', 0)
-        
-        today = datetime.now().date()
-        
-        # If no previous date, start streak at 1
-        if not last_date_str:
-            new_streak = 1
-        else:
-            last_date = datetime.strptime(last_date_str, "%Y-%m-%d").date()
-            days_diff = (today - last_date).days
-            
-            # If checked in within 10 days (allows for 1 week + grace period), increment streak
-            if 1 <= days_diff <= 10:
-                new_streak = current_streak + 1
-            # If checked in on the same day, keep streak same
-            elif days_diff == 0:
-                new_streak = current_streak
-            # If missed more than 10 days, reset streak
-            else:
-                new_streak = 1
-        
-        # Update longest streak if current is higher
-        if new_streak > longest:
-            longest = new_streak
-            
-        # Save to database
-        supabase.table('participants').update({
-            'streak_weeks': new_streak,
-            'longest_streak': longest,
-            'last_attendance_date': str(today)
-        }).eq('id', pid).execute()
-        
-    except Exception as e:
-        print(f"Streak update error: {e}")
+        res2 = supabase.table('participants').select("*").ilike('contact', f'%{clean[-4:]}%').execute()
+        for p in res2.data:
+            if clean_phone_number(p.get('contact', '')) == clean:
+                return p
+    except:
+        pass
+    return None
+
+def check_returning_guest(phone):
+    if not DB_CONNECTED: return None
+    clean = clean_phone_number(phone)
+    if len(clean) < 4: return None
+    
+    try:
+        res = supabase.table('session_rsvp').select("created_at, name").eq('phone', clean).order('created_at', desc=True).limit(1).execute()
+        if res.data: 
+            return res.data[0] 
+    except:
+        pass
+    return None
 
 def log_action(role, action, details="", target_id=""):
     """Records critical admin actions for accountability and security."""
@@ -162,46 +146,3 @@ def log_action(role, action, details="", target_id=""):
         }).execute()
     except Exception as e:
         print(f"Audit log error: {e}")
-
-def clean_phone_number(phone):
-    """Standardizes phone numbers for database matching."""
-    if not phone: return ""
-    p = str(phone).strip().replace(" ", "").replace("-", "").replace("+", "")
-    if p.startswith("65") and len(p) == 10:
-        p = p[2:] # Remove country code for local matching
-    return p
-
-def find_participant_by_phone(phone):
-    """Searches the participants database for an exact phone match."""
-    if not DB_CONNECTED: return None
-    clean = clean_phone_number(phone)
-    if len(clean) < 4: return None
-    
-    try:
-        # Try exact match first
-        res = supabase.table('participants').select("*").eq('contact', clean).execute()
-        if res.data: return res.data[0]
-        
-        # Fallback: match by last 4 digits if they typed it partially
-        res2 = supabase.table('participants').select("*").ilike('contact', f'%{clean[-4:]}%').execute()
-        for p in res2.data:
-            if clean_phone_number(p.get('contact', '')) == clean:
-                return p
-    except:
-        pass
-    return None
-
-def check_returning_guest(phone):
-    """Checks if this phone number was used as a walk-in previously."""
-    if not DB_CONNECTED: return None
-    clean = clean_phone_number(phone)
-    if len(clean) < 4: return None
-    
-    try:
-        # Check session_rsvp for past walk-ins with this phone
-        res = supabase.table('session_rsvp').select("created_at, name").eq('phone', clean).order('created_at', desc=True).limit(1).execute()
-        if res.data: 
-            return res.data[0] 
-    except:
-        pass
-    return None

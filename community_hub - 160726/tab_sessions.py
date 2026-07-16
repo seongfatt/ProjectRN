@@ -16,7 +16,7 @@ def _generate_rsvp_url(token):
     return f"{base}/?mode=rsvp&tk={token}"
 
 def _generate_whatsapp_link(phone, message):
-    """🔥 FIX 1: Added missing WhatsApp link generator."""
+    """Generate WhatsApp click-to-chat link. Auto-prefixes +65 if missing."""
     clean_phone = str(phone).strip().replace(" ", "").replace("-", "").lstrip("+")
     if not clean_phone.startswith('65') and len(clean_phone) == 8:
         clean_phone = '65' + clean_phone
@@ -68,18 +68,25 @@ def _make_walkin_permanent(sup, rsvp_id, walkin_name):
     """PHASE 2: Converts a walk-in into a permanent resident and updates their attendance record."""
     try:
         import random
+        # 1. Generate new permanent ID and insert into participants table
         new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
         sup.table('participants').insert({
-            "id": new_id, "name": walkin_name.strip().upper(), "contact": "",
-            "indemnity": False, "is_new": True, "active": True,
+            "id": new_id,
+            "name": walkin_name.strip().upper(),
+            "contact": "",
+            "indemnity": False,
+            "is_new": True,
+            "active": True,
             "registration_date": datetime.now().strftime("%Y-%m-%d")
         }).execute()
 
+        # 2. Update the main attendance record to use the new permanent ID
         temp_pid = f"WALKIN_{rsvp_id}"
         att_rec = sup.table('attendance').select('id').eq('participant_id', temp_pid).execute()
         if att_rec.data:
             sup.table('attendance').update({
-                'participant_id': new_id, 'name': walkin_name.strip().upper()
+                'participant_id': new_id, 
+                'name': walkin_name.strip().upper()
             }).eq('id', att_rec.data[0]['id']).execute()
 
         return True, new_id
@@ -119,9 +126,13 @@ def _sync_to_main_attendance(sup, session, rsvp, s1=True, s2=False):
         
         if not existing.data:
             sup.table('attendance').insert({
-                "participant_id": pid, "name": name, "date": session_date,
-                "session_1": s1, "session_2": s2,
-                "timestamp": datetime.now().isoformat(), "self_checkin": False,
+                "participant_id": pid,
+                "name": name,
+                "date": session_date,
+                "session_1": s1,
+                "session_2": s2,
+                "timestamp": datetime.now().isoformat(),
+                "self_checkin": False,
                 "source": activity_name
             }).execute()
     except Exception as e:
@@ -204,18 +215,24 @@ def _render_live_checkin(sup, session):
         s = search.lower()
         active_p = [p for p in active_p if s in p['name'].lower() or s in p.get('contact', '')[-4:]]
         
-    # 🔥 PHASE 5: PHONE-FIRST SMART CHECK-IN ROUTER
+    # 🔥 PHASE 5: PHONE-FIRST SMART CHECK-IN ROUTER (Replaces the long resident list)
     st.subheader("📱 Smart Check-In (Phone Number)")
     st.caption("Enter the resident's 8-digit mobile number to instantly check them in.")
 
-    phone_input = st.text_input("Mobile Number", placeholder="e.g., 91234567", key="live_phone_input")
+    phone_input = st.text_input(
+        "Mobile Number", 
+        placeholder="e.g., 91234567", 
+        key="live_phone_input"
+    )
 
     if phone_input and len(clean_phone_number(phone_input)) >= 8:
         clean_phone = clean_phone_number(phone_input)
         resident = find_participant_by_phone(clean_phone)
 
         if resident:
+            # ✅ RESIDENT FOUND
             rsvp = rsvp_dict.get(resident['name'].lower().strip())
+            
             st.markdown(f"""
             <div style="background: #e8f5e9; border-left: 4px solid #4caf50; padding: 15px; border-radius: 8px; margin: 10px 0;">
                 <h4 style="margin:0; color:#1a1a1a;">✅ Resident Found: {resident['name']}</h4>
@@ -238,12 +255,15 @@ def _render_live_checkin(sup, session):
                     _upsert_rsvp(sup, session['id'], resident['name'], clean_phone, 'maybe', False)
                     st.rerun()
         else:
+            # ❌ PHONE NOT FOUND
             st.markdown(f"""
             <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; margin: 10px 0;">
                 <h4 style="margin:0; color:#1a1a1a;">❓ Phone number not found.</h4>
                 <p style="margin:5px 0 0 0;">Add them as a Walk-in below.</p>
             </div>
             """, unsafe_allow_html=True)
+            
+            # Auto-fill the walk-in name input if they want to add them quickly
             st.session_state['walkin_phone_prefill'] = clean_phone
 
     st.divider()
@@ -265,13 +285,18 @@ def _render_live_checkin(sup, session):
                 st.session_state['walkin_phone_prefill'] = None
                 st.rerun()
                 
+    # 🔥 PHASE 2 FIX: Walk-in list with "Make Permanent" button properly spaced
     if walkins:
         for w in walkins:
+            # Adjusted column ratios [2, 2, 1] to give the button more horizontal space
             c1, c2, c3 = st.columns([2, 2, 1]) 
+            
             with c1: 
                 st.write(f"🚶 **{w['name']}**")
                 st.caption(f"📞 {w.get('phone', 'No phone')}")
+            
             with c2:
+                # Added use_container_width=True so the button fills the wider column nicely
                 if st.button("⭐ Make Permanent", key=f"perm_{w['id']}", disabled=is_closed, help="Register as permanent resident", use_container_width=True):
                     success, msg = _make_walkin_permanent(sup, w['id'], w['name'])
                     if success:
@@ -280,7 +305,9 @@ def _render_live_checkin(sup, session):
                         st.rerun()
                     else:
                         st.error(f"Error: {msg}")
+            
             with c3:
+                # Existing Delete Button
                 if st.button("🗑️", key=f"del_{w['id']}", disabled=is_closed, use_container_width=True):
                     _delete_rsvp(sup, w['id'])
                     st.rerun()
@@ -289,6 +316,7 @@ def _render_live_checkin(sup, session):
         
     st.divider()
     
+    # Footer Counters & Close Button
     confirmed = len([r for r in rsvps if r.get('response') == 'attending'])
     noshow = len([r for r in rsvps if r.get('response') == 'not_attending'])
     
@@ -344,6 +372,7 @@ def show(supabase, role):
     app_url = APP_URL
     sup = supabase
 
+    # 🔥 PHASE 2: Automatically close any sessions that have expired!
     _auto_close_expired_sessions(sup)
 
     if 'live_checkin_session_id' not in st.session_state:
@@ -351,6 +380,7 @@ def show(supabase, role):
 
     st.title("📅 Session RSVP & Check-In")
 
+    # 🔥 PINNED LIVE CHECK-IN DESK
     if st.session_state['live_checkin_session_id']:
         active_sid = st.session_state['live_checkin_session_id']
         session = _fetch_session_by_id(sup, active_sid)
@@ -372,6 +402,7 @@ def show(supabase, role):
         else:
             st.session_state['live_checkin_session_id'] = None
 
+    # ─── Main Tab UI ──
     if role == "admin":
         tab_list = ["📋 All Sessions", "➕ Create Session", "📊 Analytics"]
     elif role == "checker":
@@ -414,7 +445,8 @@ def show(supabase, role):
                             st.rerun()
                     st.divider()
 
-            # 🔥 FIX 2: Correctly indented inside `with tabs[0]:`
+            # ── NEW: Resend RSVP Links Feature ───────────────────────────
+            st.divider()
             st.subheader("📩 Resend RSVP Links to Residents")
             st.caption("Find a session and resend RSVP links to attendees who lost the original link")
             
@@ -430,6 +462,7 @@ def show(supabase, role):
                     token = resend_session.get('rsvp_link_token')
                     if token:
                         rsvp_url = f"{app_url}/?mode=rsvp&tk={token}"
+                        
                         st.code(rsvp_url, language="text", line_numbers=False)
                         
                         c1, c2 = st.columns([1, 3])
@@ -437,6 +470,7 @@ def show(supabase, role):
                             if st.button("📋 Copy Link", key=f"copy_resend_{resend_session['id']}"):
                                 st.success("Link copied to clipboard!")
                         
+                        # Get all RSVPs for this session
                         rsvps = _fetch_rsvps(sup, resend_session['id'])
                         attending = [r for r in rsvps if r.get('response') == 'attending' and r.get('phone')]
                         
@@ -447,7 +481,10 @@ def show(supabase, role):
                                 for rsvp in attending:
                                     phone = rsvp.get('phone', '')
                                     name = rsvp.get('name', 'Resident')
+                                    
+                                    # Generate personalized message
                                     msg = f"Hi {name}! Here's your RSVP link for {resend_session['activity_name']} on {resend_session['session_date']}:\n\n{rsvp_url}\n\nTap to confirm your attendance!"
+                                    
                                     wa_link = _generate_whatsapp_link(phone, msg)
                                     
                                     with st.expander(f"📲 {name} ({phone})", expanded=False):
@@ -459,6 +496,8 @@ def show(supabase, role):
                         st.warning("This session doesn't have an RSVP link token.")
             else:
                 st.info("No sessions available.")
+            
+            st.divider()
 
         with tabs[1]:
             _render_session_form(sup, app_url=app_url, form_key_suffix="create")

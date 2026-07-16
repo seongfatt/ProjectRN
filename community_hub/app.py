@@ -219,24 +219,16 @@ if params.get("mode") == "volunteer":
     st.divider()
 
     # 🔥 PHASE 5: PHONE-FIRST SMART CHECK-IN ROUTER
-    st.subheader(" Smart Check-In (Phone Number)")
+    st.subheader("📱 Smart Check-In (Phone Number)")
     st.caption("Enter the resident's 8-digit mobile number to instantly check them in or register them.")
 
-    # Mobile-friendly phone input
-    phone_input = st.text_input(
-        "Mobile Number", 
-        placeholder="e.g., 91234567", 
-        key="vol_phone_input",
-        help="Type the number. The system will auto-search."
-    )
+    phone_input = st.text_input("Mobile Number", placeholder="e.g., 91234567", key="vol_phone_input")
 
-    # Auto-search when 8 digits are entered
     if phone_input and len(clean_phone_number(phone_input)) >= 8:
         clean_phone = clean_phone_number(phone_input)
         resident = find_participant_by_phone(clean_phone)
 
         if resident:
-            # ✅ SCENARIO A: RESIDENT FOUND (Fixed UI Colors with explicit dark text)
             status_text = '⭐ Regular' if not resident.get('is_new') else '🆕 New'
             st.markdown(f"""
             <div style="background: #d4edda; border-left: 4px solid #28a745; padding: 15px; border-radius: 8px; margin: 10px 0;">
@@ -248,14 +240,22 @@ if params.get("mode") == "volunteer":
 
             if st.button("✅ Mark Present & Check-In", type="primary", use_container_width=True, key="vol_checkin_found"):
                 try:
-                    supabase.table('attendance').insert({
-                        "participant_id": resident['id'],
-                        "name": resident['name'],
-                        "date": str(selected_date),
-                        "session_1": s1, "session_2": s2,
-                        "timestamp": datetime.now().isoformat(),
-                        "self_checkin": False, "source": selected_activity
-                    }).execute()
+                    existing_att = supabase.table('attendance').select('id').eq('participant_id', resident['id']).eq('date', str(selected_date)).execute()
+                    if existing_att.data:
+                        supabase.table('attendance').update({
+                            "session_1": s1, "session_2": s2,
+                            "timestamp": datetime.now().isoformat(),
+                            "source": selected_activity
+                        }).eq('id', existing_att.data[0]['id']).execute()
+                    else:
+                        supabase.table('attendance').insert({
+                            "participant_id": resident['id'],
+                            "name": resident['name'],
+                            "date": str(selected_date),
+                            "session_1": s1, "session_2": s2,
+                            "timestamp": datetime.now().isoformat(),
+                            "self_checkin": False, "source": selected_activity
+                        }).execute()
                     st.success(f"✅ {resident['name']} checked in successfully!")
                     st.balloons()
                     st.rerun()
@@ -263,7 +263,6 @@ if params.get("mode") == "volunteer":
                     st.error(f"Error: {e}")
 
         else:
-            # ❌ SCENARIO B: PHONE NOT FOUND
             st.markdown(f"""
             <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; margin: 10px 0;">
                 <h4 style="margin: 0 0 8px 0; color: #856404; font-size: 18px;">❓ Phone Number Not Found</h4>
@@ -271,7 +270,6 @@ if params.get("mode") == "volunteer":
             </div>
             """, unsafe_allow_html=True)
 
-            # 🔥 RETURNING GUEST CHECK
             guest_history = check_returning_guest(clean_phone)
             if guest_history:
                 st.info(f"💡 This phone number attended as a Guest on {guest_history['created_at'][:10]}. Consider upgrading them to a Permanent Resident!")
@@ -284,7 +282,6 @@ if params.get("mode") == "volunteer":
                 if st.button("🚶 Add as Walk-in / Guest", use_container_width=True, key="vol_reg_walkin"):
                     st.session_state.vol_action = "register_walkin"
 
-            # Expandable forms based on selection
             if st.session_state.get('vol_action') == "register_permanent":
                 with st.form("vol_permanent_form", clear_on_submit=True):
                     st.subheader("Register as Permanent Resident")
@@ -295,10 +292,9 @@ if params.get("mode") == "volunteer":
                         if not new_name.strip():
                             st.error("Name is required")
                         else:
-                            # 🔥 PREVENT DUPLICATE: Check if phone number already exists
                             existing_check = supabase.table('participants').select('*').eq('contact', clean_phone).execute()
                             if existing_check.data:
-                                st.warning(f"⚠️ **Resident already exists!**\n\nName: **{existing_check.data[0]['name']}**\nPhone: {clean_phone}\n\nPlease use the 'Mark Present & Check-In' button above instead.")
+                                st.warning(f"⚠️ **Resident already exists!**\n\nName: **{existing_check.data[0]['name']}**\nPhone: {clean_phone}")
                             else:
                                 try:
                                     import random
@@ -331,17 +327,6 @@ if params.get("mode") == "volunteer":
                             st.error("Name is required")
                         else:
                             try:
-                                # Save to session_rsvp as a walk-in (or attendance with temp ID)
-                                supabase.table('session_rsvp').insert({
-                                    "session_id": "WALKIN_GLOBAL", # Or link to a specific session if applicable
-                                    "name": walkin_name.strip().upper(),
-                                    "phone": clean_phone,
-                                    "response": "attending",
-                                    "checked_in": True,
-                                    "is_walk_in": True,
-                                    "created_at": datetime.now().isoformat()
-                                }).execute()
-                                # Also add to main attendance for reporting
                                 supabase.table('attendance').insert({
                                     "participant_id": f"GUEST_{clean_phone}",
                                     "name": walkin_name.strip().upper(),
@@ -349,14 +334,81 @@ if params.get("mode") == "volunteer":
                                     "timestamp": datetime.now().isoformat(), "self_checkin": False,
                                     "source": selected_activity
                                 }).execute()
-                                st.success(f" {walkin_name.strip().upper()} added as walk-in!")
+                                st.success(f"🚶 {walkin_name.strip().upper()} added as walk-in!")
                                 st.session_state.vol_action = None
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error: {e}")
-                                
-    st.divider()
 
+    st.divider()
+    
+    # 🔥 ELDERLY / NO PHONE FALLBACK
+    with st.expander("👴 Resident does not have a mobile phone?"):
+        st.caption("Use this section to search or register residents without a handphone.")
+        
+        with st.form("no_phone_form"):
+            np_name = st.text_input("Full Name *", placeholder="e.g., TAN AH KOW")
+            
+            c1, c2 = st.columns(2)
+            with c1:
+                search_np = st.form_submit_button("🔍 Search Existing")
+            with c2:
+                register_np = st.form_submit_button("📝 Register New")
+                
+            if search_np and np_name.strip():
+                matches = [p for p in all_participants if np_name.strip().upper() in p.get('name', '').upper()]
+                if matches:
+                    st.success(f"Found {len(matches)} match(es). Select to check-in:")
+                    for m in matches:
+                        id_display = m['id'][:8] + "..."
+                        if st.button(f"✅ Check-in: {m['name']} ({id_display})", key=f"np_check_{m['id']}"):
+                            try:
+                                supabase.table('attendance').insert({
+                                    "participant_id": m['id'],
+                                    "name": m['name'],
+                                    "date": str(selected_date),
+                                    "session_1": s1, "session_2": s2,
+                                    "timestamp": datetime.now().isoformat(),
+                                    "self_checkin": False, "source": selected_activity
+                                }).execute()
+                                st.success(f"✅ {m['name']} checked in!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error: {e}")
+                else:
+                    st.warning("No matches found. Please register them as a new resident.")
+                    
+            if register_np and np_name.strip():
+                try:
+                    import random
+                    new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
+                    
+                    new_data = {
+                        "id": new_id, 
+                        "name": np_name.strip().upper(), 
+                        "contact": "NO_PHONE", 
+                        "indemnity": False, 
+                        "is_new": True, 
+                        "active": True,
+                        "registration_date": str(selected_date)
+                    }
+
+                    supabase.table('participants').insert(new_data).execute()
+                    
+                    supabase.table('attendance').insert({
+                        "participant_id": new_id, 
+                        "name": np_name.strip().upper(),
+                        "date": str(selected_date), "session_1": s1, "session_2": s2,
+                        "timestamp": datetime.now().isoformat(), "self_checkin": False,
+                        "source": selected_activity
+                    }).execute()
+                    
+                    st.success(f"✅ {np_name.strip().upper()} registered & checked in!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+    st.divider()
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Access | Link expires automatically")
     st.stop()
 
@@ -398,7 +450,8 @@ if params.get("mode") == "register":
 
     with st.form("public_register", clear_on_submit=True):
         name = st.text_input("Full Name *", placeholder="e.g., AHMAD BIN ISMAIL")
-        contact = st.text_input("Contact Number *", placeholder="e.g., 91234567")
+        contact = st.text_input("Contact Number", placeholder="e.g., 91234567")
+        no_phone = st.checkbox("👴 I do not have a phone")
         indemnity = st.checkbox("Indemnity Form Signed", value=False)
 
         st.caption("By registering, you confirm the resident has agreed to participate in community activities.")
@@ -408,30 +461,26 @@ if params.get("mode") == "register":
         if submitted:
             if not name.strip():
                 st.error("Name is required")
-            elif not contact.strip():
-                st.error("Contact is required")
             else:
-                clean_contact = clean_phone_number(contact)
-                existing_check = supabase.table('participants').select('*').eq('contact', clean_contact).execute()
-                if existing_check.data:
-                    st.warning(f"⚠️ **Resident already exists!**\n\nName: **{existing_check.data[0]['name']}**\nPhone: {clean_contact}")
-                else:
-                    try:
-                        new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
-                        supabase.table('participants').insert({
-                            "id": new_id,
-                            "name": name.strip().upper(),
-                            "contact": contact.strip(),
-                            "indemnity": indemnity,
-                            "is_new": True,
-                            "active": True,
-                            "registration_date": datetime.now().strftime("%Y-%m-%d")
-                        }).execute()
-                        st.success(f"✅ {name.strip().upper()} registered successfully!")
-                        st.info(f"Resident ID: `{new_id}`")
-                        st.caption("They can now use the check-in QR for attendance.")
-                    except Exception as e:
-                        st.error(f"Registration failed: {e}")
+                # Handle no phone case
+                final_contact = "NO_PHONE" if no_phone else contact.strip()
+                
+                try:
+                    new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
+                    supabase.table('participants').insert({
+                        "id": new_id,
+                        "name": name.strip().upper(),
+                        "contact": final_contact,
+                        "indemnity": indemnity,
+                        "is_new": True,
+                        "active": True,
+                        "registration_date": datetime.now().strftime("%Y-%m-%d")
+                    }).execute()
+                    st.success(f"✅ {name.strip().upper()} registered successfully!")
+                    st.info(f"Resident ID: `{new_id}`")
+                    st.caption("They can now use the check-in QR for attendance.")
+                except Exception as e:
+                    st.error(f"Registration failed: {e}")
 
     st.divider()
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Registration | Time-limited access")
@@ -454,10 +503,8 @@ if params.get("mode") == "rsvp":
     if not sess:
         st.error("❌ Session not found or link is invalid."); st.stop()
         
-    # 🔒 CHECK IF SESSION IS LOCKED / EXPIRED
     is_locked = sess.get('status') in ['closed', 'cancelled']
     
-    # Auto-lock if 2 hours past the session start time
     try:
         date_str = sess.get('session_date')
         time_str = sess.get('session_time', '23:59')
@@ -482,7 +529,6 @@ if params.get("mode") == "rsvp":
         """, unsafe_allow_html=True)
         st.stop()
         
-    # If we reach here, the session is OPEN and active
     st.title(f"📅 {sess['activity_name']}")
     st.markdown(f"<h3 style='text-align:center;'>{sess['session_date']}</h3>", unsafe_allow_html=True)
     st.markdown(f"<h4 style='text-align:center;color:#888;'>{sess['session_time']}</h4>", unsafe_allow_html=True)
@@ -498,13 +544,11 @@ if params.get("mode") == "rsvp":
         resident = find_participant_by_phone(clean_phone)
         
         if resident:
-            # ✅ RESIDENT FOUND: Just click attendance!
             st.success(f"✅ Welcome back, **{resident['name']}**!")
             
             with st.form("rsvp_form_found"):
                 response = st.radio("Will you be attending?", ["👍 Attending", "👎 Not Attending", "⏳ Maybe"], horizontal=True)
                 
-                # Session selection
                 acts = load_activities()
                 act_config = next((a for a in acts if a['name'] == sess['activity_name']), None)
                 s1_label = act_config.get('session_1_label', 'Session 1') if act_config else 'Session 1'
@@ -543,14 +587,12 @@ if params.get("mode") == "rsvp":
                     except Exception as e:
                         st.error(f"Error: {e}")
         else:
-            # ❌ RESIDENT NOT FOUND: Key name to register/RSVP
             st.warning("❓ Phone number not found. Please enter your details to RSVP.")
             
             with st.form("rsvp_form_new"):
                 new_name = st.text_input("Your Name *", placeholder="e.g., Tan Ah Kow")
                 response = st.radio("Will you be attending?", ["👍 Attending", "👎 Not Attending", "⏳ Maybe"], horizontal=True)
                 
-                # Session selection
                 acts = load_activities()
                 act_config = next((a for a in acts if a['name'] == sess['activity_name']), None)
                 s1_label = act_config.get('session_1_label', 'Session 1') if act_config else 'Session 1'
@@ -584,13 +626,55 @@ if params.get("mode") == "rsvp":
                             st.error(f"Error: {e}")
     else:
         st.info("📱 Enter your 8-digit mobile number to continue.")
+
+    # 🔥 ELDERLY / NO PHONE FALLBACK FOR RSVP
+    st.divider()
+    with st.expander("👴 I do not have a mobile phone"):
+        st.caption("Please enter your details below to RSVP. A volunteer will assist you at the venue.")
+        
+        with st.form("no_phone_rsvp_form"):
+            np_name = st.text_input("Full Name *", placeholder="e.g., TAN AH KOW")
+            
+            response = st.radio("Will you be attending?", ["👍 Attending", "👎 Not Attending", "⏳ Maybe"], horizontal=True)
+            
+            if st.form_submit_button("Submit RSVP", type="primary", use_container_width=True):
+                if not np_name.strip():
+                    st.error("Name is required")
+                else:
+                    try:
+                        import uuid
+                        resp_map = {"👍 Attending": "attending", "👎 Not Attending": "not_attending", "⏳ Maybe": "maybe"}
+                        
+                        existing = supabase.table('session_rsvp').select("*").eq('session_id', sess['id']).eq('name', np_name.strip().upper()).execute().data
+                        
+                        rsvp_data = {
+                            "session_id": sess['id'],
+                            "name": np_name.strip().upper(),
+                            "phone": "NO_PHONE",
+                            "response": resp_map[response], 
+                            "checked_in": False, 
+                            "is_walk_in": False,
+                            "session_1": True, "session_2": False,
+                            "updated_at": datetime.now().isoformat()
+                        }
+
+                        if existing:
+                            supabase.table('session_rsvp').update(rsvp_data).eq('id', existing[0]['id']).execute()
+                        else:
+                            rsvp_data["id"] = str(uuid.uuid4())
+                            rsvp_data["created_at"] = datetime.now().isoformat()
+                            supabase.table('session_rsvp').insert(rsvp_data).execute()
+                            
+                        st.success(f"✅ RSVP submitted: {response}")
+                        st.balloons()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
         
     st.divider()
     st.caption("Woodlands Zone 6 Community Hub | RSVP System")
     st.stop()
 
 # ===== MAIN APP (Admin Dashboard) =====
-# RN Logo + Title
 c1, c2 = st.columns([1, 4])
 with c1:
     try:
@@ -604,7 +688,6 @@ with c2:
 if not DB_CONNECTED or supabase is None:
     st.error("Database Not Connected"); st.stop()
 
-# Load data
 if not st.session_state.participants:
     st.session_state.participants = load_participants()
 if not st.session_state.plots:
@@ -623,6 +706,77 @@ if st.session_state.is_authenticated:
             st.session_state.user_role = None
             st.session_state.show_login = False
             st.rerun()
+            
+    # ── MOBILE TOP BAR (Only show when logged in) ──
+    st.markdown("""
+    <style>
+    @media(max-width:768px){
+        [data-testid="stSidebar"]{display:none!important;}
+        [data-testid="stSidebarCollapseButton"]{display:none!important;}
+        .mobile-topbar{background:#1a1a2e;padding:10px;border-radius:8px;margin-bottom:10px;}
+    }
+    @media(min-width:769px){
+        .mobile-topbar{display:none;}
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    with st.container():
+        st.markdown('<div class="mobile-topbar">', unsafe_allow_html=True)
+        m1, m2, m3 = st.columns([2, 2, 1])
+        with m1:
+            selected_date = st.date_input("📅 Date", value=st.session_state.today_date, key="mobile_date")
+        with m2:
+            if st.session_state.activities:
+                act_names = [a['name'] for a in st.session_state.activities]
+                selected_act = st.selectbox("🎯 Activity", act_names, index=0, key="mobile_act")
+                st.session_state.selected_activity = selected_act
+            else:
+                st.session_state.selected_activity = "Cardio Drumming"
+        with m3:
+            st.write(" "); st.write(" ")
+            if st.button("🔄", key="mobile_refresh"):
+                refresh_data(); st.session_state.participants = load_participants()
+                st.session_state.plots = load_plots(); st.session_state.activities = load_activities()
+                st.success("Refreshed!"); st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # Import tab functions
+    from tab_checkin import show_checkin
+    from tab_qr_links import show_qr_links
+    from tab_reports import show_reports
+    from tab_manage import show_manage
+    from tab_import import show_import
+    from tab_garden import show_garden
+    from tab_residents import show_residents
+    from tab_admin_scan import show_admin_scan
+    from tab_meeting import show_meeting
+    from tab_volunteer import show_volunteer
+    from tab_volunteer_access import show_volunteer_access
+    from tab_sessions import show_sessions
+
+    # Re-run to load tabs after imports
+    if st.session_state.user_role == "admin":
+        tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Meeting", "Volunteer", "Volunteer Access", "Manage", "Import", "Garden", "Residents", "Sessions"])
+        with tabs[0]: show_qr_links(selected_date)
+        with tabs[1]: show_admin_scan(selected_date)
+        with tabs[2]: show_reports(selected_date)
+        with tabs[3]: show_meeting(selected_date)
+        with tabs[4]: show_volunteer()
+        with tabs[5]: show_volunteer_access()
+        with tabs[6]: show_manage(selected_date)
+        with tabs[7]: show_import(selected_date)
+        with tabs[8]: show_garden()
+        with tabs[9]: show_residents()
+        with tabs[10]: show_sessions(supabase, st.session_state.user_role)
+    else:
+        tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Volunteer", "Garden", "Sessions"])
+        with tabs[0]: show_qr_links(selected_date)
+        with tabs[1]: show_admin_scan(selected_date)
+        with tabs[2]: show_reports(selected_date)
+        with tabs[3]: show_volunteer()
+        with tabs[4]: show_garden()
+        with tabs[5]: show_sessions(supabase, st.session_state.user_role)
 else:
     st.subheader("Admin Dashboard")
     st.caption(f"{datetime.now().strftime('%d %b %Y')}")
@@ -656,81 +810,7 @@ else:
         if st.button("Login", type="primary", use_container_width=True):
             st.session_state.show_login = True
             st.rerun()
-
-# Top bar for mobile — date, activity, refresh
-st.markdown("""
-<style>
-@media(max-width:768px){
-    [data-testid="stSidebar"]{display:none!important;}
-    [data-testid="stSidebarCollapseButton"]{display:none!important;}
-    .mobile-topbar{background:#1a1a2e;padding:10px;border-radius:8px;margin-bottom:10px;}
-}
-@media(min-width:769px){
-    .mobile-topbar{display:none;}
-}
-</style>
-""", unsafe_allow_html=True)
-
-# Mobile top bar
-with st.container():
-    st.markdown('<div class="mobile-topbar">', unsafe_allow_html=True)
-    m1, m2, m3 = st.columns([2, 2, 1])
-    with m1:
-        selected_date = st.date_input("📅 Date", value=st.session_state.today_date, key="mobile_date")
-    with m2:
-        if st.session_state.activities:
-            act_names = [a['name'] for a in st.session_state.activities]
-            selected_act = st.selectbox("🎯 Activity", act_names, index=0, key="mobile_act")
-            st.session_state.selected_activity = selected_act
-        else:
-            st.session_state.selected_activity = "Cardio Drumming"
-    with m3:
-        st.write(""); st.write("")
-        if st.button("🔄", key="mobile_refresh"):
-            refresh_data(); st.session_state.participants = load_participants()
-            st.session_state.plots = load_plots(); st.session_state.activities = load_activities()
-            st.success("Refreshed!"); st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
-# Import tab functions
-from tab_checkin import show_checkin
-from tab_qr_links import show_qr_links
-from tab_reports import show_reports
-from tab_manage import show_manage
-from tab_import import show_import
-from tab_garden import show_garden
-from tab_residents import show_residents
-from tab_admin_scan import show_admin_scan
-from tab_meeting import show_meeting
-from tab_volunteer import show_volunteer
-from tab_volunteer_access import show_volunteer_access
-from tab_sessions import show_sessions
-
-# Re-run to load tabs after imports
-if st.session_state.is_authenticated:
-    if st.session_state.user_role == "admin":
-        tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Meeting", "Volunteer", "Volunteer Access", "Manage", "Import", "Garden", "Residents", "Sessions"])
-        with tabs[0]: show_qr_links(selected_date)
-        with tabs[1]: show_admin_scan(selected_date)
-        with tabs[2]: show_reports(selected_date)
-        with tabs[3]: show_meeting(selected_date)
-        with tabs[4]: show_volunteer()
-        with tabs[5]: show_volunteer_access()
-        with tabs[6]: show_manage(selected_date)
-        with tabs[7]: show_import(selected_date)
-        with tabs[8]: show_garden()
-        with tabs[9]: show_residents()
-        with tabs[10]: show_sessions(supabase, st.session_state.user_role)
-    else:
-        tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Volunteer", "Garden", "Sessions"])
-        with tabs[0]: show_qr_links(selected_date)
-        with tabs[1]: show_admin_scan(selected_date)
-        with tabs[2]: show_reports(selected_date)
-        with tabs[3]: show_volunteer()
-        with tabs[4]: show_garden()
-        with tabs[5]: show_sessions(supabase, st.session_state.user_role)
-else:
+            
     st.info("Login to access features")
 
 st.divider()
