@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import uuid
 import secrets
 import hashlib
+import urllib.parse
 from config import supabase, DB_CONNECTED, APP_URL, load_activities
 
 def generate_volunteer_token(admin_id="admin"):
@@ -10,13 +11,14 @@ def generate_volunteer_token(admin_id="admin"):
     raw = f"{admin_id}{datetime.now().isoformat()}{secrets.token_hex(8)}"
     return hashlib.sha256(raw.encode()).hexdigest()[:24]
 
-def create_volunteer_link(token, expires_at):
+def create_volunteer_link(token, expires_at, created_by="admin"):
     """Store token in DB with expiration."""
     if not DB_CONNECTED:
         return None
     try:
         supabase.table('volunteer_tokens').insert({
             "token": token,
+            "created_by": created_by,
             "created_at": datetime.now().isoformat(),
             "expires_at": expires_at.isoformat(),
             "active": True,
@@ -72,6 +74,12 @@ def show_volunteer_access():
     st.header("🔐 Volunteer Access Control")
     st.caption("Create time-limited volunteer links for check-in and registration")
 
+    # 🔥 EXPLICITLY ALLOW BOTH ADMIN AND CHAIRMAN
+    current_role = st.session_state.get('user_role', '')
+    if current_role not in ['admin', 'chairman']:
+        st.warning("🔒 Access restricted. Only Admins and Chairmen can manage volunteer links.")
+        return
+
     if not DB_CONNECTED:
         st.error("Database not connected")
         return
@@ -103,8 +111,8 @@ def show_volunteer_access():
     with c3:
         st.write(""); st.write("")
         if st.button("Generate Link", type="primary", use_container_width=True):
-            token = generate_volunteer_token()
-            link = create_volunteer_link(token, expires_at)
+            token = generate_volunteer_token(current_role)
+            link = create_volunteer_link(token, expires_at, created_by=current_role)
             if link:
                 st.success("Link generated!")
                 st.session_state.new_volunteer_link = link
@@ -119,7 +127,6 @@ def show_volunteer_access():
         st.code(st.session_state.new_volunteer_link, language="text")
 
         # QR for the volunteer link
-        import urllib.parse
         vol_qr = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={urllib.parse.quote(st.session_state.new_volunteer_link)}"
         c1, c2 = st.columns([1, 2])
         with c1:
@@ -190,6 +197,7 @@ def show_volunteer_access():
                     st.code(full_link, language="text")
                     st.write("**Registration Only:**")
                     st.code(reg_link, language="text")
+                    st.write(f"Created by: {tok.get('created_by', 'Unknown').capitalize()}")
                     st.write(f"Created: {datetime.fromisoformat(tok['created_at'].replace('Z', '+00:00')).strftime('%d %b %I:%M %p')}")
                 with c2:
                     status_color = "🔴" if is_expired else "🟢"
