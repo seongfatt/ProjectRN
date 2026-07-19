@@ -68,7 +68,8 @@ def show_garden():
             if not actual_plots:
                 continue
 
-            cols = st.columns(10)
+                        # 🔥 FIX: Make columns dynamic based on row length to prevent IndexError
+            cols = st.columns(len(row))
             for ci, pn in enumerate(row):
                 if pn is None:
                     cols[ci].empty()

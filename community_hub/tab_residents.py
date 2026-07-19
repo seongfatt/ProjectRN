@@ -78,9 +78,8 @@ def show_residents():
             plot_data = plot_dict[pid.lower().strip()]
             plot_info = f"Plot {plot_data['plot_number']} (Type {plot_data['plot_type']})"
 
-            # 🔥 PDPA GUARDRAIL: Mask phone numbers for Chairman
-        contact_display = mask_phone(p.get('contact', 'N/A')) if st.session_state.user_role == 'chairman' else p.get('contact', 'N/A')
-
+        # 🔥 PDPA GUARDRAIL: Mask phone numbers for Chairman
+        contact_display = mask_phone(p.get('contact', 'N/A')) if st.session_state.get('user_role') == 'chairman' else p.get('contact', 'N/A')
 
         display_data.append({
             "ID": pid,
@@ -90,8 +89,7 @@ def show_residents():
             "Indemnity": "Yes" if p.get('indemnity') else "No",
             "Garden Plot": plot_info if plot_info else "",
             "Activities": ", ".join(attendance_info) if attendance_info else "",
-            "Total Attendance": total_counts.get(pid, 0),  # 🚀 SPEED FIX: Instant lookup instead of DB query!
-            # 🔥 PHASE 3: Add Streak Column
+            "Total Attendance": total_counts.get(pid, 0),
             "Streak": f"🔥 {p.get('streak_weeks', 0)} weeks" if p.get('streak_weeks', 0) >= 3 else f"{p.get('streak_weeks', 0)} weeks"
         })
 
@@ -103,13 +101,17 @@ def show_residents():
     st.dataframe(df, use_container_width=True, hide_index=True)
 
     st.divider()
-    csv = df.to_csv(index=False).encode('utf-8')
-    st.download_button("Export Resident Directory (CSV)", csv, f"residents_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv")
     
-    # 🔥 PDPA GUARDRAIL: Block CSV exports for Chairman
-    if st.session_state.user_role == 'admin':
+    # 🔥 FIX 1: Added unique key="btn_export_residents" to prevent duplicate ID error
+    if st.session_state.get('user_role') == 'admin':
         csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("Export Resident Directory (CSV)", csv, f"residents_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv")
+        st.download_button(
+            label="Export Resident Directory (CSV)", 
+            data=csv, 
+            file_name=f"residents_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", 
+            mime="text/csv",
+            key="btn_export_residents"
+        )
     else:
         st.info("🔒 Full data export is restricted to Admins for PDPA compliance.")
 
@@ -127,7 +129,7 @@ def show_residents():
     c2.metric("Occupied", len(plot_owners))
     c3.metric("Available", 76 - len(plot_owners))
 
-    # By Type summary cards (same style as tab_garden.py)
+    # By Type summary cards
     st.markdown("#### By Type")
     tc = st.columns(4)
     for i, (tk, ti) in enumerate(PLOT_TYPES.items()):
@@ -158,15 +160,30 @@ def show_residents():
 
             with cols[i]:
                 if is_occ:
-                    # Occupied - dimmed color, red border, X mark, NO name/contact
+                    # 🔥 PHASE 3: Check Renewal Status for visual warning
+                    renewal_date_str = plot.get('renewal_due_date')
+                    is_due_soon = False
+                    warning_icon = "X"
+                    border_style = "1px solid #666"
+                    
+                    if renewal_date_str:
+                        try:
+                            renewal_date = pd.to_datetime(renewal_date_str).date()
+                            days_left = (renewal_date - pd.Timestamp.now().date()).days
+                            if 0 <= days_left <= 30:
+                                is_due_soon = True
+                                border_style = "3px solid #ff4444"
+                                warning_icon = "⚠️"
+                        except:
+                            pass
+                    
                     st.markdown(
-                        f'<div style="background:{color};opacity:0.4;border:2px solid #ff4444;border-radius:6px;padding:6px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:12px;color:#ccc;">'
+                        f'<div style="background:{color};opacity:0.4;border:{border_style};border-radius:6px;padding:6px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:12px;color:#ccc;">'
                         f'{pn}</div>'
-                        f'<div style="text-align:center;font-size:12px;color:#ff4444;margin-top:-2px;font-weight:bold;">X</div>',
+                        f'<div style="text-align:center;font-size:12px;color:#ff4444;margin-top:-2px;font-weight:bold;">{warning_icon}</div>',
                         unsafe_allow_html=True
                     )
                 else:
-                    # Available - bright color, green border, display only (NO button, NO dropdown)
                     st.markdown(
                         f'<div style="background:{color};border:2px solid #44ff44;border-radius:6px;padding:6px 0;margin:2px 0;text-align:center;font-weight:bold;font-size:12px;color:white;">'
                         f'{pn}</div>'
@@ -211,13 +228,16 @@ def show_residents():
     plot_df = pd.DataFrame(plot_export_data)
     st.dataframe(plot_df, use_container_width=True, hide_index=True)
 
-    plot_csv = plot_df.to_csv(index=False).encode('utf-8')
-    st.download_button("Export Garden Plot Entitlements (CSV)", plot_csv, f"garden_plots_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv")
-    
-    # 🔥 PDPA GUARDRAIL: Block CSV exports for Chairman
-    if st.session_state.user_role == 'admin':
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("Export Resident Directory (CSV)", csv, f"residents_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv")
+    # 🔥 FIX 2: Added unique key="btn_export_garden" to prevent duplicate ID error
+    if st.session_state.get('user_role') == 'admin':
+        plot_csv = plot_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Export Garden Plot Entitlements (CSV)", 
+            data=plot_csv, 
+            file_name=f"garden_plots_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", 
+            mime="text/csv",
+            key="btn_export_garden"
+        )
     else:
         st.info("🔒 Full data export is restricted to Admins for PDPA compliance.")
 
@@ -227,7 +247,6 @@ def show_residents():
     # 🚀 SPEED FIX: Re-use the pre-calculated dictionaries instead of querying DB again!
     for act in acts:
         act_name = act['name']
-        # Count unique participants for this activity from our pre-calculated dict
         unique_participants = sum(1 for pid, counts in activity_counts.items() if counts[act_name] > 0)
         total_records = sum(counts[act_name] for counts in activity_counts.values())
 

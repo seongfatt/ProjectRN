@@ -10,6 +10,21 @@ from utils import (mask_phone, get_attendance_count, check_and_convert_status,
     update_request_status, get_occupied_count, clean_phone_number, 
     find_participant_by_phone, check_returning_guest)
 
+# ===== IMPORT TAB FUNCTIONS (MUST BE AT TOP) =====
+from tab_checkin import show_checkin
+from tab_qr_links import show_qr_links
+from tab_reports import show_reports
+from tab_manage import show_manage
+from tab_import import show_import
+from tab_garden import show_garden
+from tab_residents import show_residents
+from tab_admin_scan import show_admin_scan
+from tab_meeting import show_meeting
+from tab_volunteer import show_volunteer
+from tab_volunteer_access import show_volunteer_access
+from tab_sessions import show_sessions
+from tab_chairman import show_chairman
+
 # Hide sidebar completely on all screen sizes
 st.markdown("""
 <style>
@@ -28,7 +43,7 @@ for k in ['is_authenticated','user_role','show_login','participants','plots','ac
 
 def verify_password(pwd, role):
     if role == "admin": return pwd == ADMIN_PASSWORD
-    elif role == "chairman": return pwd == CHAIRMAN_PASSWORD # 🔥 NEW
+    elif role == "chairman": return pwd == CHAIRMAN_PASSWORD
     elif role == "checker": return pwd == CHECKER_PASSWORD
     return False
 
@@ -696,8 +711,9 @@ if not st.session_state.plots:
 if not st.session_state.activities:
     st.session_state.activities = load_activities()
 
-# Auth UI
+# 🔥 FIX: Wrap ALL dashboard elements inside this authenticated block
 if st.session_state.is_authenticated:
+    # Header for logged-in users
     col1, col2 = st.columns([3,1])
     with col1: st.subheader("Admin Dashboard")
     with col2:
@@ -708,19 +724,18 @@ if st.session_state.is_authenticated:
             st.session_state.show_login = False
             st.rerun()
 
-# 🔥 CHAIRMAN TERMS & CONDITIONS (Digital Handshake)
-if st.session_state.is_authenticated and st.session_state.user_role == "chairman":
-    if not st.session_state.get("chairman_tc_accepted"):
+    # 🔥 CHAIRMAN TERMS & CONDITIONS (Digital Handshake)
+    if st.session_state.user_role == "chairman" and not st.session_state.get("chairman_tc_accepted"):
         st.title("📜 System Usage Policy")
         st.markdown("""
         Welcome, Chairman. You have been granted limited administrative access to the 
         **Woodlands Zone 6 Community Hub**. By proceeding, you agree to:
         
-        1. **Maintain strict PDPA compliance:** Never share resident personal data (names, phone numbers) externally.
+        1. **Maintain strict PDPA compliance:** Never share resident personal data externally.
         2. **Use this system solely for community management and oversight.**
         3. **Keep your login credentials secure.**
         
-        *All administrative actions (approvals, payments) are logged in the Audit Trail for accountability.*
+        *All administrative actions are logged in the Audit Trail for accountability.*
         """)
         
         if st.checkbox("I have read and agree to the Terms of Use"):
@@ -729,9 +744,7 @@ if st.session_state.is_authenticated and st.session_state.user_role == "chairman
                 st.rerun()
         st.stop()
 
-# Mobile top bar... (keep existing code below this)
-#             
-    # ── MOBILE TOP BAR (Only show when logged in) ──
+    # ── MOBILE TOP BAR (Now strictly INSIDE the authenticated block) ──
     st.markdown("""
     <style>
     @media(max-width:768px){
@@ -765,21 +778,7 @@ if st.session_state.is_authenticated and st.session_state.user_role == "chairman
                 st.success("Refreshed!"); st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Import tab functions
-    from tab_checkin import show_checkin
-    from tab_qr_links import show_qr_links
-    from tab_reports import show_reports
-    from tab_manage import show_manage
-    from tab_import import show_import
-    from tab_garden import show_garden
-    from tab_residents import show_residents
-    from tab_admin_scan import show_admin_scan
-    from tab_meeting import show_meeting
-    from tab_volunteer import show_volunteer
-    from tab_volunteer_access import show_volunteer_access
-    from tab_sessions import show_sessions
-
-    # Re-run to load tabs after imports
+    # Tab Routing
     if st.session_state.user_role == "admin":
         tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Meeting", "Volunteer", "Volunteer Access", "Manage", "Import", "Garden", "Residents", "Sessions"])
         with tabs[0]: show_qr_links(selected_date)
@@ -793,7 +792,17 @@ if st.session_state.is_authenticated and st.session_state.user_role == "chairman
         with tabs[8]: show_garden()
         with tabs[9]: show_residents()
         with tabs[10]: show_sessions(supabase, st.session_state.user_role)
-    else:
+        
+    elif st.session_state.user_role == "chairman":
+        tabs = st.tabs(["📊 Overview", "Reports", "Meeting", "Garden", "Residents", "Sessions","Volunteer Access"])
+        with tabs[0]: show_chairman()
+        with tabs[1]: show_reports(selected_date)
+        with tabs[2]: show_meeting(selected_date)
+        with tabs[3]: show_garden()
+        with tabs[4]: show_residents()
+        with tabs[5]: show_sessions(supabase, st.session_state.user_role)
+        
+    else: # checker
         tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Volunteer", "Garden", "Sessions"])
         with tabs[0]: show_qr_links(selected_date)
         with tabs[1]: show_admin_scan(selected_date)
@@ -801,7 +810,9 @@ if st.session_state.is_authenticated and st.session_state.user_role == "chairman
         with tabs[3]: show_volunteer()
         with tabs[4]: show_garden()
         with tabs[5]: show_sessions(supabase, st.session_state.user_role)
+
 else:
+    # NOT AUTHENTICATED: Show ONLY the Login Screen
     st.subheader("Admin Dashboard")
     st.caption(f"{datetime.now().strftime('%d %b %Y')}")
     
@@ -810,64 +821,33 @@ else:
         c1, c2 = st.columns([2,1])
         with c1:
             pwd = st.text_input("Password", type="password", key="login_pwd")
-            st.caption("Checker: Attendance | Chairman: Oversight | Admin: Full Access") # 🔥 UPDATED
+            st.caption("Checker: Attendance | Chairman: Oversight | Admin: Full Access")
         with c2:
             st.write(" "); st.write(" ")
             if st.button("Login", type="primary", use_container_width=True):
-                if pwd == ADMIN_PASSWORD:
+                if verify_password(pwd, "admin"):
                     st.session_state.is_authenticated = True
                     st.session_state.user_role = "admin"
-                elif pwd == CHAIRMAN_PASSWORD: # 🔥 NEW
+                elif verify_password(pwd, "chairman"):
                     st.session_state.is_authenticated = True
                     st.session_state.user_role = "chairman"
-                elif pwd == CHECKER_PASSWORD:
+                elif verify_password(pwd, "checker"):
                     st.session_state.is_authenticated = True
                     st.session_state.user_role = "checker"
                 else:
                     st.error("Invalid password")
                 
                 if st.session_state.is_authenticated:
-                    if st.session_state.user_role == "admin":
-                        tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Meeting", "Volunteer", "Volunteer Access", "Manage", "Import", "Garden", "Residents", "Sessions"])
-                        with tabs[0]: show_qr_links(selected_date)
-                        with tabs[1]: show_admin_scan(selected_date)
-                        with tabs[2]: show_reports(selected_date)
-                        with tabs[3]: show_meeting(selected_date)
-                        with tabs[4]: show_volunteer()
-                        with tabs[5]: show_volunteer_access()
-                        with tabs[6]: show_manage(selected_date)
-                        with tabs[7]: show_import(selected_date)
-                        with tabs[8]: show_garden()
-                        with tabs[9]: show_residents()
-                        with tabs[10]: show_sessions(supabase, st.session_state.user_role)
-                        
-                    elif st.session_state.user_role == "chairman": # 🔥 NEW CHAIRMAN ROUTING
-                        from tab_chairman import show_chairman
-                        tabs = st.tabs(["📊 Overview", "Reports", "Meeting", "Garden", "Residents", "Sessions"])
-                        with tabs[0]: show_chairman()
-                        with tabs[1]: show_reports(selected_date)
-                        with tabs[2]: show_meeting(selected_date)
-                        with tabs[3]: show_garden()
-                        with tabs[4]: show_residents()
-                        with tabs[5]: show_sessions(supabase, st.session_state.user_role)
-                        
-                    else: # checker
-                        tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Volunteer", "Garden", "Sessions"])
-                        with tabs[0]: show_qr_links(selected_date)
-                        with tabs[1]: show_admin_scan(selected_date)
-                        with tabs[2]: show_reports(selected_date)
-                        with tabs[3]: show_volunteer()
-                        with tabs[4]: show_garden()
-                        with tabs[5]: show_sessions(supabase, st.session_state.user_role)
-                else:
-                    st.info("Login to access features")
+                    st.session_state.show_login = False
+                    st.rerun()
+            if st.button("Cancel", use_container_width=True):
+                st.session_state.show_login = False
+                st.rerun()
     else:
         st.info("Please login to access admin features")
         if st.button("Login", type="primary", use_container_width=True):
             st.session_state.show_login = True
             st.rerun()
-            
-    st.info("Login to access features")
 
 st.divider()
 st.caption("Woodlands Zone 6 Community Hub | PDPA Compliant | v2.1")
