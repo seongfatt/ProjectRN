@@ -801,6 +801,7 @@ if st.session_state.is_authenticated:
         with tabs[3]: show_garden()
         with tabs[4]: show_residents()
         with tabs[5]: show_sessions(supabase, st.session_state.user_role)
+        with tabs[6]: show_volunteer_access()  # ✅ This line MUST be here
         
     else: # checker
         tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Volunteer", "Garden", "Sessions"])

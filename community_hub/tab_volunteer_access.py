@@ -6,15 +6,13 @@ import hashlib
 import urllib.parse
 from config import supabase, DB_CONNECTED, APP_URL, load_activities
 
+# ─── Helper Functions ──────────────────────────────────────
 def generate_volunteer_token(admin_id="admin"):
-    """Generate a unique, time-limited token for volunteer access."""
     raw = f"{admin_id}{datetime.now().isoformat()}{secrets.token_hex(8)}"
     return hashlib.sha256(raw.encode()).hexdigest()[:24]
 
 def create_volunteer_link(token, expires_at, created_by="admin"):
-    """Store token in DB with expiration."""
-    if not DB_CONNECTED:
-        return None
+    if not DB_CONNECTED: return None
     try:
         supabase.table('volunteer_tokens').insert({
             "token": token,
@@ -30,17 +28,14 @@ def create_volunteer_link(token, expires_at, created_by="admin"):
         return None
 
 def validate_volunteer_token(token):
-    """Check if token is valid and not expired."""
     if not DB_CONNECTED or not token:
         return False, "Database not connected"
     try:
         r = supabase.table('volunteer_tokens').select("*").eq('token', token).eq('active', True).execute()
-        if not r.data:
-            return False, "Invalid or revoked link"
+        if not r.data: return False, "Invalid or revoked link"
         record = r.data[0]
         expires = datetime.fromisoformat(record['expires_at'].replace('Z', '+00:00'))
-        if datetime.now().astimezone() > expires:
-            return False, "This volunteer link has expired"
+        if datetime.now().astimezone() > expires: return False, "This volunteer link has expired"
         supabase.table('volunteer_tokens').update({
             "usage_count": record.get('usage_count', 0) + 1,
             "last_used": datetime.now().isoformat()
@@ -50,33 +45,33 @@ def validate_volunteer_token(token):
         return False, f"Validation error: {e}"
 
 def revoke_token(token):
-    """Revoke a volunteer token."""
-    if not DB_CONNECTED:
-        return False
+    if not DB_CONNECTED: return False
     try:
         supabase.table('volunteer_tokens').update({"active": False}).eq('token', token).execute()
         return True
-    except:
-        return False
+    except: return False
 
 def get_active_tokens():
-    """Get all active volunteer tokens."""
-    if not DB_CONNECTED:
-        return []
+    if not DB_CONNECTED: return []
     try:
         r = supabase.table('volunteer_tokens').select("*").eq('active', True).order('created_at', desc=True).execute()
         return r.data if r.data else []
-    except:
-        return []
+    except: return []
 
+# ─── Main UI Function ──────────────────────────────────────
 def show_volunteer_access():
-    # 🔥 NO ROLE BLOCKS HERE - Ensures Chairman sees everything
-    st.header("🔐 Volunteer Access Control")
+    # 🔥 DEBUG LINE: This will show exactly what role the system thinks is logged in
+    current_role = st.session_state.get('user_role', 'Unknown')
+    st.info(f" Debug: You are logged in as **{current_role}**")
+
+    st.header(" Volunteer Access Control")
     st.caption("Create time-limited volunteer links for check-in and registration")
 
     if not DB_CONNECTED:
         st.error("Database not connected")
         return
+
+    # 🔥 NO ROLE CHECKS HERE. Both Admin and Chairman can see everything below.
 
     # ── CREATE NEW LINK ──
     st.subheader("Create New Volunteer Link")
@@ -105,11 +100,10 @@ def show_volunteer_access():
     with c3:
         st.write(""); st.write("")
         if st.button("Generate Link", type="primary", use_container_width=True):
-            current_role = st.session_state.get('user_role', 'admin')
             token = generate_volunteer_token(current_role)
             link = create_volunteer_link(token, expires_at, created_by=current_role)
             if link:
-                st.success("Link generated!")
+                st.success("✅ Link generated!")
                 st.session_state.new_volunteer_link = link
                 st.session_state.new_volunteer_token = token
                 st.session_state.new_volunteer_expires = expires_at
@@ -138,11 +132,11 @@ def show_volunteer_access():
             </div>
             """, unsafe_allow_html=True)
             wa_msg = urllib.parse.quote(f"Hi! Here's your volunteer access link for Woodlands Zone 6. Link expires {st.session_state.new_volunteer_expires.strftime('%d %b %Y, %I:%M %p')}: {st.session_state.new_volunteer_link}")
-            st.markdown(f"[ Share via WhatsApp](https://wa.me/?text={wa_msg})")
+            st.markdown(f"[📱 Share via WhatsApp](https://wa.me/?text={wa_msg})")
 
         st.divider()
         reg_only_link = f"{APP_URL}/?mode=register&tk={st.session_state.new_volunteer_token}"
-        st.markdown("###  Registration-Only Link")
+        st.markdown("### 📝 Registration-Only Link")
         st.caption("For ad-hoc volunteers — register new residents only, no check-in access")
         st.code(reg_only_link, language="text")
 
@@ -192,7 +186,7 @@ def show_volunteer_access():
                     st.code(reg_link, language="text")
                     st.write(f"Created by: {tok.get('created_by', 'Unknown').capitalize()}")
                 with c2:
-                    status_color = "🔴" if is_expired else "🟢"
+                    status_color = "" if is_expired else "🟢"
                     st.write(f"**Status:** {status_color} {'Expired' if is_expired else 'Active'}")
                     st.write(f"**Time left:** {remaining_str}")
                 with c3:
@@ -202,7 +196,7 @@ def show_volunteer_access():
                         st.rerun()
 
         st.divider()
-        if st.button("🗑️ Revoke ALL Active Links", type="secondary"):
+        if st.button("️ Revoke ALL Active Links", type="secondary"):
             for tok in active:
                 revoke_token(tok['token'])
             st.success("All links revoked!")
