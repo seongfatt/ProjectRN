@@ -1,8 +1,9 @@
 import streamlit as st
 from datetime import datetime, timedelta
+import uuid
 import secrets
 import hashlib
-from config import supabase, DB_CONNECTED, APP_URL
+from config import supabase, DB_CONNECTED, APP_URL, load_activities
 
 def generate_volunteer_token(admin_id="admin"):
     """Generate a unique, time-limited token for volunteer access."""
