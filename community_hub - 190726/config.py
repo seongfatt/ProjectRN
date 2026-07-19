@@ -13,7 +13,6 @@ APP_URL = os.getenv("APP_URL", "https://wrnz6-community-hub.hf.space")
 
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
 CHECKER_PASSWORD = os.getenv("CHECKER_PASSWORD", "checker123")
-CHAIRMAN_PASSWORD = os.getenv("CHAIRMAN_PASSWORD", "chairman123") #  NEW
 
 @st.cache_resource
 def get_db():

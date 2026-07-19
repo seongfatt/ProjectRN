@@ -78,14 +78,10 @@ def show_residents():
             plot_data = plot_dict[pid.lower().strip()]
             plot_info = f"Plot {plot_data['plot_number']} (Type {plot_data['plot_type']})"
 
-            # 🔥 PDPA GUARDRAIL: Mask phone numbers for Chairman
-        contact_display = mask_phone(p.get('contact', 'N/A')) if st.session_state.user_role == 'chairman' else p.get('contact', 'N/A')
-
-
         display_data.append({
             "ID": pid,
             "Name": p['name'],
-            "Contact": contact_display,
+            "Contact": p.get('contact', 'N/A'),
             "Status": "New" if p.get('is_new') else "Regular",
             "Indemnity": "Yes" if p.get('indemnity') else "No",
             "Garden Plot": plot_info if plot_info else "",
@@ -105,13 +101,6 @@ def show_residents():
     st.divider()
     csv = df.to_csv(index=False).encode('utf-8')
     st.download_button("Export Resident Directory (CSV)", csv, f"residents_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv")
-    
-    # 🔥 PDPA GUARDRAIL: Block CSV exports for Chairman
-    if st.session_state.user_role == 'admin':
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("Export Resident Directory (CSV)", csv, f"residents_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv")
-    else:
-        st.info("🔒 Full data export is restricted to Admins for PDPA compliance.")
 
     # GARDEN PLOT ENTITLEMENTS — Visual Display with Type Colors
     st.divider()
@@ -213,13 +202,6 @@ def show_residents():
 
     plot_csv = plot_df.to_csv(index=False).encode('utf-8')
     st.download_button("Export Garden Plot Entitlements (CSV)", plot_csv, f"garden_plots_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv")
-    
-    # 🔥 PDPA GUARDRAIL: Block CSV exports for Chairman
-    if st.session_state.user_role == 'admin':
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("Export Resident Directory (CSV)", csv, f"residents_{pd.Timestamp.now().strftime('%Y%m%d')}.csv", "text/csv")
-    else:
-        st.info("🔒 Full data export is restricted to Admins for PDPA compliance.")
 
     st.divider()
     st.subheader("Activity Participation Summary")
