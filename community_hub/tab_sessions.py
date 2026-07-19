@@ -402,8 +402,9 @@ def show(supabase, role):
         else:
             st.session_state['live_checkin_session_id'] = None
 
-    # ─── Main Tab UI ──
-    if role == "admin":
+        # ─── Main Tab UI ──
+    # 🔥 FIX: Allow BOTH Admin and Chairman to manage and create sessions
+    if role in ["admin", "chairman"]:
         tab_list = ["📋 All Sessions", "➕ Create Session", "📊 Analytics"]
     elif role == "checker":
         tab_list = ["📋 Today's Sessions", "🔍 Check-In Desk"]
@@ -413,7 +414,8 @@ def show(supabase, role):
 
     tabs = st.tabs(tab_list)
 
-    if role == "admin":
+     # 🔥 FIX: Link the content rendering to BOTH Admin and Chairman
+    if role in ["admin", "chairman"]:
         with tabs[0]:
             col1, col2, col3 = st.columns([2, 2, 1])
             with col1:

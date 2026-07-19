@@ -41,7 +41,6 @@ def validate_volunteer_token(token):
         expires = datetime.fromisoformat(record['expires_at'].replace('Z', '+00:00'))
         if datetime.now().astimezone() > expires:
             return False, "This volunteer link has expired"
-        # Increment usage count
         supabase.table('volunteer_tokens').update({
             "usage_count": record.get('usage_count', 0) + 1,
             "last_used": datetime.now().isoformat()
@@ -71,14 +70,9 @@ def get_active_tokens():
         return []
 
 def show_volunteer_access():
+    # 🔥 NO ROLE BLOCKS HERE - Ensures Chairman sees everything
     st.header("🔐 Volunteer Access Control")
     st.caption("Create time-limited volunteer links for check-in and registration")
-
-    # 🔥 EXPLICITLY ALLOW BOTH ADMIN AND CHAIRMAN
-    current_role = st.session_state.get('user_role', '')
-    if current_role not in ['admin', 'chairman']:
-        st.warning("🔒 Access restricted. Only Admins and Chairmen can manage volunteer links.")
-        return
 
     if not DB_CONNECTED:
         st.error("Database not connected")
@@ -103,7 +97,7 @@ def show_volunteer_access():
         elif duration_type == "End of today":
             expires_at = datetime.now().replace(hour=23, minute=59, second=59)
             st.caption(f"Expires: {expires_at.strftime('%d %b %Y, %I:%M %p')}")
-        else:  # Specific date & time
+        else:
             exp_date = st.date_input("Expiry Date", value=datetime.now().date(), key="va_exp_date")
             exp_time = st.time_input("Expiry Time", value=datetime.strptime("23:59", "%H:%M").time(), key="va_exp_time")
             expires_at = datetime.combine(exp_date, exp_time)
@@ -111,6 +105,7 @@ def show_volunteer_access():
     with c3:
         st.write(""); st.write("")
         if st.button("Generate Link", type="primary", use_container_width=True):
+            current_role = st.session_state.get('user_role', 'admin')
             token = generate_volunteer_token(current_role)
             link = create_volunteer_link(token, expires_at, created_by=current_role)
             if link:
@@ -126,7 +121,6 @@ def show_volunteer_access():
         st.caption("Volunteers can check-in existing residents AND register new ones")
         st.code(st.session_state.new_volunteer_link, language="text")
 
-        # QR for the volunteer link
         vol_qr = f"https://api.qrserver.com/v1/create-qr-code/?size=250x250&data={urllib.parse.quote(st.session_state.new_volunteer_link)}"
         c1, c2 = st.columns([1, 2])
         with c1:
@@ -143,13 +137,12 @@ def show_volunteer_access():
                 • Status: 🟢 Active
             </div>
             """, unsafe_allow_html=True)
-            wa_msg = urllib.parse.quote(f"Hi! Here's your volunteer access link for Woodlands Zone 6. You can check-in residents AND register new ones. Link expires {st.session_state.new_volunteer_expires.strftime('%d %b %Y, %I:%M %p')}: {st.session_state.new_volunteer_link}")
-            st.markdown(f"[📱 Share via WhatsApp](https://wa.me/?text={wa_msg})")
+            wa_msg = urllib.parse.quote(f"Hi! Here's your volunteer access link for Woodlands Zone 6. Link expires {st.session_state.new_volunteer_expires.strftime('%d %b %Y, %I:%M %p')}: {st.session_state.new_volunteer_link}")
+            st.markdown(f"[ Share via WhatsApp](https://wa.me/?text={wa_msg})")
 
-        # Registration-Only Link
         st.divider()
         reg_only_link = f"{APP_URL}/?mode=register&tk={st.session_state.new_volunteer_token}"
-        st.markdown("### 📝 Registration-Only Link")
+        st.markdown("###  Registration-Only Link")
         st.caption("For ad-hoc volunteers — register new residents only, no check-in access")
         st.code(reg_only_link, language="text")
 
@@ -169,7 +162,7 @@ def show_volunteer_access():
                 • Token: <code>{st.session_state.new_volunteer_token[:12]}...</code>
             </div>
             """, unsafe_allow_html=True)
-            wa_msg2 = urllib.parse.quote(f"Hi! Here's the registration link for Woodlands Zone 6 outreach. Use this to register new residents only. Link expires {st.session_state.new_volunteer_expires.strftime('%d %b %Y, %I:%M %p')}: {reg_only_link}")
+            wa_msg2 = urllib.parse.quote(f"Hi! Here's the registration link for Woodlands Zone 6 outreach. Link expires {st.session_state.new_volunteer_expires.strftime('%d %b %Y, %I:%M %p')}: {reg_only_link}")
             st.markdown(f"[📱 Share via WhatsApp](https://wa.me/?text={wa_msg2})")
 
     st.divider()
@@ -198,19 +191,16 @@ def show_volunteer_access():
                     st.write("**Registration Only:**")
                     st.code(reg_link, language="text")
                     st.write(f"Created by: {tok.get('created_by', 'Unknown').capitalize()}")
-                    st.write(f"Created: {datetime.fromisoformat(tok['created_at'].replace('Z', '+00:00')).strftime('%d %b %I:%M %p')}")
                 with c2:
                     status_color = "🔴" if is_expired else "🟢"
                     st.write(f"**Status:** {status_color} {'Expired' if is_expired else 'Active'}")
                     st.write(f"**Time left:** {remaining_str}")
-                    st.write(f"**Usage:** {tok.get('usage_count', 0)} registrations")
                 with c3:
                     if st.button("Revoke", key=f"revoke_{tok['token']}", type="secondary", use_container_width=True):
                         revoke_token(tok['token'])
                         st.success("Revoked!")
                         st.rerun()
 
-        # Bulk revoke
         st.divider()
         if st.button("🗑️ Revoke ALL Active Links", type="secondary"):
             for tok in active:
