@@ -831,7 +831,8 @@ if st.session_state.is_authenticated:
                 st.success("Refreshed!"); st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # Tab Routing
+    # ===== TAB ROUTING =====
+if st.session_state.is_authenticated:
     if st.session_state.user_role == "admin":
         tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Meeting", "Volunteer", "Volunteer Access", "Manage", "Import", "Garden", "Residents", "Sessions"])
         with tabs[0]: show_qr_links(selected_date)
@@ -847,15 +848,14 @@ if st.session_state.is_authenticated:
         with tabs[10]: show_sessions(supabase, st.session_state.user_role)
         
     elif st.session_state.user_role == "chairman":
-        tabs = st.tabs(["📊 Overview", "Reports", "Meeting", "Garden", "Residents", "Volunteer Access","Sessions"])
+        tabs = st.tabs(["📊 Overview", "Reports", "Meeting", "Garden", "Residents", "Volunteer Access", "Sessions"])
         with tabs[0]: show_chairman()
         with tabs[1]: show_reports(selected_date)
         with tabs[2]: show_meeting(selected_date)
         with tabs[3]: show_garden()
         with tabs[4]: show_residents()
-        with tabs[5]: show_volunteer_access()  # ✅ This line MUST be her
-        with tabs[6]: show_sessions(supabase, st.session_state.user_role)
-        e
+        with tabs[5]: show_sessions(supabase, st.session_state.user_role)
+        with tabs[6]: show_volunteer_access()
         
     else: # checker
         tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Volunteer", "Garden", "Sessions"])
@@ -865,18 +865,17 @@ if st.session_state.is_authenticated:
         with tabs[3]: show_volunteer()
         with tabs[4]: show_garden()
         with tabs[5]: show_sessions(supabase, st.session_state.user_role)
-
 else:
-    # NOT AUTHENTICATED: Show ONLY the Login Screen
     st.subheader("Admin Dashboard")
     st.caption(f"{datetime.now().strftime('%d %b %Y')}")
     
     if st.session_state.show_login:
-        st.divider(); st.subheader("Login")
-        c1, c2 = st.columns([2,1])
+        st.divider()
+        st.subheader("Login")
+        c1, c2 = st.columns([2, 1])
         with c1:
             pwd = st.text_input("Password", type="password", key="login_pwd")
-            st.caption("Checker: Attendance | Chairman: Oversight | Admin: Full Access")
+            st.caption("Checker: Attendance | Chairman: Oversight | Admin: Free Access")
         with c2:
             st.write(" "); st.write(" ")
             if st.button("Login", type="primary", use_container_width=True):
