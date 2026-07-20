@@ -509,10 +509,10 @@ if params.get("mode") == "register":
             if not name.strip():
                 st.error("Name is required")
             else:
-                                # Handle no phone case
+                # Handle no phone case
                 final_contact = "NO_PHONE" if no_phone else contact.strip()
                 
-                # 🔥 ULTIMATE DUPLICATE CHECK
+                # 🔥 STRICT DUPLICATE CHECK (Hard Block for both Phone and Name)
                 clean_contact = clean_phone_number(final_contact) if final_contact != "NO_PHONE" else None
 
                 try:
@@ -520,22 +520,20 @@ if params.get("mode") == "register":
                     if clean_contact:
                         res_phone = supabase.table('participants').select('name').eq('contact', clean_contact).eq('active', True).execute()
                         if res_phone.data:
-                            st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**\n\nPlease search for them in the system instead.")
+                            st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**\n\nPlease use the Check-In link instead of registering again.")
                             st.stop()
 
-                        # 2. Check Name (Hard Block for Public Registration)
-                        res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
-                        if res_name.data:
-                            st.error(f" **Name already exists!**\n\nA resident named **{name.strip().upper()}** is already in our system.\n\nIf you are already registered, please use the Check-In link instead of registering again.")
-                            st.stop() # 🔥 STOP execution immediately
-                        else:
-                            # Soft Warning if phone is different
-                            st.warning(f"⚠️ **Name Match:** A resident named '{name.strip().upper()}' already exists. Proceeding because phone numbers differ.")
-                            
+                    # 2. Check Name (Strict Block)
+                    res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
+                    if res_name.data:
+                        st.error(f"⛔ **Name already exists!**\n\nA resident named **{name.strip().upper()}** is already registered in our system.\n\nIf you are already registered, please use the Check-In link instead of registering again.")
+                        st.stop() # 🔥 STOP execution immediately
+                        
                 except Exception as e:
-                    st.error(f"Error checking duplicates: {e}")
+                    st.error(f"Error checking for duplicates: {e}")
                     st.stop()
                 
+                # If we get here, no duplicate found - proceed with registration
                 try:
                     new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
                     supabase.table('participants').insert({
