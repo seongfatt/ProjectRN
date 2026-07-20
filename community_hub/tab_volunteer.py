@@ -1,6 +1,5 @@
-import random
-
 import streamlit as st
+import random
 from datetime import datetime
 from config import supabase, DB_CONNECTED, refresh_data
 from utils import mask_phone, clean_phone_number
@@ -22,7 +21,7 @@ def show_volunteer():
         with c2:
             contact = st.text_input("Contact Number", placeholder="e.g., 91234567")
 
-        no_phone = st.checkbox(" Resident does not have a phone")
+        no_phone = st.checkbox("👴 Resident does not have a phone")
         indemnity = st.checkbox("Indemnity Form Signed", value=False)
 
         st.markdown("""
@@ -37,10 +36,10 @@ def show_volunteer():
             if not name.strip():
                 st.error("Name is required")
             else:
-                                # Handle no phone case
+                # Handle no phone case
                 final_contact = "NO_PHONE" if no_phone else contact.strip()
                 
-                # 🔥 ULTIMATE DUPLICATE CHECK
+                # 🔥 STRICT DUPLICATE CHECK (Hard Block for both Phone and Name)
                 clean_contact = clean_phone_number(final_contact) if final_contact != "NO_PHONE" else None
 
                 try:
@@ -51,19 +50,14 @@ def show_volunteer():
                             st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**\n\nPlease search for them in the system instead.")
                             st.stop()
 
-                    # 2. Check Name (Smart Logic)
+                    # 2. Check Name (Strict Block)
                     res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
                     if res_name.data:
-                        if final_contact == "NO_PHONE":
-                            # 🔥 STRICT BLOCK for Name-Only: Prevents exact name duplicates
-                            st.error(f" **Name already exists!**\n\nA resident named **{name.strip().upper()}** is already registered without a phone number.\n\nTo register a different person with the same name (e.g., a family member), you MUST provide their phone number to distinguish them.")
-                            st.stop()
-                        else:
-                            # Soft Warning if phone is different
-                            st.warning(f"⚠️ **Name Match:** A resident named '{name.strip().upper()}' already exists. Proceeding because phone numbers differ.")
-                            
+                        st.error(f"⛔ **Name already exists!**\n\nA resident named **{name.strip().upper()}** is already registered in the system.\n\nPlease search for them in the system instead of creating a duplicate.")
+                        st.stop() # 🔥 STOP execution immediately
+                        
                 except Exception as e:
-                    st.error(f"Error checking duplicates: {e}")
+                    st.error(f"Error checking for duplicates: {e}")
                     st.stop()
                 
                 # If we get here, no duplicate found - proceed with registration
@@ -92,7 +86,7 @@ def show_volunteer():
         recent = supabase.table('participants').select("*").eq('registration_date', today_str).order('id', desc=True).limit(10).execute().data
         if recent:
             for p in recent:
-                status = "" if p.get('is_new') else "⭐"
+                status = "🆕" if p.get('is_new') else "⭐"
                 ind = "🟢" if p.get('indemnity') else "🔴"
                 contact_display = mask_phone(p.get('contact', 'N/A')) if p.get('contact') != 'NO_PHONE' else "📵 No phone"
                 st.write(f"{status} {ind} **{p['name']}** — {contact_display} — ID: `{p['id']}`")

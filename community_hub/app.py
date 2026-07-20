@@ -849,7 +849,7 @@ if st.session_state.is_authenticated:
         with tabs[10]: show_sessions(supabase, st.session_state.user_role)
         
     elif st.session_state.user_role == "chairman":
-        tabs = st.tabs(["📊 Overview", "Reports", "Meeting", "Garden", "Residents", "Sessions","Volunteer Access"])
+        tabs = st.tabs(["📊 Overview", "Reports", "Meeting", "Garden", "Residents", "Volunteer Access","Sessions"])
         with tabs[0]: show_chairman()
         with tabs[1]: show_reports(selected_date)
         with tabs[2]: show_meeting(selected_date)
