@@ -369,7 +369,7 @@ if params.get("mode") == "volunteer":
 
     st.divider()
     
-    # 🔥 ELDERLY / NO PHONE FALLBACK
+        # 🔥 ELDERLY / NO PHONE FALLBACK
     with st.expander("👴 Resident does not have a mobile phone?"):
         st.caption("Use this section to search or register residents without a handphone.")
         
@@ -378,62 +378,82 @@ if params.get("mode") == "volunteer":
             
             c1, c2 = st.columns(2)
             with c1:
-                search_np = st.form_submit_button("🔍 Search Existing")
+                search_np = st.form_submit_button(" Search Existing")
             with c2:
                 register_np = st.form_submit_button("📝 Register New")
-                
+
+            # 🔥 FIX: Handle Search Results using Selectbox instead of st.button()
             if search_np and np_name.strip():
                 matches = [p for p in all_participants if np_name.strip().upper() in p.get('name', '').upper()]
-                if matches:
-                    st.success(f"Found {len(matches)} match(es). Select to check-in:")
-                    for m in matches:
-                        id_display = m['id'][:8] + "..."
-                        if st.button(f"✅ Check-in: {m['name']} ({id_display})", key=f"np_check_{m['id']}"):
-                            try:
-                                supabase.table('attendance').insert({
-                                    "participant_id": m['id'],
-                                    "name": m['name'],
-                                    "date": str(selected_date),
-                                    "session_1": s1, "session_2": s2,
-                                    "timestamp": datetime.now().isoformat(),
-                                    "self_checkin": False, "source": selected_activity
-                                }).execute()
-                                st.success(f"✅ {m['name']} checked in!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error: {e}")
-                else:
-                    st.warning("No matches found. Please register them as a new resident.")
-                    
-            if register_np and np_name.strip():
-                try:
-                    import random
-                    new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
-                    
-                    new_data = {
-                        "id": new_id, 
-                        "name": np_name.strip().upper(), 
-                        "contact": "NO_PHONE", 
-                        "indemnity": False, 
-                        "is_new": True, 
-                        "active": True,
-                        "registration_date": str(selected_date)
-                    }
+                st.session_state['np_matches'] = matches
+            else:
+                if 'np_matches' not in st.session_state:
+                    st.session_state['np_matches'] = []
 
-                    supabase.table('participants').insert(new_data).execute()
-                    
-                    supabase.table('attendance').insert({
-                        "participant_id": new_id, 
-                        "name": np_name.strip().upper(),
-                        "date": str(selected_date), "session_1": s1, "session_2": s2,
-                        "timestamp": datetime.now().isoformat(), "self_checkin": False,
-                        "source": selected_activity
-                    }).execute()
-                    
-                    st.success(f"✅ {np_name.strip().upper()} registered & checked in!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
+            matches = st.session_state.get('np_matches', [])
+
+            if matches:
+                st.success(f"Found {len(matches)} match(es). Please select one:")
+                # Create options for selectbox
+                match_options = {f"{m['name']} (ID: {m['id'][:8]}...)": m for m in matches}
+                selected_label = st.selectbox("Select Resident to Check-In", list(match_options.keys()), key="np_selectbox")
+                
+                # This is the ONLY way to trigger an action inside a form
+                if st.form_submit_button("✅ Confirm Check-In", type="primary", use_container_width=True):
+                    if selected_label:
+                        selected_resident = match_options[selected_label]
+                        try:
+                            supabase.table('attendance').insert({
+                                "participant_id": selected_resident['id'],
+                                "name": selected_resident['name'],
+                                "date": str(selected_date),
+                                "session_1": s1, "session_2": s2,
+                                "timestamp": datetime.now().isoformat(),
+                                "self_checkin": False, "source": selected_activity
+                            }).execute()
+                            st.success(f"✅ {selected_resident['name']} checked in!")
+                            st.session_state['np_matches'] = [] # Clear matches after success
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error: {e}")
+            elif search_np and np_name.strip():
+                st.warning("No matches found. Please register them as a new resident.")
+                
+            # 🔥 Handle Registration
+            if register_np and np_name.strip():
+                # Apply the Ultimate Duplicate Check here too!
+                res_name = supabase.table('participants').select('name', 'contact').eq('name', np_name.strip().upper()).eq('active', True).execute()
+                if res_name.data:
+                    st.error(f"⛔ **Name already exists!**\n\nA resident named **{np_name.strip().upper()}** is already registered.\n\nTo register a different person with the same name, you MUST provide their phone number in the main form above.")
+                else:
+                    try:
+                        import random
+                        new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
+                        
+                        new_data = {
+                            "id": new_id, 
+                            "name": np_name.strip().upper(), 
+                            "contact": "NO_PHONE", 
+                            "indemnity": False, 
+                            "is_new": True, 
+                            "active": True,
+                            "registration_date": str(selected_date)
+                        }
+
+                        supabase.table('participants').insert(new_data).execute()
+                        
+                        supabase.table('attendance').insert({
+                            "participant_id": new_id, 
+                            "name": np_name.strip().upper(),
+                            "date": str(selected_date), "session_1": s1, "session_2": s2,
+                            "timestamp": datetime.now().isoformat(), "self_checkin": False,
+                            "source": selected_activity
+                        }).execute()
+                        
+                        st.success(f"✅ {np_name.strip().upper()} registered & checked in!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
 
     st.divider()
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Access | Link expires automatically")
@@ -489,24 +509,32 @@ if params.get("mode") == "register":
             if not name.strip():
                 st.error("Name is required")
             else:
-                # Handle no phone case
+                                # Handle no phone case
                 final_contact = "NO_PHONE" if no_phone else contact.strip()
                 
-                # 🔥 BULLETPROOF DUPLICATE CHECK
-                if final_contact != "NO_PHONE" and final_contact:
-                    clean_contact = clean_phone_number(final_contact)
-                    
-                    try:
-                        existing_check = supabase.table('participants').select('id, name, contact').eq('contact', clean_contact).eq('active', True).execute()
-                        
-                        if existing_check.data:
-                            existing_name = existing_check.data[0]['name']
-                            existing_phone = existing_check.data[0]['contact']
-                            st.error(f"️ **Resident already exists!**\n\nName: **{existing_name}**\nPhone: {mask_phone(existing_phone)}\n\nPlease use the check-in system instead.")
+                # 🔥 ULTIMATE DUPLICATE CHECK
+                clean_contact = clean_phone_number(final_contact) if final_contact != "NO_PHONE" else None
+
+                try:
+                    # 1. Check Phone (Strict Block)
+                    if clean_contact:
+                        res_phone = supabase.table('participants').select('name').eq('contact', clean_contact).eq('active', True).execute()
+                        if res_phone.data:
+                            st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**\n\nPlease search for them in the system instead.")
                             st.stop()
-                    except Exception as e:
-                        st.error(f"Error checking for duplicates: {e}")
-                        st.stop()
+
+                        # 2. Check Name (Hard Block for Public Registration)
+                        res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
+                        if res_name.data:
+                            st.error(f" **Name already exists!**\n\nA resident named **{name.strip().upper()}** is already in our system.\n\nIf you are already registered, please use the Check-In link instead of registering again.")
+                            st.stop() # 🔥 STOP execution immediately
+                        else:
+                            # Soft Warning if phone is different
+                            st.warning(f"⚠️ **Name Match:** A resident named '{name.strip().upper()}' already exists. Proceeding because phone numbers differ.")
+                            
+                except Exception as e:
+                    st.error(f"Error checking duplicates: {e}")
+                    st.stop()
                 
                 try:
                     new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))

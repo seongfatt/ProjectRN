@@ -37,33 +37,34 @@ def show_volunteer():
             if not name.strip():
                 st.error("Name is required")
             else:
-                # Handle no phone case
+                                # Handle no phone case
                 final_contact = "NO_PHONE" if no_phone else contact.strip()
                 
-                # 🔥 BULLETPROOF DUPLICATE CHECK
-                if final_contact != "NO_PHONE" and final_contact:
-                    clean_contact = clean_phone_number(final_contact)
-                    
-                    # 🔥 DEBUG: Show what we're checking
-                    st.write(f"🔍 Checking for duplicate: {clean_contact}")
-                    
-                    try:
-                        # Query 1: Exact match
-                        existing_check = supabase.table('participants').select('id, name, contact').eq('contact', clean_contact).eq('active', True).execute()
-                        
-                        # Query 2: Fallback - check last 4 digits
-                        if not existing_check.data and len(clean_contact) >= 4:
-                            last_four = clean_contact[-4:]
-                            existing_check = supabase.table('participants').select('id, name, contact').ilike('contact', f'%{last_four}').eq('active', True).execute()
-                        
-                        if existing_check.data:
-                            existing_name = existing_check.data[0]['name']
-                            existing_phone = existing_check.data[0]['contact']
-                            st.error(f"⚠️ **Resident already exists!**\n\nName: **{existing_name}**\nPhone: {mask_phone(existing_phone)}\n\nPlease search for them in the system instead of creating a duplicate.")
-                            st.stop()  # STOP immediately
-                    except Exception as e:
-                        st.error(f"Error checking for duplicates: {e}")
-                        st.stop()
+                # 🔥 ULTIMATE DUPLICATE CHECK
+                clean_contact = clean_phone_number(final_contact) if final_contact != "NO_PHONE" else None
+
+                try:
+                    # 1. Check Phone (Strict Block)
+                    if clean_contact:
+                        res_phone = supabase.table('participants').select('name').eq('contact', clean_contact).eq('active', True).execute()
+                        if res_phone.data:
+                            st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**\n\nPlease search for them in the system instead.")
+                            st.stop()
+
+                    # 2. Check Name (Smart Logic)
+                    res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
+                    if res_name.data:
+                        if final_contact == "NO_PHONE":
+                            # 🔥 STRICT BLOCK for Name-Only: Prevents exact name duplicates
+                            st.error(f" **Name already exists!**\n\nA resident named **{name.strip().upper()}** is already registered without a phone number.\n\nTo register a different person with the same name (e.g., a family member), you MUST provide their phone number to distinguish them.")
+                            st.stop()
+                        else:
+                            # Soft Warning if phone is different
+                            st.warning(f"⚠️ **Name Match:** A resident named '{name.strip().upper()}' already exists. Proceeding because phone numbers differ.")
+                            
+                except Exception as e:
+                    st.error(f"Error checking duplicates: {e}")
+                    st.stop()
                 
                 # If we get here, no duplicate found - proceed with registration
                 try:

@@ -26,31 +26,34 @@ def show_manage(selected_date):
                     
                     if st.form_submit_button("Register"):
                         if name:
+                                            # Handle no phone case
                             final_contact = "NO_PHONE" if no_phone else contact.strip()
                             
-                            # 🔥 PREVENT DUPLICATE: Check if phone number already exists
-                            if final_contact != "NO_PHONE":
-                                clean_contact = clean_phone_number(final_contact)
-                                existing_check = supabase.table('participants').select('*').eq('contact', clean_contact).execute()
-                                if existing_check.data:
-                                    st.warning(f"⚠️ **Resident already exists!**\n\nName: **{existing_check.data[0]['name']}**\nPhone: {clean_contact}")
-                                    st.stop()
-                            
-                            new_p = {
-                                "id": datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99)), 
-                                "name": name.upper(), 
-                                "contact": final_contact,
-                                "indemnity": indemnity, 
-                                "is_new": True, 
-                                "active": True, 
-                                "registration_date": str(selected_date)
-                            }
-                            supabase.table('participants').insert(new_p).execute()
-                            refresh_data()
-                            st.success(f"Added {name}!")
-                            st.rerun()
-                        else:
-                            st.error("Name is required")
+                            # 🔥 ULTIMATE DUPLICATE CHECK
+                            clean_contact = clean_phone_number(final_contact) if final_contact != "NO_PHONE" else None
+
+                            try:
+                                # 1. Check Phone (Strict Block)
+                                if clean_contact:
+                                    res_phone = supabase.table('participants').select('name').eq('contact', clean_contact).eq('active', True).execute()
+                                    if res_phone.data:
+                                        st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**\n\nPlease search for them in the system instead.")
+                                        st.stop()
+
+                                # 2. Check Name (Smart Logic)
+                                res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
+                                if res_name.data:
+                                    if final_contact == "NO_PHONE":
+                                        # 🔥 STRICT BLOCK for Name-Only: Prevents exact name duplicates
+                                        st.error(f" **Name already exists!**\n\nA resident named **{name.strip().upper()}** is already registered without a phone number.\n\nTo register a different person with the same name (e.g., a family member), you MUST provide their phone number to distinguish them.")
+                                        st.stop()
+                                    else:
+                                        # Soft Warning if phone is different
+                                        st.warning(f"⚠️ **Name Match:** A resident named '{name.strip().upper()}' already exists. Proceeding because phone numbers differ.")
+                                        
+                            except Exception as e:
+                                st.error(f"Error checking duplicates: {e}")
+                                st.stop()
 
             with st.expander("Indemnity Status"):
                 unsigned = [p for p in st.session_state.participants if not p.get('indemnity') and p.get('active', True)]
