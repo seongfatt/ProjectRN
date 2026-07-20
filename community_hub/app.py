@@ -310,7 +310,8 @@ if params.get("mode") == "volunteer":
                         else:
                             existing_check = supabase.table('participants').select('*').eq('contact', clean_phone).execute()
                             if existing_check.data:
-                                st.warning(f"⚠️ **Resident already exists!**\n\nName: **{existing_check.data[0]['name']}**\nPhone: {clean_phone}")
+                                st.error(f"️ **Resident already exists!**\n\nName: **{existing_check.data[0]['name']}**\nPhone: {clean_phone}\n\nPlease use the 'Mark Present & Check-In' button above instead.")
+                                st.stop()  # 🔥 STOP execution immediately
                             else:
                                 try:
                                     import random
@@ -327,6 +328,7 @@ if params.get("mode") == "volunteer":
                                         "source": selected_activity
                                     }).execute()
                                     st.success(f"✅ {new_name.strip().upper()} registered & checked in!")
+                                    #  REMOVED: st.balloons()
                                     st.session_state.vol_action = None
                                     st.rerun()
                                 except Exception as e:
@@ -481,6 +483,15 @@ if params.get("mode") == "register":
                 # Handle no phone case
                 final_contact = "NO_PHONE" if no_phone else contact.strip()
                 
+                # 🔥 FIX: STRICT DUPLICATE CHECK
+                if final_contact != "NO_PHONE" and final_contact:
+                    clean_contact = clean_phone_number(final_contact)
+                    existing_check = supabase.table('participants').select('*').eq('contact', clean_contact).execute()
+                    
+                    if existing_check.data:
+                        st.error(f"⚠️ **Resident already exists!**\n\nName: **{existing_check.data[0]['name']}**\nPhone: {clean_contact}\n\nPlease use the check-in system instead.")
+                        st.stop()  # 🔥 STOP execution immediately
+                
                 try:
                     new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
                     supabase.table('participants').insert({
@@ -493,6 +504,7 @@ if params.get("mode") == "register":
                         "registration_date": datetime.now().strftime("%Y-%m-%d")
                     }).execute()
                     st.success(f"✅ {name.strip().upper()} registered successfully!")
+                    # 🔥 REMOVED: st.balloons()
                     st.info(f"Resident ID: `{new_id}`")
                     st.caption("They can now use the check-in QR for attendance.")
                 except Exception as e:

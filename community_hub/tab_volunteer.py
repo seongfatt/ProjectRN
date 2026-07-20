@@ -22,7 +22,7 @@ def show_volunteer():
         with c2:
             contact = st.text_input("Contact Number", placeholder="e.g., 91234567")
 
-        no_phone = st.checkbox("👴 Resident does not have a phone")
+        no_phone = st.checkbox(" Resident does not have a phone")
         indemnity = st.checkbox("Indemnity Form Signed", value=False)
 
         st.markdown("""
@@ -40,6 +40,15 @@ def show_volunteer():
                 # Handle no phone case
                 final_contact = "NO_PHONE" if no_phone else contact.strip()
                 
+                # 🔥 FIX: STRICT DUPLICATE CHECK
+                if final_contact != "NO_PHONE" and final_contact:
+                    clean_contact = clean_phone_number(final_contact)
+                    existing_check = supabase.table('participants').select('*').eq('contact', clean_contact).execute()
+                    
+                    if existing_check.data:
+                        st.error(f"️ **Resident already exists!**\n\nName: **{existing_check.data[0]['name']}**\nPhone: {clean_contact}\n\nPlease search for them in the system instead of creating a duplicate.")
+                        st.stop()  # 🔥 STOP execution immediately
+                
                 try:
                     new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
                     supabase.table('participants').insert({
@@ -53,7 +62,7 @@ def show_volunteer():
                     }).execute()
                     refresh_data()
                     st.success(f"✅ {name.strip().upper()} registered successfully!")
-                    st.balloons()
+                    # 🔥 REMOVED: st.balloons()
                     st.info(f"Resident ID: `{new_id}`")
                     st.caption("They can now use the check-in QR for attendance.")
                 except Exception as e:
