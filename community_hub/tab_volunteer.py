@@ -40,15 +40,32 @@ def show_volunteer():
                 # Handle no phone case
                 final_contact = "NO_PHONE" if no_phone else contact.strip()
                 
-                # 🔥 FIX: STRICT DUPLICATE CHECK
+                # 🔥 BULLETPROOF DUPLICATE CHECK
                 if final_contact != "NO_PHONE" and final_contact:
                     clean_contact = clean_phone_number(final_contact)
-                    existing_check = supabase.table('participants').select('*').eq('contact', clean_contact).execute()
                     
-                    if existing_check.data:
-                        st.error(f"️ **Resident already exists!**\n\nName: **{existing_check.data[0]['name']}**\nPhone: {clean_contact}\n\nPlease search for them in the system instead of creating a duplicate.")
-                        st.stop()  # 🔥 STOP execution immediately
+                    # 🔥 DEBUG: Show what we're checking
+                    st.write(f"🔍 Checking for duplicate: {clean_contact}")
+                    
+                    try:
+                        # Query 1: Exact match
+                        existing_check = supabase.table('participants').select('id, name, contact').eq('contact', clean_contact).eq('active', True).execute()
+                        
+                        # Query 2: Fallback - check last 4 digits
+                        if not existing_check.data and len(clean_contact) >= 4:
+                            last_four = clean_contact[-4:]
+                            existing_check = supabase.table('participants').select('id, name, contact').ilike('contact', f'%{last_four}').eq('active', True).execute()
+                        
+                        if existing_check.data:
+                            existing_name = existing_check.data[0]['name']
+                            existing_phone = existing_check.data[0]['contact']
+                            st.error(f"⚠️ **Resident already exists!**\n\nName: **{existing_name}**\nPhone: {mask_phone(existing_phone)}\n\nPlease search for them in the system instead of creating a duplicate.")
+                            st.stop()  # STOP immediately
+                    except Exception as e:
+                        st.error(f"Error checking for duplicates: {e}")
+                        st.stop()
                 
+                # If we get here, no duplicate found - proceed with registration
                 try:
                     new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
                     supabase.table('participants').insert({
@@ -62,7 +79,6 @@ def show_volunteer():
                     }).execute()
                     refresh_data()
                     st.success(f"✅ {name.strip().upper()} registered successfully!")
-                    # 🔥 REMOVED: st.balloons()
                     st.info(f"Resident ID: `{new_id}`")
                     st.caption("They can now use the check-in QR for attendance.")
                 except Exception as e:
@@ -75,7 +91,7 @@ def show_volunteer():
         recent = supabase.table('participants').select("*").eq('registration_date', today_str).order('id', desc=True).limit(10).execute().data
         if recent:
             for p in recent:
-                status = "🆕" if p.get('is_new') else "⭐"
+                status = "" if p.get('is_new') else "⭐"
                 ind = "🟢" if p.get('indemnity') else "🔴"
                 contact_display = mask_phone(p.get('contact', 'N/A')) if p.get('contact') != 'NO_PHONE' else "📵 No phone"
                 st.write(f"{status} {ind} **{p['name']}** — {contact_display} — ID: `{p['id']}`")
