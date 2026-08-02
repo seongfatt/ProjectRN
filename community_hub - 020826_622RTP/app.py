@@ -249,13 +249,13 @@ if params.get("mode") == "volunteer":
         else:
             st.markdown(f"""
             <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                <h4 style="margin: 0 0 8px 0; color: #856404; font-size: 18px;">❓ Phone Number Not Found</h4>
+                <h4 style="margin: 0 0 8px 0; color: #856404; font-size: 18px;"> Phone Number Not Found</h4>
                 <p style="margin: 0; color: #1a1a1a; font-size: 15px;">Would you like to register them or add them as a guest?</p>
             </div>
             """, unsafe_allow_html=True)
             guest_history = check_returning_guest(clean_phone)
             if guest_history:
-                st.info(f"💡 This phone number attended as a Guest on {guest_history['created_at'][:10]}. Consider upgrading them to a Permanent Resident!")
+                st.info(f" This phone number attended as a Guest on {guest_history['created_at'][:10]}. Consider upgrading them to a Permanent Resident!")
             c1, c2 = st.columns(2)
             with c1:
                 if st.button("📝 Register Permanent", use_container_width=True, key="vol_reg_perm"):
@@ -267,25 +267,17 @@ if params.get("mode") == "volunteer":
                 with st.form("vol_permanent_form", clear_on_submit=True):
                     st.subheader("Register as Permanent Resident")
                     new_name = st.text_input("Full Name *", placeholder="e.g., AHMAD BIN ISMAIL")
-                    no_phone_vol = st.checkbox("👴 I do not have a mobile phone", key="vol_no_phone_perm")
                     new_indemnity = st.checkbox("Indemnity Signed", value=False)
-                    block_consent_vol = st.checkbox("🏢 I agree to share my block information (Optional)", key="vol_block_consent")
-                    block_no_vol = ""
-                    if block_consent_vol:
-                        block_no_vol = st.text_input("Block No.", placeholder="e.g., 622, 624A", max_chars=10, key="vol_block_no").strip().upper()
-
                     if st.form_submit_button("Register & Check-In", type="primary", use_container_width=True):
                         if not new_name.strip():
                             st.error("Name is required")
-                        elif not no_phone_vol and not clean_phone_number(phone_input):
-                            st.error("Phone number is required unless you check 'I do not have a mobile phone'.")
                         else:
-                            clean_phone_check = clean_phone_number(phone_input)
+                            clean_phone = clean_phone_number(phone_input)
                             try:
-                                existing_check = supabase.table('participants').select('id, name, contact').eq('contact', clean_phone_check).eq('active', True).execute()
+                                existing_check = supabase.table('participants').select('id, name, contact').eq('contact', clean_phone).eq('active', True).execute()
                                 if existing_check.data:
                                     existing_name = existing_check.data[0]['name']
-                                    st.error(f"⚠️ **Resident already exists!**\n\nName: **{existing_name}**\nPhone: {mask_phone(clean_phone_check)}\n\nPlease use the 'Mark Present & Check-In' button above instead.")
+                                    st.error(f"⚠️ **Resident already exists!**\n\nName: **{existing_name}**\nPhone: {mask_phone(clean_phone)}\n\nPlease use the 'Mark Present & Check-In' button above instead.")
                                     st.stop()
                             except Exception as e:
                                 st.error(f"Error checking for duplicates: {e}")
@@ -293,16 +285,16 @@ if params.get("mode") == "volunteer":
                             try:
                                 import random
                                 new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
-                                final_contact = "NO_PHONE" if no_phone_vol else clean_phone_check
                                 supabase.table('participants').insert({
-                                    "id": new_id, 
-                                    "name": new_name.strip().upper(), 
-                                    "contact": final_contact,
-                                    "block_no": block_no_vol if block_no_vol else None,
-                                    "indemnity": new_indemnity, 
-                                    "is_new": True, 
-                                    "active": True,
+                                    "id": new_id, "name": new_name.strip().upper(), "contact": clean_phone,
+                                    "indemnity": new_indemnity, "is_new": True, "active": True,
                                     "registration_date": str(selected_date)
+                                }).execute()
+                                supabase.table('attendance').insert({
+                                    "participant_id": new_id, "name": new_name.strip().upper(),
+                                    "date": str(selected_date), "session_1": s1, "session_2": s2,
+                                    "timestamp": datetime.now().isoformat(), "self_checkin": False,
+                                    "source": selected_activity
                                 }).execute()
                                 st.success(f"✅ {new_name.strip().upper()} registered & checked in!")
                                 st.session_state.vol_action = None
@@ -404,7 +396,7 @@ if params.get("mode") == "volunteer":
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Access | Link expires automatically")
     st.stop()
 
-# ===== VOLUNTEER REGISTRATION MODE (Token-protected, time-limited) =====
+# ===== VOLUNTEER REGISTRATION MODE =====
 if params.get("mode") == "register":
     import random
     if not DB_CONNECTED or supabase is None:
@@ -412,50 +404,49 @@ if params.get("mode") == "register":
     token = params.get("tk")
     if not token:
         st.error("❌ Invalid registration link. No token provided.")
+        st.markdown("""
+        <div style="background: #ffebee; border-left: 4px solid #f44336; padding: 20px; border-radius: 8px; color: #1a1a1a; text-align: center;">
+            <h3>🔗 Invalid Link</h3>
+            <p>This registration link is missing a security token.</p>
+            <p>Please contact the admin for a valid volunteer link.</p>
+        </div>
+        """, unsafe_allow_html=True)
         st.stop()
-    
     from tab_volunteer_access import validate_volunteer_token
     is_valid, msg = validate_volunteer_token(token)
     if not is_valid:
         st.error(f"❌ {msg}")
+        st.markdown("""
+        <div style="background: #ffebee; border-left: 4px solid #f44336; padding: 20px; border-radius: 8px; color: #1a1a1a; text-align: center;">
+            <h3>⏰ Access Expired</h3>
+            <p>This registration link is no longer valid.</p>
+            <p>Please contact the admin for a new volunteer link.</p>
+        </div>
+        """, unsafe_allow_html=True)
         st.stop()
-
     st.title("📝 New Resident Registration")
     st.markdown("<h4 style='text-align:center;'>Woodlands Zone 6 Community Hub</h4>", unsafe_allow_html=True)
     st.success("✅ Registration access active — link expires automatically")
     st.divider()
-
     with st.form("public_register", clear_on_submit=True):
         name = st.text_input("Full Name *", placeholder="e.g., AHMAD BIN ISMAIL")
         contact = st.text_input("Contact Number", placeholder="e.g., 91234567")
         no_phone = st.checkbox("👴 I do not have a phone")
-        indemnity = st.checkbox("Indemnity Form Signed (Optional)", value=False)
-        
-        # 🔥 ADDED: Block Number fields
-        block_consent = st.checkbox("🏢 I agree to share my block information (Optional)")
-        block_no = ""
-        if block_consent:
-            block_no = st.text_input("Block No.", placeholder="e.g., 622, 624A", max_chars=10).strip().upper()
-        
+        indemnity = st.checkbox("Indemnity Form Signed", value=False)
         st.caption("By registering, you confirm the resident has agreed to participate in community activities.")
         submitted = st.form_submit_button("Register Resident", type="primary", use_container_width=True)
-        
         if submitted:
             if not name.strip():
                 st.error("Name is required")
             else:
-                # Handle no phone case
                 final_contact = "NO_PHONE" if no_phone else contact.strip()
-                # 🔥 STRICT DUPLICATE CHECK
                 clean_contact = clean_phone_number(final_contact) if final_contact != "NO_PHONE" else None
                 try:
-                    # 1. Check Phone (Strict Block)
                     if clean_contact:
                         res_phone = supabase.table('participants').select('name').eq('contact', clean_contact).eq('active', True).execute()
                         if res_phone.data:
                             st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**\n\nPlease use the Check-In link instead of registering again.")
                             st.stop()
-                    # 2. Check Name (Strict Block)
                     res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
                     if res_name.data:
                         st.error(f"⛔ **Name already exists!**\n\nA resident named **{name.strip().upper()}** is already registered in our system.\n\nIf you are already registered, please use the Check-In link instead of registering again.")
@@ -463,15 +454,12 @@ if params.get("mode") == "register":
                 except Exception as e:
                     st.error(f"Error checking for duplicates: {e}")
                     st.stop()
-                
-                # If we get here, no duplicate found - proceed with registration
                 try:
                     new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
                     supabase.table('participants').insert({
                         "id": new_id,
                         "name": name.strip().upper(),
                         "contact": final_contact,
-                        "block_no": block_no if block_no else None,  # 🔥 Save block number
                         "indemnity": indemnity,
                         "is_new": True,
                         "active": True,
@@ -482,7 +470,6 @@ if params.get("mode") == "register":
                     st.caption("They can now use the check-in QR for attendance.")
                 except Exception as e:
                     st.error(f"Registration failed: {e}")
-
     st.divider()
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Registration | Time-limited access")
     st.stop()
@@ -549,7 +536,7 @@ if params.get("mode") == "rsvp":
                 if st.form_submit_button("Confirm RSVP", type="primary", use_container_width=True):
                     try:
                         import uuid
-                        resp_map = {"👍 Attending": "attending", "👎 Not Attending": "not_attending", "⏳ Maybe": "maybe"} # 🔥 FIXED EMOJI
+                        resp_map = {"👍 Attending": "attending", " Not Attending": "not_attending", "⏳ Maybe": "maybe"}
                         existing = supabase.table('session_rsvp').select("*").eq('session_id', sess['id']).eq('name', resident['name']).execute().data
                         if existing:
                             supabase.table('session_rsvp').update({
@@ -573,7 +560,7 @@ if params.get("mode") == "rsvp":
             st.warning("❓ Phone number not found. Please enter your details to RSVP.")
             with st.form("rsvp_form_new"):
                 new_name = st.text_input("Your Name *", placeholder="e.g., Tan Ah Kow")
-                response = st.radio("Will you be attending?", ["👍 Attending", "👎 Not Attending", "⏳ Maybe"], horizontal=True)
+                response = st.radio("Will you be attending?", ["👍 Attending", " Not Attending", "⏳ Maybe"], horizontal=True)
                 acts = load_activities()
                 act_config = next((a for a in acts if a['name'] == sess['activity_name']), None)
                 s1_label = act_config.get('session_1_label', 'Session 1') if act_config else 'Session 1'
@@ -590,7 +577,7 @@ if params.get("mode") == "rsvp":
                     else:
                         try:
                             import uuid
-                            resp_map = {"👍 Attending": "attending", "👎 Not Attending": "not_attending", "⏳ Maybe": "maybe"} # 🔥 FIXED EMOJI
+                            resp_map = {"👍 Attending": "attending", "👎 Not Attending": "not_attending", "⏳ Maybe": "maybe"}
                             supabase.table('session_rsvp').insert({
                                 "id": str(uuid.uuid4()), "session_id": sess['id'],
                                 "name": new_name.strip().upper(), "phone": clean_phone,
@@ -609,14 +596,14 @@ if params.get("mode") == "rsvp":
         st.caption("Please enter your details below to RSVP. A volunteer will assist you at the venue.")
         with st.form("no_phone_rsvp_form"):
             np_name = st.text_input("Full Name *", placeholder="e.g., TAN AH KOW")
-            response = st.radio("Will you be attending?", ["👍 Attending", "👎 Not Attending", "⏳ Maybe"], horizontal=True)
+            response = st.radio("Will you be attending?", ["👍 Attending", " Not Attending", "⏳ Maybe"], horizontal=True)
             if st.form_submit_button("Submit RSVP", type="primary", use_container_width=True):
                 if not np_name.strip():
                     st.error("Name is required")
                 else:
                     try:
                         import uuid
-                        resp_map = {"👍 Attending": "attending", "👎 Not Attending": "not_attending", "⏳ Maybe": "maybe"} # 🔥 FIXED EMOJI
+                        resp_map = {" Attending": "attending", "👎 Not Attending": "not_attending", " Maybe": "maybe"}
                         existing = supabase.table('session_rsvp').select("*").eq('session_id', sess['id']).eq('name', np_name.strip().upper()).execute().data
                         rsvp_data = {
                             "session_id": sess['id'],
@@ -663,8 +650,10 @@ if not st.session_state.plots:
 if not st.session_state.activities:
     st.session_state.activities = load_activities()
 
-# 🔥 AUTHENTICATED DASHBOARD
+# 🔥 AUTHENTICATED DASHBOARD (Everything below must be inside this block)
 if st.session_state.is_authenticated:
+    
+    # Header for logged-in users
     col1, col2 = st.columns([3,1])
     with col1: 
         st.subheader("Admin Dashboard")
@@ -677,8 +666,9 @@ if st.session_state.is_authenticated:
             st.session_state.active_page = None
             st.rerun()
     
+    # 🔥 CHAIRMAN TERMS & CONDITIONS
     if st.session_state.user_role == "chairman" and not st.session_state.get("chairman_tc_accepted"):
-        st.title("📜 System Usage Policy")
+        st.title(" System Usage Policy")
         st.markdown("""
         Welcome, Chairman. You have been granted limited administrative access to the 
         **Woodlands Zone 6 Community Hub**. By proceeding, you agree to:
@@ -693,6 +683,7 @@ if st.session_state.is_authenticated:
                 st.rerun()
         st.stop()
     
+    # ─ MOBILE TOP BAR (Date & Activity Selectors) ──
     st.markdown("""
     <style>
     @media(max-width:768px){
@@ -727,17 +718,18 @@ if st.session_state.is_authenticated:
                 st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
     
-    st.divider()
+    st.divider()  # ✅ Only ONE divider here, after login
     
-    # ===== NAVIGATION BUTTONS =====
+    # ===== NAVIGATION BUTTONS (Only show when logged in) =====
+    # Define navigation based on role
     if st.session_state.user_role == "admin":
         nav_items = [
             {"id": "dashboard", "icon": "📊", "title": "Dashboard"},
-            {"id": "checkin", "icon": "🎟️", "title": "Check-In"},
-            {"id": "sessions", "icon": "📅", "title": "Sessions"},
-            {"id": "volunteer", "icon": "🤝", "title": "Volunteer"},
-            {"id": "vol_access", "icon": "🪪", "title": "Vol Access"},
-            {"id": "reports", "icon": "📑", "title": "Reports"},
+            {"id": "checkin", "icon": "️", "title": "Check-In"},
+            {"id": "sessions", "icon": "", "title": "Sessions"},
+            {"id": "volunteer", "icon": "", "title": "Volunteer"},
+            {"id": "vol_access", "icon": "", "title": "Vol Access"},
+            {"id": "reports", "icon": "", "title": "Reports"},
             {"id": "manage", "icon": "⚙️", "title": "Manage"},
             {"id": "garden", "icon": "🌱", "title": "622 Garden"},
             {"id": "residents", "icon": "🏡", "title": "Residents"},
@@ -749,24 +741,26 @@ if st.session_state.is_authenticated:
             {"id": "dashboard", "icon": "📊", "title": "Dashboard"},
             {"id": "checkin", "icon": "🎟️", "title": "Check-In"},
             {"id": "sessions", "icon": "📅", "title": "Sessions"},
-            {"id": "vol_access", "icon": "🪪", "title": "Vol Access"},
-            {"id": "reports", "icon": "📑", "title": "Reports"},
+            {"id": "vol_access", "icon": "", "title": "Vol Access"},
+            {"id": "reports", "icon": "", "title": "Reports"},
             {"id": "garden", "icon": "🌱", "title": "622 Garden"},
             {"id": "residents", "icon": "🏡", "title": "Residents"},
             {"id": "meeting", "icon": "📋", "title": "Meeting"},
         ]
-    else:
+    else:  # checker
         nav_items = [
-            {"id": "checkin", "icon": "🎟️", "title": "Check-In"},
-            {"id": "sessions", "icon": "📅", "title": "Sessions"},
-            {"id": "volunteer", "icon": "🤝", "title": "Volunteer"},
-            {"id": "reports", "icon": "📑", "title": "Reports"},
+            {"id": "checkin", "icon": "️", "title": "Check-In"},
+            {"id": "sessions", "icon": "", "title": "Sessions"},
+            {"id": "volunteer", "icon": "", "title": "Volunteer"},
+            {"id": "reports", "icon": "", "title": "Reports"},
             {"id": "meeting", "icon": "📋", "title": "Meeting"},
         ]
     
+    # Set default page
     if st.session_state.active_page is None:
         st.session_state.active_page = nav_items[0]["id"]
     
+    # Display navigation buttons in grid
     cols_per_row = 5 if len(nav_items) >= 5 else len(nav_items)
     cols = st.columns(cols_per_row)
     
@@ -788,28 +782,40 @@ if st.session_state.is_authenticated:
     page = st.session_state.active_page
     
     if page == "dashboard":
+        from tab_dashboard import show_dashboard
         show_dashboard()
     elif page == "checkin":
+        from tab_checkin import show_checkin
         show_checkin(selected_date)
     elif page == "sessions":
+        from tab_sessions import show_sessions
         show_sessions(supabase, st.session_state.user_role)
     elif page == "volunteer":
+        from tab_volunteer import show_volunteer
         show_volunteer()
     elif page == "vol_access":
+        from tab_volunteer_access import show_volunteer_access
         show_volunteer_access()
     elif page == "reports":
+        from tab_reports import show_reports
         show_reports(selected_date)
     elif page == "manage":
+        from tab_manage import show_manage
         show_manage(selected_date)
     elif page == "garden":
+        from tab_garden import show_garden
         show_garden()
     elif page == "residents":
+        from tab_residents import show_residents
         show_residents()
     elif page == "meeting":
+        from tab_meeting import show_meeting
         show_meeting(selected_date)
     elif page == "overview":
+        from tab_chairman import show_chairman
         show_chairman()
 
+# 🔥 LOGIN SECTION (Only show when NOT logged in)
 else:
     st.divider()
     st.subheader("Admin Dashboard")

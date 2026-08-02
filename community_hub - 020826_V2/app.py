@@ -404,7 +404,7 @@ if params.get("mode") == "volunteer":
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Access | Link expires automatically")
     st.stop()
 
-# ===== VOLUNTEER REGISTRATION MODE (Token-protected, time-limited) =====
+# ===== VOLUNTEER REGISTRATION MODE =====
 if params.get("mode") == "register":
     import random
     if not DB_CONNECTED or supabase is None:
@@ -425,63 +425,60 @@ if params.get("mode") == "register":
     st.success("✅ Registration access active — link expires automatically")
     st.divider()
 
-    with st.form("public_register", clear_on_submit=True):
-        name = st.text_input("Full Name *", placeholder="e.g., AHMAD BIN ISMAIL")
-        contact = st.text_input("Contact Number", placeholder="e.g., 91234567")
-        no_phone = st.checkbox("👴 I do not have a phone")
-        indemnity = st.checkbox("Indemnity Form Signed (Optional)", value=False)
-        
-        # 🔥 ADDED: Block Number fields
-        block_consent = st.checkbox("🏢 I agree to share my block information (Optional)")
-        block_no = ""
-        if block_consent:
-            block_no = st.text_input("Block No.", placeholder="e.g., 622, 624A", max_chars=10).strip().upper()
-        
-        st.caption("By registering, you confirm the resident has agreed to participate in community activities.")
-        submitted = st.form_submit_button("Register Resident", type="primary", use_container_width=True)
-        
-        if submitted:
-            if not name.strip():
-                st.error("Name is required")
-            else:
-                # Handle no phone case
-                final_contact = "NO_PHONE" if no_phone else contact.strip()
-                # 🔥 STRICT DUPLICATE CHECK
-                clean_contact = clean_phone_number(final_contact) if final_contact != "NO_PHONE" else None
-                try:
-                    # 1. Check Phone (Strict Block)
-                    if clean_contact:
-                        res_phone = supabase.table('participants').select('name').eq('contact', clean_contact).eq('active', True).execute()
-                        if res_phone.data:
-                            st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**\n\nPlease use the Check-In link instead of registering again.")
-                            st.stop()
-                    # 2. Check Name (Strict Block)
-                    res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
-                    if res_name.data:
-                        st.error(f"⛔ **Name already exists!**\n\nA resident named **{name.strip().upper()}** is already registered in our system.\n\nIf you are already registered, please use the Check-In link instead of registering again.")
+    # 🔥 FIX: Removed st.form to allow instant checkbox reactivity
+    name = st.text_input("Full Name *", placeholder="e.g., AHMAD BIN ISMAIL", key="pub_reg_name")
+    contact = st.text_input("Contact Number", placeholder="e.g., 91234567", key="pub_reg_contact")
+    no_phone = st.checkbox("👴 I do not have a phone", key="pub_reg_no_phone")
+    indemnity = st.checkbox("Indemnity Form Signed (Optional)", value=False, key="pub_reg_indemnity")
+    
+    # 🔥 This checkbox now works instantly!
+    block_consent = st.checkbox("🏢 I agree to share my block information (Optional)", key="pub_reg_block_consent")
+    block_no = ""
+    if block_consent:
+        block_no = st.text_input("Block No.", placeholder="e.g., 622, 624A", key="pub_reg_block_no").strip().upper()
+
+    st.caption("By registering, you confirm the resident has agreed to participate in community activities.")
+    
+    # Use regular button instead of form_submit_button
+    if st.button("Register Resident", type="primary", use_container_width=True, key="pub_reg_submit_btn"):
+        if not name.strip():
+            st.error("❌ Name is required")
+        elif not no_phone and not contact.strip():
+            st.error("❌ Contact number is required (check 'I do not have a phone' if they don't have one)")
+        else:
+            final_contact = "NO_PHONE" if no_phone else contact.strip()
+            clean_contact = clean_phone_number(final_contact) if final_contact != "NO_PHONE" else None
+            
+            try:
+                if clean_contact and clean_contact != "NO_PHONE":
+                    res_phone = supabase.table('participants').select('name').eq('contact', clean_contact).eq('active', True).execute()
+                    if res_phone.data:
+                        st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**")
                         st.stop()
-                except Exception as e:
-                    st.error(f"Error checking for duplicates: {e}")
+                res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
+                if res_name.data:
+                    st.error(f"⛔ **Name already exists!**\n\nA resident named **{name.strip().upper()}** is already registered.")
                     st.stop()
-                
-                # If we get here, no duplicate found - proceed with registration
-                try:
-                    new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
-                    supabase.table('participants').insert({
-                        "id": new_id,
-                        "name": name.strip().upper(),
-                        "contact": final_contact,
-                        "block_no": block_no if block_no else None,  # 🔥 Save block number
-                        "indemnity": indemnity,
-                        "is_new": True,
-                        "active": True,
-                        "registration_date": datetime.now().strftime("%Y-%m-%d")
-                    }).execute()
-                    st.success(f"✅ {name.strip().upper()} registered successfully!")
-                    st.info(f"Resident ID: `{new_id}`")
-                    st.caption("They can now use the check-in QR for attendance.")
-                except Exception as e:
-                    st.error(f"Registration failed: {e}")
+            except Exception as e:
+                st.error(f"Error checking for duplicates: {e}")
+                st.stop()
+            
+            try:
+                new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
+                supabase.table('participants').insert({
+                    "id": new_id,
+                    "name": name.strip().upper(),
+                    "contact": final_contact,
+                    "block_no": block_no if block_no else None,
+                    "indemnity": indemnity,
+                    "is_new": True,
+                    "active": True,
+                    "registration_date": datetime.now().strftime("%Y-%m-%d")
+                }).execute()
+                st.success(f"✅ {name.strip().upper()} registered successfully!")
+                st.info(f"Resident ID: `{new_id}`")
+            except Exception as e:
+                st.error(f"Registration failed: {e}")
 
     st.divider()
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Registration | Time-limited access")

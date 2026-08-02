@@ -101,9 +101,9 @@ def show_manage(selected_date):
                                     refresh_data()
                                     st.rerun()
 
-            # 🔥 NEW: Update Resident Contact Info & Block No.
+            # 🔥 NEW: Update Contact Info for "NO_PHONE" residents
             with st.expander("✏️ Update Resident Contact Info"):
-                st.caption("Use this to add a phone number or block info for residents previously registered without one.")
+                st.caption("Use this to add a phone number for residents previously registered without one.")
                 update_search = st.text_input("Search resident by Name or ID", key="update_search_contact")
                 
                 if update_search:
@@ -116,8 +116,7 @@ def show_manage(selected_date):
                                 c1, c2, c3 = st.columns([3, 2, 1])
                                 c1.write(f"**{p['name']}**")
                                 current_contact = p.get('contact', 'N/A')
-                                current_block = p.get('block_no', 'Not provided')
-                                c2.write(f"Phone: {current_contact if current_contact != 'NO_PHONE' else ' No Phone'} | Block: {current_block}")
+                                c2.write(f"Current: {current_contact if current_contact != 'NO_PHONE' else '📵 No Phone'}")
                                 
                                 with c3:
                                     if st.button("Edit", key=f"edit_btn_{p['id']}"):
@@ -131,18 +130,9 @@ def show_manage(selected_date):
                                             value="" if current_contact == "NO_PHONE" else current_contact,
                                             key=f"new_phone_{p['id']}"
                                         )
-                                        new_block = st.text_input(
-                                            "Block No.", 
-                                            value="" if current_block == 'Not provided' else current_block,
-                                            placeholder="e.g., 622, 624A",
-                                            key=f"new_block_{p['id']}"
-                                        )
                                         col_save, col_cancel = st.columns(2)
                                         with col_save:
                                             if st.form_submit_button("💾 Save Update", type="primary"):
-                                                updates = {}
-                                                
-                                                # Update phone if provided
                                                 if new_contact.strip():
                                                     clean_contact = clean_phone_number(new_contact)
                                                     
@@ -152,29 +142,14 @@ def show_manage(selected_date):
                                                     
                                                     if is_dup:
                                                         st.error(f"⛔ This phone number is already used by: {dup_check.data[0]['name']}")
-                                                        st.stop()
                                                     else:
-                                                        updates['contact'] = clean_contact
-                                                elif new_contact.strip() == "":
-                                                    # If field is empty and was NO_PHONE, keep it
-                                                    if current_contact != "NO_PHONE":
-                                                        updates['contact'] = "NO_PHONE"
-                                                
-                                                # Update block if provided
-                                                if new_block.strip():
-                                                    updates['block_no'] = new_block.strip().upper()
-                                                
-                                                if updates:
-                                                    try:
-                                                        supabase.table('participants').update(updates).eq('id', p['id']).execute()
-                                                        st.success("✅ Contact/Block updated successfully!")
+                                                        supabase.table('participants').update({'contact': clean_contact}).eq('id', p['id']).execute()
+                                                        st.success("✅ Contact updated successfully!")
                                                         refresh_data()
                                                         st.session_state[f"edit_mode_{p['id']}"] = False
                                                         st.rerun()
-                                                    except Exception as e:
-                                                        st.error(f"Error: {e}")
                                                 else:
-                                                    st.error("No changes to save.")
+                                                    st.error("Phone number cannot be empty.")
                                         with col_cancel:
                                             if st.form_submit_button("Cancel"):
                                                 st.session_state[f"edit_mode_{p['id']}"] = False

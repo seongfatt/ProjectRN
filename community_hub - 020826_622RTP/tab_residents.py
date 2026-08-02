@@ -3,7 +3,6 @@ import pandas as pd
 from config import supabase, DB_CONNECTED, load_activities, TYPE_MAP, PLOT_TYPES
 from utils import mask_phone, get_user_plot, load_plots
 from collections import defaultdict
-import urllib.parse
 
 def show_residents():
     st.header("Resident Network & Entitlements")
@@ -79,14 +78,13 @@ def show_residents():
             plot_data = plot_dict[pid.lower().strip()]
             plot_info = f"Plot {plot_data['plot_number']} (Type {plot_data['plot_type']})"
 
-                # 🔥 PDPA GUARDRAIL: Mask phone numbers for Chairman
+        # 🔥 PDPA GUARDRAIL: Mask phone numbers for Chairman
         contact_display = mask_phone(p.get('contact', 'N/A')) if st.session_state.get('user_role') == 'chairman' else p.get('contact', 'N/A')
 
         display_data.append({
             "ID": pid,
             "Name": p['name'],
             "Contact": contact_display,
-            "Block": p.get('block_no', 'N/A'),  # 🔥 NEW: Display Block Number (e.g., 622, 624A)
             "Status": "New" if p.get('is_new') else "Regular",
             "Indemnity": "Yes" if p.get('indemnity') else "No",
             "Garden Plot": plot_info if plot_info else "",

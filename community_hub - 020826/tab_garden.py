@@ -19,7 +19,7 @@ PLOT_LAYOUTS = {
 }
 
 def show_garden():
-    st.header("🌱 622 Roof Top Garden")
+    st.header("Roof Top Garden")
 
     if not DB_CONNECTED:
         st.error("Database not connected"); return
@@ -181,7 +181,7 @@ def show_garden():
     st.subheader("Admin Panel")
     
     if st.session_state.user_role == 'admin':
-        st.caption("Manage plots and requests for Block 622 , direct assignments, and releases")
+        st.caption("Manage garden plot requests, direct assignments, and releases")
         at1, at2 = st.tabs(["Requests", "Direct Assignment"])
 
         with at1:
@@ -257,7 +257,7 @@ def show_garden():
                     st.success(f"Plot {rp} released!"); st.rerun()
     else:
         # 🔒 CHAIRMAN / CHECKER VIEW: Read-only or restricted
-        st.caption("🔒 Manage plots and requests for Block 622 (Assignments & Releases) are restricted to System Admins.")
+        st.caption("🔒 Garden management tools (Assignments & Releases) are restricted to System Admins.")
         reqs = get_pending_requests()
         if reqs:
             st.write(f"**{len(reqs)} pending request(s) awaiting admin approval:**")
