@@ -447,45 +447,51 @@ def show(supabase, role):
                             st.rerun()
                     st.divider()
 
-                        # ── Resend RSVP Links Feature ───────────────────────────
+            # ── NEW: Resend RSVP Links Feature ───────────────────────────
             st.divider()
             st.subheader("📩 Resend RSVP Links to Residents")
             st.caption("Find a session and resend RSVP links to attendees who lost the original link")
-
-            # Re-fetch sessions for this section
-            all_sessions_for_resend = _fetch_sessions(sup, status=None, activity=None, future_only=False)
-
-            if all_sessions_for_resend:
+            
+            if sessions:
                 resend_session = st.selectbox(
                     "Select Session to Resend Links",
-                    all_sessions_for_resend,
+                    sessions,
                     format_func=lambda x: f"{x['activity_name']} - {x['session_date']} ({x['status']})",
                     key="resend_session_select"
                 )
+                
                 if resend_session:
                     token = resend_session.get('rsvp_link_token')
                     if token:
                         rsvp_url = f"{app_url}/?mode=rsvp&tk={token}"
+                        
                         st.code(rsvp_url, language="text", line_numbers=False)
+                        
                         c1, c2 = st.columns([1, 3])
                         with c1:
-                            if st.button(" Copy Link", key=f"copy_resend_{resend_session['id']}"):
+                            if st.button("📋 Copy Link", key=f"copy_resend_{resend_session['id']}"):
                                 st.success("Link copied to clipboard!")
+                        
                         # Get all RSVPs for this session
                         rsvps = _fetch_rsvps(sup, resend_session['id'])
                         attending = [r for r in rsvps if r.get('response') == 'attending' and r.get('phone')]
+                        
                         if attending:
                             st.write(f"**{len(attending)} residents attending with phone numbers:**")
+                            
                             if st.button("📱 Generate WhatsApp Resend Links", type="primary", key=f"wa_resend_btn_{resend_session['id']}"):
                                 for rsvp in attending:
                                     phone = rsvp.get('phone', '')
                                     name = rsvp.get('name', 'Resident')
+                                    
                                     # Generate personalized message
                                     msg = f"Hi {name}! Here's your RSVP link for {resend_session['activity_name']} on {resend_session['session_date']}:\n\n{rsvp_url}\n\nTap to confirm your attendance!"
+                                    
                                     wa_link = _generate_whatsapp_link(phone, msg)
+                                    
                                     with st.expander(f"📲 {name} ({phone})", expanded=False):
                                         st.code(msg, language="text", line_numbers=False)
-                                        st.link_button(" Open WhatsApp", wa_link, key=f"wa_link_{rsvp['id']}")
+                                        st.link_button("Open WhatsApp", wa_link, key=f"wa_link_{rsvp['id']}")
                         else:
                             st.info("No attending residents with phone numbers found for this session.")
                     else:
@@ -530,6 +536,5 @@ def show(supabase, role):
                         st.session_state['live_checkin_session_id'] = s['id']
                         st.rerun()
                     st.divider()
-
 
 show_sessions = show

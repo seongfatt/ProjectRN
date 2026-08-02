@@ -15,6 +15,7 @@ from tab_checkin import show_checkin
 from tab_qr_links import show_qr_links
 from tab_reports import show_reports
 from tab_manage import show_manage
+from tab_import import show_import
 from tab_garden import show_garden
 from tab_residents import show_residents
 from tab_admin_scan import show_admin_scan
@@ -23,7 +24,6 @@ from tab_volunteer import show_volunteer
 from tab_volunteer_access import show_volunteer_access
 from tab_sessions import show_sessions
 from tab_chairman import show_chairman
-from tab_kiosk import show_kiosk
 
 # Hide sidebar completely on all screen sizes
 st.markdown("""
@@ -834,63 +834,39 @@ if st.session_state.is_authenticated:
     # ===== TAB ROUTING =====
 if st.session_state.is_authenticated:
     if st.session_state.user_role == "admin":
-        # 🔥 SIMPLIFIED: 9 tabs (merged Admin Scan + Kiosk → Check-In)
-        tabs = st.tabs([
-            "📱 Check-In",
-            "📅 Sessions",
-            " Volunteer",
-            "🔐 Volunteer Access",
-            "📊 Reports",
-            "⚙️ Manage",
-            " Garden",
-            "👥 Residents",
-            "📋 Meeting"
-        ])
-        with tabs[0]: show_checkin(selected_date)
-        with tabs[1]: show_sessions(supabase, st.session_state.user_role)
-        with tabs[2]: show_volunteer()
-        with tabs[3]: show_volunteer_access()
-        with tabs[4]: show_reports(selected_date)
-        with tabs[5]: show_manage(selected_date)
-        with tabs[6]: show_garden()
-        with tabs[7]: show_residents()
-        with tabs[8]: show_meeting(selected_date)
+        tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Meeting", "Volunteer", "Volunteer Access", "Manage", "Import", "Garden", "Residents", "Sessions"])
+        with tabs[0]: show_qr_links(selected_date)
+        with tabs[1]: show_admin_scan(selected_date)
+        with tabs[2]: show_reports(selected_date)
+        with tabs[3]: show_meeting(selected_date)
+        with tabs[4]: show_volunteer()
+        with tabs[5]: show_volunteer_access()
+        with tabs[6]: show_manage(selected_date)
+        with tabs[7]: show_import(selected_date)
+        with tabs[8]: show_garden()
+        with tabs[9]: show_residents()
+        with tabs[10]: show_sessions(supabase, st.session_state.user_role)
         
     elif st.session_state.user_role == "chairman":
-        # 🔥 CHAIRMAN: 8 tabs
-        tabs = st.tabs([
-            "📊 Overview",
-            "📱 Check-In",
-            " Sessions",
-            "🔐 Volunteer Access",
-            "📊 Reports",
-            " Garden",
-            "👥 Residents",
-            "📋 Meeting"
-        ])
+        # 🔥 NEW: Added "📱 Check-In Scanner" for Chairman oversight
+        tabs = st.tabs(["📊 Overview", "📱 Check-In Scanner", "Reports", "Meeting", "Garden", "Residents", "Sessions", "Volunteer Access"])
         with tabs[0]: show_chairman()
-        with tabs[1]: show_checkin(selected_date)
-        with tabs[2]: show_sessions(supabase, st.session_state.user_role)
-        with tabs[3]: show_volunteer_access()
-        with tabs[4]: show_reports(selected_date)
-        with tabs[5]: show_garden()
-        with tabs[6]: show_residents()
-        with tabs[7]: show_meeting(selected_date)
+        with tabs[1]: show_admin_scan(selected_date)  # 🔥 Chairman can now use the scanner!
+        with tabs[2]: show_reports(selected_date)
+        with tabs[3]: show_meeting(selected_date)
+        with tabs[4]: show_garden()
+        with tabs[5]: show_residents()
+        with tabs[6]: show_sessions(supabase, st.session_state.user_role)
+        with tabs[7]: show_volunteer_access()
         
     else: # checker
-        # 🔥 CHECKER: 5 tabs
-        tabs = st.tabs([
-            " Check-In",
-            "📅 Sessions",
-            "🤝 Volunteer",
-            " Reports",
-            "📋 Meeting"
-        ])
-        with tabs[0]: show_checkin(selected_date)
-        with tabs[1]: show_sessions(supabase, st.session_state.user_role)
-        with tabs[2]: show_volunteer()
-        with tabs[3]: show_reports(selected_date)
-        with tabs[4]: show_meeting(selected_date)
+        tabs = st.tabs(["QR/Links", "Admin Scan", "Reports", "Volunteer", "Garden", "Sessions"])
+        with tabs[0]: show_qr_links(selected_date)
+        with tabs[1]: show_admin_scan(selected_date)
+        with tabs[2]: show_reports(selected_date)
+        with tabs[3]: show_volunteer()
+        with tabs[4]: show_garden()
+        with tabs[5]: show_sessions(supabase, st.session_state.user_role)
 else:
     st.subheader("Admin Dashboard")
     st.caption(f"{datetime.now().strftime('%d %b %Y')}")

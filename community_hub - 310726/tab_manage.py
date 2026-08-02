@@ -8,17 +8,15 @@ from utils import mask_phone, clean_phone_number, log_action
 def show_manage(selected_date):
     st.header("Management")
     if not DB_CONNECTED:
-        st.error("Database not connected")
-        return
+        st.error("Database not connected"); return
 
     # Define tabs
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["Participants", "Activities", "Convert Status", "💰 Payment Status", "📜 Audit Logs"])
 
     # ── TAB 1: Participants ───────────────────────────────────
     with tab1:
-        # CHAIRMAN RESTRICTION: Hide registration and deletion
+        #  CHAIRMAN RESTRICTION: Hide registration and deletion
         if st.session_state.user_role == 'admin':
-            
             with st.expander("Register New Participant"):
                 with st.form("new_p"):
                     name = st.text_input("Full Name")
@@ -28,7 +26,7 @@ def show_manage(selected_date):
                     
                     if st.form_submit_button("Register"):
                         if name:
-                            # Handle no phone case
+                                            # Handle no phone case
                             final_contact = "NO_PHONE" if no_phone else contact.strip()
                             
                             # 🔥 ULTIMATE DUPLICATE CHECK
@@ -46,31 +44,16 @@ def show_manage(selected_date):
                                 res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
                                 if res_name.data:
                                     if final_contact == "NO_PHONE":
-                                        st.error(f"⛔ **Name already exists!**\n\nA resident named **{name.strip().upper()}** is already registered without a phone number.\n\nTo register a different person with the same name, you MUST provide their phone number to distinguish them.")
+                                        # 🔥 STRICT BLOCK for Name-Only: Prevents exact name duplicates
+                                        st.error(f" **Name already exists!**\n\nA resident named **{name.strip().upper()}** is already registered without a phone number.\n\nTo register a different person with the same name (e.g., a family member), you MUST provide their phone number to distinguish them.")
                                         st.stop()
                                     else:
+                                        # Soft Warning if phone is different
                                         st.warning(f"⚠️ **Name Match:** A resident named '{name.strip().upper()}' already exists. Proceeding because phone numbers differ.")
                                         
                             except Exception as e:
                                 st.error(f"Error checking duplicates: {e}")
                                 st.stop()
-
-                            # If no duplicates, proceed with registration
-                            new_p = {
-                                "id": datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99)), 
-                                "name": name.upper(), 
-                                "contact": final_contact,
-                                "indemnity": indemnity, 
-                                "is_new": True, 
-                                "active": True, 
-                                "registration_date": str(selected_date)
-                            }
-                            supabase.table('participants').insert(new_p).execute()
-                            refresh_data()
-                            st.success(f"Added {name}!")
-                            st.rerun()
-                        else:
-                            st.error("Name is required")
 
             with st.expander("Indemnity Status"):
                 unsigned = [p for p in st.session_state.participants if not p.get('indemnity') and p.get('active', True)]
@@ -79,8 +62,7 @@ def show_manage(selected_date):
                     c1.write(f"🔴 {p['name']}")
                     if c2.button("Mark Signed", key=f"ind_{p['id']}"):
                         supabase.table('participants').update({'indemnity': True}).eq('id', p['id']).execute()
-                        refresh_data()
-                        st.rerun()
+                        refresh_data(); st.rerun()
 
             with st.expander("🗑️ Remove Participant"):
                 st.warning("Removing a participant will deactivate them.")
@@ -98,64 +80,7 @@ def show_manage(selected_date):
                                 c2.write(f" {mask_phone(p.get('contact', 'N/A'))}")
                                 if c3.button("Remove", key=f"remove_{p['id']}", type="secondary"):
                                     supabase.table('participants').update({'active': False}).eq('id', p['id']).execute()
-                                    refresh_data()
-                                    st.rerun()
-
-            # 🔥 NEW: Update Contact Info for "NO_PHONE" residents
-            with st.expander("✏️ Update Resident Contact Info"):
-                st.caption("Use this to add a phone number for residents previously registered without one.")
-                update_search = st.text_input("Search resident by Name or ID", key="update_search_contact")
-                
-                if update_search:
-                    s = update_search.lower()
-                    matches = [p for p in st.session_state.participants if p.get('active', True) and (s in p['name'].lower() or s in p.get('id', '').lower())]
-                    
-                    if matches:
-                        for p in matches:
-                            with st.container():
-                                c1, c2, c3 = st.columns([3, 2, 1])
-                                c1.write(f"**{p['name']}**")
-                                current_contact = p.get('contact', 'N/A')
-                                c2.write(f"Current: {current_contact if current_contact != 'NO_PHONE' else '📵 No Phone'}")
-                                
-                                with c3:
-                                    if st.button("Edit", key=f"edit_btn_{p['id']}"):
-                                        st.session_state[f"edit_mode_{p['id']}"] = True
-                                
-                                # Show Edit Form if activated
-                                if st.session_state.get(f"edit_mode_{p['id']}"):
-                                    with st.form(f"update_form_{p['id']}"):
-                                        new_contact = st.text_input(
-                                            "New Phone Number", 
-                                            value="" if current_contact == "NO_PHONE" else current_contact,
-                                            key=f"new_phone_{p['id']}"
-                                        )
-                                        col_save, col_cancel = st.columns(2)
-                                        with col_save:
-                                            if st.form_submit_button("💾 Save Update", type="primary"):
-                                                if new_contact.strip():
-                                                    clean_contact = clean_phone_number(new_contact)
-                                                    
-                                                    # Check for duplicates (excluding the current resident)
-                                                    dup_check = supabase.table('participants').select('id, name').eq('contact', clean_contact).eq('active', True).execute()
-                                                    is_dup = any(d['id'] != p['id'] for d in dup_check.data) if dup_check.data else False
-                                                    
-                                                    if is_dup:
-                                                        st.error(f"⛔ This phone number is already used by: {dup_check.data[0]['name']}")
-                                                    else:
-                                                        supabase.table('participants').update({'contact': clean_contact}).eq('id', p['id']).execute()
-                                                        st.success("✅ Contact updated successfully!")
-                                                        refresh_data()
-                                                        st.session_state[f"edit_mode_{p['id']}"] = False
-                                                        st.rerun()
-                                                else:
-                                                    st.error("Phone number cannot be empty.")
-                                        with col_cancel:
-                                            if st.form_submit_button("Cancel"):
-                                                st.session_state[f"edit_mode_{p['id']}"] = False
-                                                st.rerun()
-                    else:
-                        st.info("No residents found.")
+                                    refresh_data(); st.rerun()
         else:
             st.info("🔒 Participant management is restricted to System Admins.")
 
@@ -170,12 +95,13 @@ def show_manage(selected_date):
                 c1.write(f"**{a['name']}**")
                 c2.write(f"{a.get('session_1_label', 'S1')} | {a.get('session_2_label', 'S2')}")
                 with c3:
+                    # 🔒 HIDE DELETE FOR CHAIRMAN
                     if st.session_state.user_role == 'admin':
-                        if st.button("🗑️ Remove", key=f"act_del_{a['id']}"):
+                        if st.button("️ Remove", key=f"act_del_{a['id']}"):
                             supabase.table('activities').update({'active': False}).eq('id', a['id']).execute()
-                            refresh_data()
-                            st.rerun()
+                            refresh_data(); st.rerun()
         
+        # 🔒 HIDE ADD FOR CHAIRMAN
         if st.session_state.user_role == 'admin':
             with st.expander("➕ Add New Activity"):
                 with st.form("add_act"):
@@ -190,8 +116,7 @@ def show_manage(selected_date):
                                 "session_2_label": s2,
                                 "active": True
                             }).execute()
-                            refresh_data()
-                            st.rerun()
+                            refresh_data(); st.rerun()
 
     # ─── TAB 3: Convert Status ─────────────────────────────────
     with tab3:
@@ -204,8 +129,7 @@ def show_manage(selected_date):
             if c >= 3:
                 if st.button(f"Convert {p['name']}", key=f"conv_{p['id']}"):
                     supabase.table('participants').update({'is_new': False}).eq('id', p['id']).execute()
-                    refresh_data()
-                    st.rerun()
+                    refresh_data(); st.rerun()
 
     # ─── TAB 4: Payment Status ─────────────────────────────────
     with tab4:
@@ -237,6 +161,7 @@ def show_manage(selected_date):
                                 'updated_at': datetime.now().isoformat()
                             }).eq('plot_number', plot['plot_number']).execute()
                             
+                            # 🔥 AUDIT LOG: Record the payment change
                             action_type = "MARK_PAID" if new_status else "MARK_UNPAID"
                             log_action(st.session_state.user_role, action_type, f"Plot {plot['plot_number']} - {owner_name}", str(plot['plot_number']))
                             
