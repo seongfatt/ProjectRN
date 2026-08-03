@@ -51,14 +51,8 @@ def verify_password(pwd, role):
 
 # ===== URL PARAMETER ROUTING =====
 params = st.query_params
-# 🔥 METHOD 1 & 2: Restore Activity from URL if it exists
-# This ensures that if the system refreshes/crashes, it remembers the last selected activity
-url_act = params.get("act")
-if url_act:
-    # Decode URL encoding (e.g., Chair%20Zumba -> Chair Zumba)
-    decoded_act = urllib.parse.unquote(url_act)
-    st.session_state.selected_activity = decoded_act
-# ===== AUTO CHECK-IN MODE (Supports Permanent QR & Temporary Links) =====
+
+# ===== AUTO CHECK-IN MODE =====
 if params.get("mode") == "auto":
     if not DB_CONNECTED or supabase is None:
         st.error("Database not connected."); st.stop()
@@ -67,107 +61,59 @@ if params.get("mode") == "auto":
     token = params.get("tk")
     act = params.get("act", "Cardio Drumming")
     session_param = params.get("session", "both")
-    
-        # 🔒 SECURITY FIX: Require token for all auto check-ins to prevent home scanning
-    # Residents must be checked in by a volunteer on the shared tablet
     if not verify_token(pid, date_str, token):
-        # Show a friendly message instead of an error if it's a permanent QR
-        st.title("Woodlands Zone 6 Community Hub")
-        st.markdown("""
-        <div style="background: #e3f2fd; border-left: 5px solid #2196f3; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="margin-top:0; color: #0d47a1;">👋 Hello!</h3>
-            <p style="font-size: 18px; color: #1a1a1a;">
-                Please present this QR code to the <strong>Volunteer at the entrance</strong> to check in.
-            </p>
-            <p style="color: #666;">Self check-in from home is not allowed to ensure accurate attendance.</p>
-        </div>
-        """, unsafe_allow_html=True)
-        st.stop()
-
-    # --- Fetch participant details ---
+        st.error("Invalid or expired link."); st.stop()
     try:
         p = supabase.table('participants').select("*").eq('id', pid).execute().data[0]
     except:
         st.error("Participant not found"); st.stop()
-    
-    # 🔥 IMPROVED: Check for existing attendance with better error handling
-    formatted_date = datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-    
     try:
         existing = supabase.table('attendance').select("*")\
             .eq('participant_id', pid)\
-            .eq('date', formatted_date)\
+            .eq('date', datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d"))\
             .eq('source', act)\
             .execute()
-        
-        if existing.data and len(existing.data) > 0:
-            # ✅ ALREADY CHECKED IN - Show friendly message
+        if existing.data:
             record = existing.data[0]
             s1_done = record.get('session_1', False)
             s2_done = record.get('session_2', False)
-            
             st.title(f"{act}")
             st.success(f"Hello {p['name']}!")
-            st.info(f"You already checked in for {formatted_date}")
-            
+            st.info(f"You already checked in for {datetime.strptime(date_str, '%Y%m%d').strftime('%d %B %Y')}")
             if s1_done and s2_done:
-                st.success("✅ Both sessions recorded! See you there!")
+                st.success("Both sessions recorded! See you there!")
             elif s1_done:
                 st.write("Session 1: Confirmed")
                 if session_param in ['2', 'both'] and not s2_done:
-                    if st.button("Add Session 2", type="primary"):
-                        supabase.table('attendance').update({"session_2": True}).eq('id', record['id']).execute()
-                        st.success("Session 2 added! Both sessions confirmed!")
-                        st.rerun()
+                    supabase.table('attendance').update({"session_2": True}).eq('id', record['id']).execute()
+                    st.success("Session 2 added! Both sessions confirmed!")
             elif s2_done:
                 st.write("Session 2: Confirmed")
                 if session_param in ['1', 'both'] and not s1_done:
-                    if st.button("Add Session 1", type="primary"):
-                        supabase.table('attendance').update({"session_1": True}).eq('id', record['id']).execute()
-                        st.success("Session 1 added! Both sessions confirmed!")
-                        st.rerun()
+                    supabase.table('attendance').update({"session_1": True}).eq('id', record['id']).execute()
+                    st.success("Session 1 added! Both sessions confirmed!")
             st.stop()
-            
     except Exception as e:
-        st.error(f"Error checking attendance: {e}")
-        st.stop()
-
-    # --- Insert new attendance ---
+        pass
     if not st.session_state.auto_checkin_done:
         try:
             s1 = session_param in ['1', 'both']
             s2 = session_param in ['2', 'both']
-            
-            # 🔥 Use upsert instead of insert to handle duplicates gracefully
-            attendance_data = {
-                "participant_id": pid, 
-                "name": p['name'], 
-                "date": formatted_date,
-                "session_1": s1, 
-                "session_2": s2, 
+            supabase.table('attendance').insert({
+                "participant_id": pid, "name": p['name'], 
+                "date": datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d"),
+                "session_1": s1, "session_2": s2, 
                 "timestamp": datetime.now().isoformat(),
-                "self_checkin": True, 
-                "source": act
-            }
-            
-            # Try to insert
-            result = supabase.table('attendance').insert(attendance_data).execute()
+                "self_checkin": True, "source": act
+            }).execute()
             st.session_state.auto_checkin_done = True
             check_and_convert_status(pid, p['name'])
-            
         except Exception as e:
-            # 🔥 Handle duplicate key error gracefully
-            error_msg = str(e)
-            if 'duplicate key' in error_msg or '23505' in error_msg:
-                st.info("ℹ️ You are already checked in for today!")
-                st.stop()
-            else:
-                st.error(f"Error saving: {e}")
-                st.stop()
-                
+            st.error(f"Error saving: {e}")
+            st.stop()
     st.title(f"{act}")
     st.success(f"Welcome {p['name']}!")
-    st.info(f"Attendance confirmed for {formatted_date}")
+    st.info(f"Attendance confirmed for {datetime.strptime(date_str, '%Y%m%d').strftime('%d %B %Y')}")
     if session_param == 'both':
         st.markdown("### Both sessions auto-registered!")
     elif session_param == '1':
@@ -520,26 +466,22 @@ if params.get("mode") == "register":
                 st.error(f"Error checking for duplicates: {e}")
                 st.stop()
             
-                try:
-                    new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
-                    supabase.table('participants').insert({
-                        "id": new_id,
-                        "name": name.strip().upper(),
-                        "contact": final_contact,
-                        "block_no": block_no if block_no else None,
-                        "indemnity": indemnity,
-                        "is_new": True,
-                        "active": True,
-                        "registration_date": datetime.now().strftime("%Y-%m-%d")
-                    }).execute()
-                    
-                    # 🔥 FORCE INSTANT REFRESH
-                    refresh_data()
-                    
-                    st.success(f"✅ {name.strip().upper()} registered successfully!")
-                    st.info(f"Resident ID: `{new_id}`")
-                except Exception as e:
-                    st.error(f"Registration failed: {e}")
+            try:
+                new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
+                supabase.table('participants').insert({
+                    "id": new_id,
+                    "name": name.strip().upper(),
+                    "contact": final_contact,
+                    "block_no": block_no if block_no else None,  # 🔥 Save block number
+                    "indemnity": indemnity,
+                    "is_new": True,
+                    "active": True,
+                    "registration_date": datetime.now().strftime("%Y-%m-%d")
+                }).execute()
+                st.success(f"✅ {name.strip().upper()} registered successfully!")
+                st.info(f"Resident ID: `{new_id}`")
+            except Exception as e:
+                st.error(f"Registration failed: {e}")
 
     st.divider()
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Registration | Time-limited access")
@@ -733,11 +675,6 @@ if st.session_state.is_authenticated:
             st.session_state.user_role = None
             st.session_state.show_login = False
             st.session_state.active_page = None
-            st.session_state.selected_activity = None #  Reset activity
-            
-            # 🔥 Clear the URL parameter so it doesn't persist after logout
-            st.query_params.clear() 
-            
             st.rerun()
     
     if st.session_state.user_role == "chairman" and not st.session_state.get("chairman_tc_accepted"):
@@ -775,26 +712,8 @@ if st.session_state.is_authenticated:
         with m2:
             if st.session_state.activities:
                 act_names = [a['name'] for a in st.session_state.activities]
-                
-                #  Determine the correct index based on saved session state (from URL)
-                default_index = 0
-                if st.session_state.selected_activity and st.session_state.selected_activity in act_names:
-                    default_index = act_names.index(st.session_state.selected_activity)
-                
-                selected_act = st.selectbox(
-                    "🎯 Activity", 
-                    act_names, 
-                    index=default_index, 
-                    key="mobile_act"
-                )
-                
-                # Update session state
+                selected_act = st.selectbox("🎯 Activity", act_names, index=0, key="mobile_act")
                 st.session_state.selected_activity = selected_act
-                
-                # 🔥 METHOD 2: Save to URL Query Params (Acts as Local Storage)
-                # This updates the browser URL so it survives page refreshes/crashes
-                if params.get("act") != urllib.parse.quote(selected_act):
-                    st.query_params["act"] = selected_act
             else:
                 st.session_state.selected_activity = "Cardio Drumming"
         with m3:

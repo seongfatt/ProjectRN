@@ -5,7 +5,12 @@ from utils import clean_phone_number, find_participant_by_phone
 import urllib.parse
 
 def show_checkin(selected_date):
-    # 🔥 CSS FOR PROFESSIONAL DESIGN & LARGE BUTTONS
+    """
+    UNIFIED SMART CHECK-IN HUB
+    Includes USB Scanner Listener with URL Parsing
+    """
+    
+    # 🔥 CSS FOR PROFESSIONAL DESIGN
     st.markdown("""
     <style>
     .participant-card {
@@ -29,12 +34,6 @@ def show_checkin(selected_date):
     .phone-section {
         background: white; border: 3px solid #e0e0e0; border-radius: 20px;
         padding: 30px; margin: 20px 0; box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-    }
-    .volunteer-banner {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white; padding: 15px; border-radius: 10px; text-align: center;
-        margin-bottom: 20px; font-weight: 600;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
     }
     </style>
     """, unsafe_allow_html=True)
@@ -69,15 +68,16 @@ def show_checkin(selected_date):
 
     st.title("🏘️ Community Check-In Hub")
     
-    # 🔒 SHARED VOLUNTEER ACCOUNTABILITY - FIXED VISIBILITY
+    # 🔒 SHARED VOLUNTEER ACCOUNTABILITY
     role = st.session_state.get('user_role', 'Unknown').upper()
     st.markdown(f"""
-    <div class="volunteer-banner">
-        🔐 Logged in as: {role} | All scans are recorded under this session.
+    <div style="background: #fff3cd; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+        <strong>🔐 Logged in as: {role}</strong> | All scans are recorded under this session.
     </div>
     """, unsafe_allow_html=True)
     
-    # Removed duplicate caption
+    st.caption("Woodlands Zone 6 - Fast & Easy Check-In")
+    st.caption("Woodlands Zone 6 - Fast & Easy Check-In")
     
     if not DB_CONNECTED:
         st.error("Database not connected")
@@ -208,17 +208,17 @@ def show_checkin(selected_date):
 
     st.divider()
 
-    # ── METHOD 2: Name Search ──────────────────
+    # ─ METHOD 2: Name Search ──────────────────
     show_names = st.checkbox("👁️ Show participant names", value=True, key="show_names_toggle")
     
     if show_names:
-        st.subheader(" Find by Name")
+        st.subheader("🔍 Find by Name")
         st.caption(f"Participants for **{activity}** - {selected_date.strftime('%d %b %Y')}")
         
         participants = st.session_state.get('participants', [])
         active_participants = [p for p in participants if p.get('active', True)]
         
-        show_all = st.checkbox("👥 Show ALL participants (including newly registered)", value=False, key="show_all_participants")
+        show_all = st.checkbox(" Show ALL participants (including newly registered)", value=False, key="show_all_participants")
         
         if not show_all:
             try:
@@ -236,10 +236,9 @@ def show_checkin(selected_date):
         st.caption(f"📊 Showing {len(active_participants)} participant(s)")
         
         if active_participants:
-            # 🔥 FIX: Changed from 2 columns to 4 columns for better screen usage
-            cols = st.columns(4)
-            for i, p in enumerate(active_participants):  # Removed limit to show all
-                with cols[i % 4]:  # Changed to 4 columns
+            cols = st.columns(2)
+            for i, p in enumerate(active_participants[:50]):
+                with cols[i % 2]:
                     try:
                         att_count = supabase.table('attendance').select("*", count="exact") \
                             .eq('participant_id', p['id']) \
@@ -263,7 +262,7 @@ def show_checkin(selected_date):
                         <h3>{p['name']}</h3>
                         <div class="participant-info">
                             🆔 ID: {p['id'][:12]}...<br>
-                            🔥 Attended {att_count}x for {activity}
+                             Attended {att_count}x for {activity}
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -277,7 +276,7 @@ def show_checkin(selected_date):
         else:
             st.info("No participants found for this activity.")
     else:
-        st.info(" Participant names hidden. Use QR scanner or phone search.")
+        st.info("🔒 Participant names hidden. Use QR scanner or phone search.")
 
 def process_checkin_by_id(pid, date, activity, s1, s2):
     """Core logic to mark attendance - prevents duplicates and forces instant refresh"""
@@ -302,7 +301,7 @@ def process_checkin_by_id(pid, date, activity, s1, s2):
         # 2. FETCH RESIDENT DETAILS
         res = supabase.table('participants').select("*").eq('id', pid).execute()
         if not res.data:
-            st.error(f"❌ Resident ID not found: {pid}")
+            st.error(f" Resident ID not found: {pid}")
             return
             
         resident = res.data[0]
