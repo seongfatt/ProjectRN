@@ -1,7 +1,7 @@
 import streamlit as st
 from datetime import datetime, timezone
 from config import supabase, DB_CONNECTED, load_activities, refresh_data
-from utils import clean_phone_number, find_participant_by_phone, validate_checkin_time
+from utils import clean_phone_number, find_participant_by_phone
 import urllib.parse
 
 def show_checkin(selected_date):
@@ -30,7 +30,7 @@ def show_checkin(selected_date):
     }
     </style>
     """, unsafe_allow_html=True)
-    
+
     st.title("🏘️ Community Check-In Hub")
     
     # 🔒 VOLUNTEER BANNER
@@ -44,15 +44,15 @@ def show_checkin(selected_date):
     if not DB_CONNECTED:
         st.error("Database not connected")
         return
-    
+
     activity = st.session_state.get('selected_activity', 'Cardio Drumming')
     acts = load_activities()
     act_config = next((a for a in acts if a['name'] == activity), None)
     s1_label = act_config.get('session_1_label', 'Session 1') if act_config else 'Session 1'
     s2_label = act_config.get('session_2_label', 'Session 2') if act_config else 'Session 2'
     has_s2 = bool(s2_label and s2_label.strip())
-    
-    st.subheader("🕐 Select Session")
+
+    st.subheader(" Select Session")
     if has_s2:
         session_option = st.radio("Which session?", ["Both", s1_label, s2_label], horizontal=True, key="kiosk_session")
         s1 = session_option in ["Both", s1_label]
@@ -60,12 +60,13 @@ def show_checkin(selected_date):
     else:
         st.info(f"️ Only one session: {s1_label}")
         s1, s2 = True, False
-    
+
     st.divider()
-    
-    # 🔥 QR / ID SCANNER INPUT
+
+    # 🔥 QR / ID SCANNER INPUT (Native Streamlit - Works with USB Scanners)
     st.subheader("📱 Scan QR Code or Enter ID")
     st.caption("💡 Tip: If using a USB scanner, click the box below and scan. The system will auto-detect the ID.")
+    
     scanned_input = st.text_input(
         "Scan QR code or enter ID...", 
         key="scanner_input_main", 
@@ -73,10 +74,12 @@ def show_checkin(selected_date):
         label_visibility="collapsed"
     )
     
+    # Process the input immediately when it changes (scanner hits Enter)
     if scanned_input and len(scanned_input.strip()) > 5:
         input_text = scanned_input.strip()
         extracted_pid = None
         
+        # Check if it's a full URL
         if 'pid=' in input_text or input_text.startswith('http'):
             try:
                 parsed_url = urllib.parse.urlparse(input_text)
@@ -86,22 +89,25 @@ def show_checkin(selected_date):
                 pass
         else:
             extracted_pid = input_text
-        
+            
         if extracted_pid:
             process_checkin_by_id(extracted_pid, selected_date, activity, s1, s2)
+            # Clear the input by resetting the key via a rerun or just let user clear it
+            # To make it feel like a kiosk, we can use a session state flag to clear it, 
+            # but for now, we just process it.
             st.rerun()
-    
+
     st.divider()
-    
+
     # ── PHONE SEARCH ──────────────────
     st.markdown('<div class="phone-section">', unsafe_allow_html=True)
     st.subheader("📱 Quick Check-In by Phone")
     phone_input = st.text_input("Enter 8-digit mobile number", placeholder="e.g., 91234567", key="checkin_phone")
-    
+
     if phone_input and len(clean_phone_number(phone_input)) >= 8:
         clean_phone = clean_phone_number(phone_input)
         resident = find_participant_by_phone(clean_phone)
-        
+
         if resident:
             try:
                 existing_check = supabase.table('attendance').select("*") \
@@ -109,6 +115,7 @@ def show_checkin(selected_date):
                     .eq('date', str(selected_date)) \
                     .eq('source', activity) \
                     .execute()
+                
                 already_checked = existing_check.data is not None and len(existing_check.data) > 0
                 
                 if already_checked:
@@ -125,6 +132,7 @@ def show_checkin(selected_date):
                         <p style="margin:5px 0 0 0; color:#666;">ID: {resident['id'][:12]}...</p>
                     </div>
                     """, unsafe_allow_html=True)
+                    
                     if st.button("Confirm Check-In", type="primary", key=f"confirm_{resident['id']}", use_container_width=True):
                         process_checkin_by_id(resident['id'], selected_date, activity, s1, s2)
                         st.rerun()
@@ -132,17 +140,19 @@ def show_checkin(selected_date):
                 st.error(f"Error: {e}")
         else:
             st.warning("❓ Phone not found.")
-    
     st.markdown('</div>', unsafe_allow_html=True)
+
     st.divider()
-    
-    # ── NAME LIST ─────────────────
+
+    # ── NAME LIST ──────────────────
     show_names = st.checkbox("👁️ Show participant names", value=True, key="show_names_toggle")
+    
     if show_names:
-        st.subheader(" Find by Name")
+        st.subheader("🔍 Find by Name")
         participants = st.session_state.get('participants', [])
         active_participants = [p for p in participants if p.get('active', True)]
         
+        # Filter by activity
         try:
             att_data = supabase.table('attendance').select('participant_id').eq('source', activity).execute().data
             activity_attendees = {rec['participant_id'] for rec in att_data}
@@ -155,10 +165,10 @@ def show_checkin(selected_date):
             s = name_search.lower()
             active_participants = [p for p in active_participants if s in p['name'].lower()]
         
-        st.caption(f" Showing {len(active_participants)} participant(s)")
+        st.caption(f"📊 Showing {len(active_participants)} participant(s)")
         
         if active_participants:
-            cols = st.columns(4)
+            cols = st.columns(4) # 4 Columns for better view
             for i, p in enumerate(active_participants):
                 with cols[i % 4]:
                     try:
@@ -186,24 +196,17 @@ def show_checkin(selected_date):
                             st.rerun()
 
 def process_checkin_by_id(pid, date, activity, s1, s2):
-    """Core logic to mark attendance - with Time Validation"""
+    """Core logic to mark attendance - Fixed Date Format Issue"""
     try:
-        #  TIME VALIDATION (The "Bouncer")
-        session_to_check = 1 if s1 else 2
-        is_allowed, message = validate_checkin_time(activity, session_to_check)
-        
-        if not is_allowed:
-            st.error(message)
-            st.info("💡 If this is incorrect, please contact the admin to adjust the session times or disable time validation.")
-            return
-        
-        # Handle date format
+        # 🔥 FIX: Handle different date formats correctly
         if isinstance(date, str):
+            # If it's a string like "20260804"
             if len(date) == 8 and date.isdigit():
                 formatted_date = datetime.strptime(date, "%Y%m%d").strftime("%Y-%m-%d")
             else:
-                formatted_date = date
+                formatted_date = date  # Assume it's already "YYYY-MM-DD"
         else:
+            # If it's a datetime.date object from st.date_input (e.g., 2026-08-04)
             formatted_date = date.strftime("%Y-%m-%d")
         
         # Check existing
@@ -221,7 +224,7 @@ def process_checkin_by_id(pid, date, activity, s1, s2):
         if not res.data:
             st.error(f"❌ Resident ID not found: {pid}")
             return
-        
+            
         resident = res.data[0]
         
         # Insert

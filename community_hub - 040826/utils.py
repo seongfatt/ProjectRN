@@ -1,6 +1,6 @@
 import streamlit as st
 from config import supabase, DB_CONNECTED, SUPABASE_KEY
-from datetime import datetime, timedelta
+from datetime import datetime
 import hashlib
 
 def mask_phone(phone):
@@ -146,64 +146,3 @@ def log_action(role, action, details="", target_id=""):
         }).execute()
     except Exception as e:
         print(f"Audit log error: {e}")
-
-def validate_checkin_time(activity_name, session_number=1):
-    """
-    Validate if current time is within the allowed check-in window.
-    Returns: (is_allowed: bool, message: str)
-    
-    If no time window is set, returns (True, "OK") to allow all-day check-in.
-    """
-    from datetime import datetime, time, timedelta, timezone
-    
-    if not DB_CONNECTED:
-        return True, "OK"  # Allow if DB not connected
-    
-    try:
-        # Fetch activity config
-        activity = supabase.table('activities').select("*").eq('name', activity_name).single().execute().data
-        
-        if not activity:
-            return True, "OK"  # Allow if activity not found
-        
-        # Check if time validation is enabled (Opt-In Strategy)
-        if not activity.get('enable_time_validation', False):
-            return True, "OK"  # No validation needed
-        
-        # Get session times based on session number
-        if session_number == 1 or session_number == "Session 1":
-            start_time_str = activity.get('session_1_start_time')
-            end_time_str = activity.get('session_1_end_time')
-            session_label = activity.get('session_1_label', 'Session 1')
-        else:
-            start_time_str = activity.get('session_2_start_time')
-            end_time_str = activity.get('session_2_end_time')
-            session_label = activity.get('session_2_label', 'Session 2')
-        
-        # If no times set, allow check-in (Backward Compatible)
-        if not start_time_str or not end_time_str:
-            return True, "OK"
-        
-        # Parse times
-        try:
-            start_time = datetime.strptime(start_time_str, "%H:%M").time()
-            end_time = datetime.strptime(end_time_str, "%H:%M").time()
-        except:
-            return True, "OK"  # Allow if time parsing fails
-        
-        # Get current time (Singapore Time)
-        sgt_tz = timezone(timedelta(hours=8))
-        now = datetime.now(sgt_tz)
-        current_time = now.time()
-        
-        # Check if within window
-        if current_time < start_time:
-            return False, f" Check-in for {session_label} opens at {start_time.strftime('%I:%M %p')}. Please return at that time."
-        elif current_time > end_time:
-            return False, f" Check-in for {session_label} closed at {end_time.strftime('%I:%M %p')}. The session has started."
-        else:
-            return True, "OK"
-            
-    except Exception as e:
-        print(f"Time validation error: {e}")
-        return True, "OK"  # Allow on error to prevent blocking residents

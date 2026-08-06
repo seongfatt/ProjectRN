@@ -58,10 +58,9 @@ def show_residents():
 
     search = st.text_input("Search resident", placeholder="Name or last 4 digits...")
     filter_status = st.selectbox(
-    "Filter",
-    ["All", "Active Only", "New Only", "Regular Only", "Has Garden Plot", "No Garden Plot", 
-     "RN Members Only", "Volunteer Members Only", "Residents Only"],
-)
+        "Filter",
+        ["All", "Active Only", "New Only", "Regular Only", "Has Garden Plot", "No Garden Plot"],
+    )
 
     plot_dict = {
         str(p.get("user_id", "")).lower().strip(): p
@@ -97,16 +96,6 @@ def show_residents():
             continue
         if filter_status == "Regular Only" and p.get("is_new"):
             continue
-        
-        # 🔥 FIX: Use "Resident" as default for existing members who have no type set
-        current_type = p.get("member_type", "Resident") 
-        
-        if filter_status == "RN Members Only" and current_type != "RN Member":
-            continue
-        if filter_status == "Volunteer Members Only" and current_type != "Volunteer Member":
-            continue
-        if filter_status == "Residents Only" and current_type != "Resident":
-            continue
 
         pid = str(p.get("id", "UNKNOWN"))
         has_plot = pid.lower().strip() in plot_dict
@@ -133,30 +122,20 @@ def show_residents():
             else p.get("contact", "N/A")
         )
 
-                #  NEW: Member Type Badge
-        member_type = p.get('member_type', 'Resident')
-        if member_type == 'RN Member':
-            name_display = f"🏘️ {p.get('name', 'Unknown')}"
-        elif member_type == 'Volunteer Member':
-            name_display = f"🤝 {p.get('name', 'Unknown')}"
-        else:
-            name_display = f"👤 {p.get('name', 'Unknown')}"
-
         display_data.append(
             {
                 "ID": pid,
-                "Name": name_display,  # 🔥 Now shows badge emoji
-                "Member Type": member_type,  # 🔥 NEW column
+                "Name": p.get("name", "Unknown"),
                 "Contact": contact_display,
-                "Block": p.get('block_no', 'N/A'),
-                "Status": "New" if p.get('is_new') else "Regular",
-                "Indemnity": "Yes" if p.get('indemnity') else "No",
+                "Block": p.get("block_no", "N/A"),
+                "Status": "New" if p.get("is_new") else "Regular",
+                "Indemnity": "Yes" if p.get("indemnity") else "No",
                 "Garden Plot": plot_info if plot_info else "",
                 "Activities": ", ".join(attendance_info) if attendance_info else "",
                 "Total Attendance": total_counts.get(pid, 0),
                 "Streak": (
                     f"🔥 {p.get('streak_weeks', 0)} weeks"
-                    if p.get('streak_weeks', 0) >= 3
+                    if p.get("streak_weeks", 0) >= 3
                     else f"{p.get('streak_weeks', 0)} weeks"
                 ),
             }

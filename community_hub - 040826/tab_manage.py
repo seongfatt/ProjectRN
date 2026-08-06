@@ -14,7 +14,7 @@ def show_manage(selected_date):
     # Define tabs
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["Participants", "Activities", "Convert Status", "💰 Payment Status", "📜 Audit Logs"])
 
-    # ─ TAB 1: Participants ───────────────────────────────────
+    # ── TAB 1: Participants ───────────────────────────────────
     with tab1:
         # CHAIRMAN RESTRICTION: Hide registration and deletion
         if st.session_state.user_role == 'admin':
@@ -25,17 +25,6 @@ def show_manage(selected_date):
                     contact = st.text_input("Contact")
                     no_phone = st.checkbox("👴 Elderly without phone")
                     indemnity = st.checkbox("Indemnity Signed")
-                    
-                    # 🔥 NEW: Member Type Selection
-                    st.markdown("---")
-                    st.markdown("**👤 Member Type:**")
-                    member_type = st.radio(
-                        "Select member category:",
-                        ["Resident", "RN Member", "Volunteer Member"],
-                        horizontal=True,
-                        key="new_p_member_type",
-                        help="RN Member = Resident Network Committee | Volunteer Member = Activity Volunteer"
-                    )
                     
                     if st.form_submit_button("Register"):
                         if name:
@@ -74,12 +63,11 @@ def show_manage(selected_date):
                                 "indemnity": indemnity, 
                                 "is_new": True, 
                                 "active": True, 
-                                "registration_date": str(selected_date),
-                                "member_type": member_type  # 🔥 NEW: Save member type
+                                "registration_date": str(selected_date)
                             }
                             supabase.table('participants').insert(new_p).execute()
                             refresh_data()
-                            st.success(f"Added {name} as **{member_type}**!")
+                            st.success(f"Added {name}!")
                             st.rerun()
                         else:
                             st.error("Name is required")
@@ -88,7 +76,7 @@ def show_manage(selected_date):
                 unsigned = [p for p in st.session_state.participants if not p.get('indemnity') and p.get('active', True)]
                 for p in unsigned:
                     c1, c2 = st.columns([3, 1])
-                    c1.write(f" {p['name']}")
+                    c1.write(f"🔴 {p['name']}")
                     if c2.button("Mark Signed", key=f"ind_{p['id']}"):
                         supabase.table('participants').update({'indemnity': True}).eq('id', p['id']).execute()
                         refresh_data()
@@ -113,14 +101,14 @@ def show_manage(selected_date):
                                     refresh_data()
                                     st.rerun()
 
-            # 🔥 NEW: Update Resident Contact Info & Block No. & Member Type
+            # 🔥 NEW: Update Resident Contact Info & Block No.
             with st.expander("✏️ Update Resident Contact Info"):
-                st.caption("Use this to add a phone number, block info, or change member type for existing residents.")
+                st.caption("Use this to add a phone number or block info for residents previously registered without one.")
                 update_search = st.text_input("Search resident by Name or ID", key="update_search_contact")
                 
                 if update_search:
                     s = update_search.lower()
-                    matches = [p for p in st.session_state.participants if p.get('active', True) and (s in p['name'].lower() or s in str(p.get('id', '')).lower())]
+                    matches = [p for p in st.session_state.participants if p.get('active', True) and (s in p['name'].lower() or s in p.get('id', '').lower())]
                     
                     if matches:
                         for p in matches:
@@ -129,8 +117,7 @@ def show_manage(selected_date):
                                 c1.write(f"**{p['name']}**")
                                 current_contact = p.get('contact', 'N/A')
                                 current_block = p.get('block_no', 'Not provided')
-                                current_type = p.get('member_type', 'Resident')
-                                c2.write(f"Phone: {current_contact if current_contact != 'NO_PHONE' else ' No Phone'} | Block: {current_block} | Type: {current_type}")
+                                c2.write(f"Phone: {current_contact if current_contact != 'NO_PHONE' else ' No Phone'} | Block: {current_block}")
                                 
                                 with c3:
                                     if st.button("Edit", key=f"edit_btn_{p['id']}"):
@@ -150,18 +137,6 @@ def show_manage(selected_date):
                                             placeholder="e.g., 622, 624A",
                                             key=f"new_block_{p['id']}"
                                         )
-                                        
-                                        # 🔥 NEW: Member Type Dropdown
-                                        member_types = ["Resident", "RN Member", "Volunteer Member"]
-                                        default_index = member_types.index(current_type) if current_type in member_types else 0
-                                        
-                                        new_member_type = st.selectbox(
-                                            "👤 Member Type", 
-                                            member_types, 
-                                            index=default_index,
-                                            key=f"new_member_type_{p['id']}"
-                                        )
-                                        
                                         col_save, col_cancel = st.columns(2)
                                         with col_save:
                                             if st.form_submit_button("💾 Save Update", type="primary"):
@@ -176,7 +151,7 @@ def show_manage(selected_date):
                                                     is_dup = any(d['id'] != p['id'] for d in dup_check.data) if dup_check.data else False
                                                     
                                                     if is_dup:
-                                                        st.error(f" This phone number is already used by: {dup_check.data[0]['name']}")
+                                                        st.error(f"⛔ This phone number is already used by: {dup_check.data[0]['name']}")
                                                         st.stop()
                                                     else:
                                                         updates['contact'] = clean_contact
@@ -188,15 +163,11 @@ def show_manage(selected_date):
                                                 # Update block if provided
                                                 if new_block.strip():
                                                     updates['block_no'] = new_block.strip().upper()
-                                                    
-                                                # 🔥 NEW: Check if Member Type changed
-                                                if new_member_type != current_type:
-                                                    updates['member_type'] = new_member_type
                                                 
                                                 if updates:
                                                     try:
                                                         supabase.table('participants').update(updates).eq('id', p['id']).execute()
-                                                        st.success("✅ Resident updated successfully!")
+                                                        st.success("✅ Contact/Block updated successfully!")
                                                         refresh_data()
                                                         st.session_state[f"edit_mode_{p['id']}"] = False
                                                         st.rerun()
@@ -213,166 +184,36 @@ def show_manage(selected_date):
         else:
             st.info("🔒 Participant management is restricted to System Admins.")
 
-    # ─── TAB 2: Activities ────────────────────────────────────
+    # ─── TAB 2: Activities ─────────────────────────────────────
     with tab2:
         acts = load_activities()
         if not acts:
             st.info("No activities configured.")
         else:
             for a in acts:
-                c1, c2, c3, c4 = st.columns([3, 2, 1, 1])
+                c1, c2, c3 = st.columns([3, 2, 1])
                 c1.write(f"**{a['name']}**")
                 c2.write(f"{a.get('session_1_label', 'S1')} | {a.get('session_2_label', 'S2')}")
-                
-                # Show time validation status
-                time_status = "⏰ Time-Gated" if a.get('enable_time_validation') else "🕒 All-Day"
-                c3.caption(time_status)
-                
-                with c4:
+                with c3:
                     if st.session_state.user_role == 'admin':
-                        if st.button("✏️ Edit", key=f"act_edit_{a['id']}"):
-                            st.session_state[f"edit_act_{a['id']}"] = True
-                        if st.button("🗑️", key=f"act_del_{a['id']}"):
+                        if st.button("🗑️ Remove", key=f"act_del_{a['id']}"):
                             supabase.table('activities').update({'active': False}).eq('id', a['id']).execute()
                             refresh_data()
                             st.rerun()
-                
-                # Edit Form
-                if st.session_state.get(f"edit_act_{a['id']}"):
-                    with st.form(f"edit_act_form_{a['id']}"):
-                        st.subheader(f"Edit: {a['name']}")
-                        edit_name = st.text_input("Activity Name", value=a['name'], key=f"edit_name_{a['id']}")
-                        edit_s1_label = st.text_input("Session 1 Label", value=a.get('session_1_label', ''), key=f"edit_s1_label_{a['id']}")
-                        edit_s2_label = st.text_input("Session 2 Label (Optional)", value=a.get('session_2_label', ''), key=f"edit_s2_label_{a['id']}")
-                        
-                        st.markdown("---")
-                        st.markdown("**⏰ Time-Gated Check-In (Optional)**")
-                        st.caption("Set check-in windows to prevent early/late arrivals. Leave blank for all-day check-in.")
-                        
-                        enable_time_val = st.checkbox(
-                            "✅ Enable Check-In Time Window",
-                            value=bool(a.get('enable_time_validation', False)),
-                            key=f"edit_enable_time_{a['id']}"
-                        )
-                        
-                        # Always initialize these variables
-                        edit_s1_start = edit_s1_end = edit_s2_start = edit_s2_end = None
-                        
-                        if enable_time_val:
-                            col_t1, col_t2 = st.columns(2)
-                            with col_t1:
-                                st.markdown("**Session 1 Times**")
-                                s1_start_val = a.get('session_1_start_time', '19:45')
-                                s1_end_val = a.get('session_1_end_time', '20:15')
-                                
-                                # Parse time safely
-                                try:
-                                    start_time_val = datetime.strptime(s1_start_val, "%H:%M").time() if s1_start_val else datetime.strptime("19:45", "%H:%M").time()
-                                except:
-                                    start_time_val = datetime.strptime("19:45", "%H:%M").time()
-                                
-                                try:
-                                    end_time_val = datetime.strptime(s1_end_val, "%H:%M").time() if s1_end_val else datetime.strptime("20:15", "%H:%M").time()
-                                except:
-                                    end_time_val = datetime.strptime("20:15", "%H:%M").time()
-                                
-                                edit_s1_start = st.time_input(
-                                    "Check-in Opens",
-                                    value=start_time_val,
-                                    key=f"edit_s1_start_{a['id']}"
-                                )
-                                edit_s1_end = st.time_input(
-                                    "Check-in Closes",
-                                    value=end_time_val,
-                                    key=f"edit_s1_end_{a['id']}"
-                                )
-                            
-                            with col_t2:
-                                st.markdown("**Session 2 Times**")
-                                s2_start_val = a.get('session_2_start_time', '20:45')
-                                s2_end_val = a.get('session_2_end_time', '21:15')
-                                
-                                # Parse time safely
-                                try:
-                                    start_time_val = datetime.strptime(s2_start_val, "%H:%M").time() if s2_start_val else datetime.strptime("20:45", "%H:%M").time()
-                                except:
-                                    start_time_val = datetime.strptime("20:45", "%H:%M").time()
-                                
-                                try:
-                                    end_time_val = datetime.strptime(s2_end_val, "%H:%M").time() if s2_end_val else datetime.strptime("21:15", "%H:%M").time()
-                                except:
-                                    end_time_val = datetime.strptime("21:15", "%H:%M").time()
-                                
-                                edit_s2_start = st.time_input(
-                                    "Check-in Opens",
-                                    value=start_time_val,
-                                    key=f"edit_s2_start_{a['id']}"
-                                )
-                                edit_s2_end = st.time_input(
-                                    "Check-in Closes",
-                                    value=end_time_val,
-                                    key=f"edit_s2_end_{a['id']}"
-                                )
-                        else:
-                            edit_s1_start = edit_s1_end = edit_s2_start = edit_s2_end = None
-                        
-                        col_save, col_cancel = st.columns(2)
-                        with col_save:
-                            if st.form_submit_button("💾 Save Changes", type="primary"):
-                                update_data = {
-                                    "name": edit_name.upper(),
-                                    "session_1_label": edit_s1_label,
-                                    "session_2_label": edit_s2_label,
-                                    "enable_time_validation": enable_time_val,
-                                    "session_1_start_time": edit_s1_start.strftime("%H:%M") if edit_s1_start else None,
-                                    "session_1_end_time": edit_s1_end.strftime("%H:%M") if edit_s1_end else None,
-                                    "session_2_start_time": edit_s2_start.strftime("%H:%M") if edit_s2_start else None,
-                                    "session_2_end_time": edit_s2_end.strftime("%H:%M") if edit_s2_end else None,
-                                }
-                                supabase.table('activities').update(update_data).eq('id', a['id']).execute()
-                                refresh_data()
-                                st.session_state[f"edit_act_{a['id']}"] = False
-                                st.success("Activity updated!")
-                                st.rerun()
-                        with col_cancel:
-                            if st.form_submit_button("Cancel"):
-                                st.session_state[f"edit_act_{a['id']}"] = False
-                                st.rerun()
         
         if st.session_state.user_role == 'admin':
-            with st.expander(" Add New Activity"):
+            with st.expander("➕ Add New Activity"):
                 with st.form("add_act"):
                     act_name = st.text_input("Activity Name")
                     s1 = st.text_input("Session 1 Label", value="Session 1 (7PM-8PM)")
                     s2 = st.text_input("Session 2 Label (Optional)", value="")
-                    
-                    st.markdown("---")
-                    st.markdown("**⏰ Time-Gated Check-In (Optional)**")
-                    enable_time = st.checkbox("Enable Check-In Time Window", value=False, key="add_enable_time")
-                    
-                    if enable_time:
-                        col_t1, col_t2 = st.columns(2)
-                        with col_t1:
-                            add_s1_start = st.time_input("Session 1 Opens", value=datetime.strptime("19:45", "%H:%M").time(), key="add_s1_start")
-                            add_s1_end = st.time_input("Session 1 Closes", value=datetime.strptime("20:15", "%H:%M").time(), key="add_s1_end")
-                        with col_t2:
-                            add_s2_start = st.time_input("Session 2 Opens", value=datetime.strptime("20:45", "%H:%M").time(), key="add_s2_start")
-                            add_s2_end = st.time_input("Session 2 Closes", value=datetime.strptime("21:15", "%H:%M").time(), key="add_s2_end")
-                    else:
-                        add_s1_start = add_s1_end = add_s2_start = add_s2_end = None
-                    
                     if st.form_submit_button("Add Activity"):
                         if act_name:
                             supabase.table('activities').insert({
                                 "name": act_name.upper(),
                                 "session_1_label": s1,
                                 "session_2_label": s2,
-                                "active": True,
-                                "enable_time_validation": enable_time,
-                                "session_1_start_time": add_s1_start.strftime("%H:%M") if add_s1_start else None,
-                                "session_1_end_time": add_s1_end.strftime("%H:%M") if add_s1_end else None,
-                                "session_2_start_time": add_s2_start.strftime("%H:%M") if add_s2_start else None,
-                                "session_2_end_time": add_s2_end.strftime("%H:%M") if add_s2_end else None,
+                                "active": True
                             }).execute()
                             refresh_data()
                             st.rerun()
@@ -391,7 +232,7 @@ def show_manage(selected_date):
                     refresh_data()
                     st.rerun()
 
-    # ── TAB 4: Payment Status ─────────────────────────────────
+    # ─── TAB 4: Payment Status ─────────────────────────────────
     with tab4:
         st.subheader("Garden Plot Payment Management")
         plots = st.session_state.plots
