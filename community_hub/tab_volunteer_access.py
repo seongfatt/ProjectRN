@@ -75,11 +75,18 @@ def get_active_tokens():
         return r.data if r.data else []
     except: return []
 
+def to_sgt(dt):
+    """Convert UTC datetime to Singapore Time (UTC+8) for display"""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    sgt = timezone(timedelta(hours=8))
+    return dt.astimezone(sgt)
+
 # ─── Main UI Function ──────────────────────────────────────
 def show_volunteer_access():
     current_role = st.session_state.get('user_role', 'admin')
     
-    st.header(" Volunteer Access Control")
+    st.header("🤝 Volunteer Access Control")
     st.caption("Create time-limited volunteer links for check-in and registration")
     
     if not DB_CONNECTED:
@@ -99,31 +106,31 @@ def show_volunteer_access():
             key="vp_duration_type"
         )
     with c2:
+        sgt = timezone(timedelta(hours=8))
         if duration_type == "Hours from now":
             hours = st.number_input("Hours", min_value=1, max_value=168, value=4, key="vp_hours")
-            expires_at = datetime.now(timezone.utc) + timedelta(hours=hours)
-            st.caption(f"Expires: {expires_at.strftime('%d %b %Y, %I:%M %p')} UTC")
+            expires_at_sgt = datetime.now(sgt) + timedelta(hours=hours)
+            expires_at = expires_at_sgt.astimezone(timezone.utc) # Save to DB in UTC
+            st.caption(f"Expires: {expires_at_sgt.strftime('%d %b %Y, %I:%M %p')} (SG Time)")
         elif duration_type == "End of today":
-            expires_at = datetime.now(timezone.utc).replace(hour=23, minute=59, second=59)
-            st.caption(f"Expires: {expires_at.strftime('%d %b %Y, %I:%M %p')} UTC")
+            now_sgt = datetime.now(sgt)
+            expires_at_sgt = now_sgt.replace(hour=23, minute=59, second=59)
+            expires_at = expires_at_sgt.astimezone(timezone.utc) # Save to DB in UTC
+            st.caption(f"Expires: {expires_at_sgt.strftime('%d %b %Y, %I:%M %p')} (SG Time)")
         else:
             exp_date = st.date_input("Expiry Date", value=datetime.now().date(), key="vp_exp_date")
             exp_time = st.time_input("Expiry Time", value=datetime.strptime("23:59", "%H:%M").time(), key="vp_exp_time")
             
-            # 🔥 FIX: Treat input as Singapore Time (UTC+8), then convert to UTC
-            sgt = timezone(timedelta(hours=8))
             expires_at_sgt = datetime.combine(exp_date, exp_time, tzinfo=sgt)
-            expires_at = expires_at_sgt.astimezone(timezone.utc)
+            expires_at = expires_at_sgt.astimezone(timezone.utc) # Save to DB in UTC
             
             st.caption(f"Expires: {expires_at_sgt.strftime('%d %b %Y, %I:%M %p')} (SG Time)")
     with c3:
         st.write(""); st.write("")
         if st.button("📱 Generate Unified Portal Link", type="primary", use_container_width=True):
             new_token = generate_volunteer_token(current_role)
-            
             selected_activity = st.session_state.get('selected_activity', 'Cardio Drumming')
             
-                        # Save token (with Network Error Handling)
             try:
                 supabase.table('volunteer_tokens').insert({
                     "token": new_token,
@@ -136,7 +143,7 @@ def show_volunteer_access():
             except Exception as e:
                 st.error(f"⚠️ Network Error: Could not connect to database.")
                 st.info("💡 This is usually a temporary internet glitch on the server. Please wait 1 minute and try again, or restart the Space.")
-                st.stop() # Stop execution to prevent further errors
+                st.stop()
             
             portal_url = f"{APP_URL}/?mode=volunteer_portal&tk={new_token}&act={urllib.parse.quote(selected_activity)}"
             
@@ -147,7 +154,7 @@ def show_volunteer_access():
 
     if st.session_state.get('portal_link'):
         st.divider()
-        st.markdown("###  Unified Volunteer Portal Link")
+        st.markdown("### 🔗 Unified Volunteer Portal Link")
         st.caption("All-in-one access: QR scanner, phone search, and registration")
         st.code(st.session_state.portal_link, language="text")
 
@@ -157,6 +164,7 @@ def show_volunteer_access():
             st.image(portal_qr, width=200)
             st.caption("Portal QR — scan to open")
         with c2:
+            portal_expires_sgt = to_sgt(st.session_state.portal_expires)
             st.markdown(f"""
             <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; border-radius: 4px; color: #1a1a1a;">
                 <strong>Unified Portal Access</strong><br>
@@ -166,11 +174,11 @@ def show_volunteer_access():
                 • Session selection included ✅<br>
                 • Real-time statistics ✅<br>
                 • Token: <code>{st.session_state.portal_link.split('tk=')[1][:12]}...</code><br>
-                • Expires: <strong>{st.session_state.portal_expires.strftime('%d %b %Y, %I:%M %p')} UTC</strong><br>
-                • Status:  Active
+                • Expires: <strong>{portal_expires_sgt.strftime('%d %b %Y, %I:%M %p')} (SG Time)</strong><br>
+                • Status: 🟢 Active
             </div>
             """, unsafe_allow_html=True)
-            wa_msg = urllib.parse.quote(f"Hi! Here's your unified volunteer portal link for Woodlands Zone 6. Link expires {st.session_state.portal_expires.strftime('%d %b %Y, %I:%M %p')}: {st.session_state.portal_link}")
+            wa_msg = urllib.parse.quote(f"Hi! Here's your unified volunteer portal link for Woodlands Zone 6. Link expires {portal_expires_sgt.strftime('%d %b %Y, %I:%M %p')}: {st.session_state.portal_link}")
             st.markdown(f"[📱 Share via WhatsApp](https://wa.me/?text={wa_msg})")
 
     st.divider()
@@ -187,26 +195,28 @@ def show_volunteer_access():
             key="va_duration_type"
         )
     with c2:
+        sgt = timezone(timedelta(hours=8))
         if duration_type == "Hours from now":
             hours = st.number_input("Hours", min_value=1, max_value=168, value=4, key="va_hours")
-            expires_at = datetime.now(timezone.utc) + timedelta(hours=hours)
-            st.caption(f"Expires: {expires_at.strftime('%d %b %Y, %I:%M %p')} UTC")
+            expires_at_sgt = datetime.now(sgt) + timedelta(hours=hours)
+            expires_at = expires_at_sgt.astimezone(timezone.utc) # Save to DB in UTC
+            st.caption(f"Expires: {expires_at_sgt.strftime('%d %b %Y, %I:%M %p')} (SG Time)")
         elif duration_type == "End of today":
-            expires_at = datetime.now(timezone.utc).replace(hour=23, minute=59, second=59)
-            st.caption(f"Expires: {expires_at.strftime('%d %b %Y, %I:%M %p')} UTC")
+            now_sgt = datetime.now(sgt)
+            expires_at_sgt = now_sgt.replace(hour=23, minute=59, second=59)
+            expires_at = expires_at_sgt.astimezone(timezone.utc) # Save to DB in UTC
+            st.caption(f"Expires: {expires_at_sgt.strftime('%d %b %Y, %I:%M %p')} (SG Time)")
         else:
             exp_date = st.date_input("Expiry Date", value=datetime.now().date(), key="va_exp_date")
             exp_time = st.time_input("Expiry Time", value=datetime.strptime("23:59", "%H:%M").time(), key="va_exp_time")
             
-            # 🔥 FIX: Treat input as Singapore Time (UTC+8), then convert to UTC
-            sgt = timezone(timedelta(hours=8))
             expires_at_sgt = datetime.combine(exp_date, exp_time, tzinfo=sgt)
-            expires_at = expires_at_sgt.astimezone(timezone.utc)
+            expires_at = expires_at_sgt.astimezone(timezone.utc) # Save to DB in UTC
             
             st.caption(f"Expires: {expires_at_sgt.strftime('%d %b %Y, %I:%M %p')} (SG Time)")
     with c3:
         st.write(""); st.write("")
-        if st.button(" Generate Legacy Link", type="secondary", use_container_width=True):
+        if st.button("🔗 Generate Legacy Link", type="secondary", use_container_width=True):
             token = generate_volunteer_token(current_role)
             link = create_volunteer_link(token, expires_at, created_by=current_role)
             if link:
@@ -228,22 +238,23 @@ def show_volunteer_access():
             st.image(vol_qr, width=200)
             st.caption("Full Volunteer QR — scan to open")
         with c2:
+            new_vol_expires_sgt = to_sgt(st.session_state.new_volunteer_expires)
             st.markdown(f"""
             <div style="background: #e8f5e9; border-left: 4px solid #4caf50; padding: 15px; border-radius: 4px; color: #1a1a1a;">
                 <strong>Full Access Link</strong><br>
                 • Check-in existing residents ✅<br>
                 • Register new residents ✅<br>
                 • Token: <code>{st.session_state.new_volunteer_token[:12]}...</code><br>
-                • Expires: <strong>{st.session_state.new_volunteer_expires.strftime('%d %b %Y, %I:%M %p')} UTC</strong><br>
-                • Status:  Active
+                • Expires: <strong>{new_vol_expires_sgt.strftime('%d %b %Y, %I:%M %p')} (SG Time)</strong><br>
+                • Status: 🟢 Active
             </div>
             """, unsafe_allow_html=True)
-            wa_msg = urllib.parse.quote(f"Hi! Here's your volunteer access link for Woodlands Zone 6. Link expires {st.session_state.new_volunteer_expires.strftime('%d %b %Y, %I:%M %p')}: {st.session_state.new_volunteer_link}")
+            wa_msg = urllib.parse.quote(f"Hi! Here's your volunteer access link for Woodlands Zone 6. Link expires {new_vol_expires_sgt.strftime('%d %b %Y, %I:%M %p')}: {st.session_state.new_volunteer_link}")
             st.markdown(f"[📱 Share via WhatsApp](https://wa.me/?text={wa_msg})")
 
         st.divider()
         reg_only_link = f"{APP_URL}/?mode=register&tk={st.session_state.new_volunteer_token}"
-        st.markdown("###  Registration-Only Link")
+        st.markdown("### 📝 Registration-Only Link")
         st.caption("For ad-hoc volunteers — register new residents only, no check-in access")
         st.code(reg_only_link, language="text")
 
@@ -263,7 +274,7 @@ def show_volunteer_access():
                 • Token: <code>{st.session_state.new_volunteer_token[:12]}...</code>
             </div>
             """, unsafe_allow_html=True)
-            wa_msg2 = urllib.parse.quote(f"Hi! Here's the registration link for Woodlands Zone 6 outreach. Link expires {st.session_state.new_volunteer_expires.strftime('%d %b %Y, %I:%M %p')}: {reg_only_link}")
+            wa_msg2 = urllib.parse.quote(f"Hi! Here's the registration link for Woodlands Zone 6 outreach. Link expires {new_vol_expires_sgt.strftime('%d %b %Y, %I:%M %p')}: {reg_only_link}")
             st.markdown(f"[📱 Share via WhatsApp](https://wa.me/?text={wa_msg2})")
 
     st.divider()
@@ -284,11 +295,12 @@ def show_volunteer_access():
             if exp.tzinfo is None:
                 exp = exp.replace(tzinfo=timezone.utc)
                 
+            exp_sgt = to_sgt(exp)
             remaining = exp - datetime.now(timezone.utc)
             remaining_str = f"{remaining.days}d {remaining.seconds//3600}h" if remaining.total_seconds() > 0 else "Expired"
             is_expired = remaining.total_seconds() <= 0
 
-            with st.expander(f"🔗 {tok['token'][:16]}... | Used {tok.get('usage_count', 0)}x | Expires: {exp.strftime('%d %b %I:%M %p')} UTC"):
+            with st.expander(f"🔗 {tok['token'][:16]}... | Used {tok.get('usage_count', 0)}x | Expires: {exp_sgt.strftime('%d %b %Y, %I:%M %p')} (SG Time)"):
                 c1, c2, c3 = st.columns([3, 2, 1])
                 with c1:
                     full_link = f"{APP_URL}/?mode=volunteer&tk={tok['token']}"
