@@ -430,7 +430,7 @@ if params.get("mode") == "volunteer_portal":
     show_volunteer_portal(token, activity_param)
     st.stop()
 
-# ===== VOLUNTEER REGISTRATION MODE =====
+# ===== VOLUNTEER REGISTRATION MODE (Token-protected, time-limited) =====
 if params.get("mode") == "register":
     import random
     if not DB_CONNECTED or supabase is None:
@@ -444,19 +444,35 @@ if params.get("mode") == "register":
     if not is_valid:
         st.error(f"❌ {msg}")
         st.stop()
-    st.title("📝 New Resident Registration")
+    
+    st.title(" New Resident Registration")
     st.markdown("<h4 style='text-align:center;'>Woodlands Zone 6 Community Hub</h4>", unsafe_allow_html=True)
     st.success("✅ Registration access active — link expires automatically")
     st.divider()
+    
     name = st.text_input("Full Name *", placeholder="e.g., AHMAD BIN ISMAIL", key="reg_name")
     contact = st.text_input("Contact Number", placeholder="e.g., 91234567", key="reg_contact")
     no_phone = st.checkbox("👴 I do not have a phone", key="reg_no_phone")
     indemnity = st.checkbox("Indemnity Form Signed (Optional)", value=False, key="reg_indemnity")
+    
+    # 🔥 NEW: Member Type Selection
+    st.markdown("---")
+    st.markdown("** Member Type:**")
+    member_type = st.radio(
+        "Select member category:",
+        ["Resident", "RN Member", "Volunteer Member"],
+        horizontal=True,
+        key="reg_member_type",
+        help="RN Member = Resident Network Committee | Volunteer Member = Activity Volunteer"
+    )
+    
     block_consent = st.checkbox("🏢 I agree to share my block information (Optional)", key="reg_block_consent")
     block_no = ""
     if block_consent:
         block_no = st.text_input("Block No.", placeholder="e.g., 622, 624A", key="reg_block_no").strip().upper()
+    
     st.caption("By registering, you confirm the resident has agreed to participate in community activities.")
+    
     if st.button("Register Resident", type="primary", use_container_width=True, key="reg_submit_btn"):
         if not name.strip():
             st.error("❌ Name is required")
@@ -469,28 +485,35 @@ if params.get("mode") == "register":
                 if clean_contact and clean_contact != "NO_PHONE":
                     res_phone = supabase.table('participants').select('name').eq('contact', clean_contact).eq('active', True).execute()
                     if res_phone.data:
-                        st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**")
+                        st.error(f" **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**")
                         st.stop()
                 res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
                 if res_name.data:
-                    st.error(f" **Name already exists!**\n\nA resident named **{name.strip().upper()}** is already registered.")
+                    st.error(f"⛔ **Name already exists!**\n\nA resident named **{name.strip().upper()}** is already registered.")
                     st.stop()
             except Exception as e:
                 st.error(f"Error checking for duplicates: {e}")
                 st.stop()
+            
             try:
                 new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
                 supabase.table('participants').insert({
-                    "id": new_id, "name": name.strip().upper(), "contact": final_contact,
+                    "id": new_id,
+                    "name": name.strip().upper(),
+                    "contact": final_contact,
                     "block_no": block_no if block_no else None,
-                    "indemnity": indemnity, "is_new": True, "active": True,
-                    "registration_date": datetime.now().strftime("%Y-%m-%d")
+                    "indemnity": indemnity,
+                    "is_new": True,
+                    "active": True,
+                    "registration_date": datetime.now().strftime("%Y-%m-%d"),
+                    "member_type": member_type  # 🔥 NEW: Save member type
                 }).execute()
                 refresh_data()
-                st.success(f"✅ {name.strip().upper()} registered successfully!")
+                st.success(f"✅ {name.strip().upper()} registered as **{member_type}** successfully!")
                 st.info(f"Resident ID: `{new_id}`")
             except Exception as e:
                 st.error(f"Registration failed: {e}")
+    
     st.divider()
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Registration | Time-limited access")
     st.stop()

@@ -213,7 +213,7 @@ def show_manage(selected_date):
         else:
             st.info("🔒 Participant management is restricted to System Admins.")
 
-    # ─── TAB 2: Activities ────────────────────────────────────
+        # ── TAB 2: Activities ─────────────────────────────────────
     with tab2:
         acts = load_activities()
         if not acts:
@@ -225,19 +225,20 @@ def show_manage(selected_date):
                 c2.write(f"{a.get('session_1_label', 'S1')} | {a.get('session_2_label', 'S2')}")
                 
                 # Show time validation status
-                time_status = "⏰ Time-Gated" if a.get('enable_time_validation') else "🕒 All-Day"
+                time_status = " Time-Gated" if a.get('enable_time_validation') else "🕒 All-Day"
                 c3.caption(time_status)
                 
                 with c4:
                     if st.session_state.user_role == 'admin':
                         if st.button("✏️ Edit", key=f"act_edit_{a['id']}"):
                             st.session_state[f"edit_act_{a['id']}"] = True
+                            st.rerun()
                         if st.button("🗑️", key=f"act_del_{a['id']}"):
                             supabase.table('activities').update({'active': False}).eq('id', a['id']).execute()
                             refresh_data()
                             st.rerun()
                 
-                # Edit Form
+                # Edit Form - FIXED: Properly maintain session state
                 if st.session_state.get(f"edit_act_{a['id']}"):
                     with st.form(f"edit_act_form_{a['id']}"):
                         st.subheader(f"Edit: {a['name']}")
@@ -249,13 +250,14 @@ def show_manage(selected_date):
                         st.markdown("**⏰ Time-Gated Check-In (Optional)**")
                         st.caption("Set check-in windows to prevent early/late arrivals. Leave blank for all-day check-in.")
                         
+                        # 🔥 FIX: Use session state to track checkbox state
                         enable_time_val = st.checkbox(
                             "✅ Enable Check-In Time Window",
                             value=bool(a.get('enable_time_validation', False)),
                             key=f"edit_enable_time_{a['id']}"
                         )
                         
-                        # Always initialize these variables
+                        # Always initialize time variables
                         edit_s1_start = edit_s1_end = edit_s2_start = edit_s2_end = None
                         
                         if enable_time_val:
@@ -265,7 +267,6 @@ def show_manage(selected_date):
                                 s1_start_val = a.get('session_1_start_time', '19:45')
                                 s1_end_val = a.get('session_1_end_time', '20:15')
                                 
-                                # Parse time safely
                                 try:
                                     start_time_val = datetime.strptime(s1_start_val, "%H:%M").time() if s1_start_val else datetime.strptime("19:45", "%H:%M").time()
                                 except:
@@ -292,7 +293,6 @@ def show_manage(selected_date):
                                 s2_start_val = a.get('session_2_start_time', '20:45')
                                 s2_end_val = a.get('session_2_end_time', '21:15')
                                 
-                                # Parse time safely
                                 try:
                                     start_time_val = datetime.strptime(s2_start_val, "%H:%M").time() if s2_start_val else datetime.strptime("20:45", "%H:%M").time()
                                 except:
@@ -313,8 +313,6 @@ def show_manage(selected_date):
                                     value=end_time_val,
                                     key=f"edit_s2_end_{a['id']}"
                                 )
-                        else:
-                            edit_s1_start = edit_s1_end = edit_s2_start = edit_s2_end = None
                         
                         col_save, col_cancel = st.columns(2)
                         with col_save:
@@ -332,7 +330,7 @@ def show_manage(selected_date):
                                 supabase.table('activities').update(update_data).eq('id', a['id']).execute()
                                 refresh_data()
                                 st.session_state[f"edit_act_{a['id']}"] = False
-                                st.success("Activity updated!")
+                                st.success("✅ Activity updated!")
                                 st.rerun()
                         with col_cancel:
                             if st.form_submit_button("Cancel"):
@@ -340,7 +338,7 @@ def show_manage(selected_date):
                                 st.rerun()
         
         if st.session_state.user_role == 'admin':
-            with st.expander(" Add New Activity"):
+            with st.expander("➕ Add New Activity"):
                 with st.form("add_act"):
                     act_name = st.text_input("Activity Name")
                     s1 = st.text_input("Session 1 Label", value="Session 1 (7PM-8PM)")
