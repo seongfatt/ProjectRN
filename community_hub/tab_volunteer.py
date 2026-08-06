@@ -5,7 +5,7 @@ from config import supabase, DB_CONNECTED, refresh_data
 from utils import mask_phone, clean_phone_number
 
 def show_volunteer():
-    st.header(" Volunteer Registration")
+    st.header("🤝 Volunteer Registration")
     st.caption("Quick registration for new residents — no full admin access needed")
     
     if not DB_CONNECTED:
@@ -14,15 +14,26 @@ def show_volunteer():
 
     st.info("Fill in the details below to register a new community member. They will be marked as 'New' automatically.")
 
-    #  FIX: Use standard widgets instead of st.form to allow instant checkbox reactivity
+    # FIX: Use standard widgets instead of st.form to allow instant checkbox reactivity
     name = st.text_input("Full Name *", placeholder="e.g., AHMAD BIN ISMAIL", key="vol_name")
     contact = st.text_input("Contact Number", placeholder="e.g., 91234567", key="vol_contact")
 
     no_phone = st.checkbox("👴 Resident does not have a phone", key="vol_no_phone")
     indemnity = st.checkbox("Indemnity Form Signed", value=False, key="vol_indemnity")
     
+    # 🔥 NEW: Member Type Selection
+    st.markdown("---")
+    st.markdown("**👤 Member Type:**")
+    member_type = st.radio(
+        "Select member category:",
+        ["Resident", "RN Member", "Volunteer Member"],
+        horizontal=True,
+        key="vol_member_type",
+        help="RN Member = Resident Network Committee | Volunteer Member = Activity Volunteer"
+    )
+    
     # 🔥 This checkbox will now work instantly!
-    block_consent = st.checkbox(" I agree to share my block information (Optional)", key="vol_block_consent")
+    block_consent = st.checkbox("🏢 I agree to share my block information (Optional)", key="vol_block_consent")
     
     block_no = ""
     if block_consent:
@@ -37,10 +48,10 @@ def show_volunteer():
     # Use a regular button instead of form_submit_button
     if st.button("Register Resident", type="primary", use_container_width=True, key="vol_register_btn"):
         if not name.strip():
-            st.error("Name is required")
+            st.error("❌ Name is required")
         elif not no_phone and not contact.strip():
             # 🔥 FIX: Only require phone if "no phone" checkbox is NOT checked
-            st.error("Contact number is required (check 'Resident does not have a phone' if they don't have one)")
+            st.error("❌ Contact number is required (check 'Resident does not have a phone' if they don't have one)")
         else:
             final_contact = "NO_PHONE" if no_phone else contact.strip()
             clean_contact = clean_phone_number(final_contact) if final_contact != "NO_PHONE" else None
@@ -49,7 +60,7 @@ def show_volunteer():
                 if clean_contact and clean_contact != "NO_PHONE":
                     res_phone = supabase.table('participants').select('name').eq('contact', clean_contact).eq('active', True).execute()
                     if res_phone.data:
-                        st.error(f" **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**")
+                        st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**")
                         st.stop()
 
                 res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
@@ -71,10 +82,11 @@ def show_volunteer():
                     "indemnity": indemnity,
                     "is_new": True,
                     "active": True,
-                    "registration_date": datetime.now().strftime("%Y-%m-%d")
+                    "registration_date": datetime.now().strftime("%Y-%m-%d"),
+                    "member_type": member_type  # 🔥 NEW: Save member type
                 }).execute()
                 refresh_data()
-                st.success(f"✅ {name.strip().upper()} registered successfully!")
+                st.success(f"✅ {name.strip().upper()} registered as **{member_type}** successfully!")
                 st.info(f"Resident ID: `{new_id}`")
             except Exception as e:
                 st.error(f"Registration failed: {e}")
@@ -90,7 +102,8 @@ def show_volunteer():
                 ind = "🟢" if p.get('indemnity') else ""
                 contact_display = mask_phone(p.get('contact', 'N/A')) if p.get('contact') != 'NO_PHONE' else "📵 No phone"
                 block_display = f" | Block: {p.get('block_no', 'N/A')}" if p.get('block_no') else ""
-                st.write(f"{status} {ind} **{p['name']}** — {contact_display}{block_display} — ID: `{p['id']}`")
+                member_type_display = f" | {p.get('member_type', 'Resident')}"
+                st.write(f"{status} {ind} **{p['name']}** — {contact_display}{block_display}{member_type_display} — ID: `{p['id']}`")
         else:
             st.info("No registrations today")
     except Exception:

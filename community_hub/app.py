@@ -442,10 +442,10 @@ if params.get("mode") == "register":
     from tab_volunteer_access import validate_volunteer_token
     is_valid, msg = validate_volunteer_token(token)
     if not is_valid:
-        st.error(f"❌ {msg}")
+        st.error(f" {msg}")
         st.stop()
     
-    st.title(" New Resident Registration")
+    st.title("📝 New Resident Registration")
     st.markdown("<h4 style='text-align:center;'>Woodlands Zone 6 Community Hub</h4>", unsafe_allow_html=True)
     st.success("✅ Registration access active — link expires automatically")
     st.divider()
@@ -457,7 +457,7 @@ if params.get("mode") == "register":
     
     # 🔥 NEW: Member Type Selection
     st.markdown("---")
-    st.markdown("** Member Type:**")
+    st.markdown("**👤 Member Type:**")
     member_type = st.radio(
         "Select member category:",
         ["Resident", "RN Member", "Volunteer Member"],
@@ -466,7 +466,7 @@ if params.get("mode") == "register":
         help="RN Member = Resident Network Committee | Volunteer Member = Activity Volunteer"
     )
     
-    block_consent = st.checkbox("🏢 I agree to share my block information (Optional)", key="reg_block_consent")
+    block_consent = st.checkbox(" I agree to share my block information (Optional)", key="reg_block_consent")
     block_no = ""
     if block_consent:
         block_no = st.text_input("Block No.", placeholder="e.g., 622, 624A", key="reg_block_no").strip().upper()

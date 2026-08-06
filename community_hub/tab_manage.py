@@ -213,7 +213,7 @@ def show_manage(selected_date):
         else:
             st.info("🔒 Participant management is restricted to System Admins.")
 
-        # ── TAB 2: Activities ─────────────────────────────────────
+            # ── TAB 2: Activities ─────────────────────────────────────
     with tab2:
         acts = load_activities()
         if not acts:
@@ -225,7 +225,7 @@ def show_manage(selected_date):
                 c2.write(f"{a.get('session_1_label', 'S1')} | {a.get('session_2_label', 'S2')}")
                 
                 # Show time validation status
-                time_status = " Time-Gated" if a.get('enable_time_validation') else "🕒 All-Day"
+                time_status = "⏰ Time-Gated" if a.get('enable_time_validation') else "🕒 All-Day"
                 c3.caption(time_status)
                 
                 with c4:
@@ -238,81 +238,65 @@ def show_manage(selected_date):
                             refresh_data()
                             st.rerun()
                 
-                # Edit Form - FIXED: Properly maintain session state
+                # Edit Form
                 if st.session_state.get(f"edit_act_{a['id']}"):
+                    # 🔥 FIX: Move checkbox OUTSIDE the form so it can trigger rerun
+                    st.subheader(f"Edit: {a['name']}")
+                    
+                    enable_time_val = st.checkbox(
+                        "✅ Enable Check-In Time Window",
+                        value=bool(a.get('enable_time_validation', False)),
+                        key=f"edit_enable_time_{a['id']}"
+                    )
+                    
+                    # Initialize time variables
+                    edit_s1_start = edit_s1_end = edit_s2_start = edit_s2_end = None
+                    
+                    if enable_time_val:
+                        col_t1, col_t2 = st.columns(2)
+                        with col_t1:
+                            st.markdown("**Session 1 Times**")
+                            s1_start_val = a.get('session_1_start_time', '19:45')
+                            s1_end_val = a.get('session_1_end_time', '20:15')
+                            
+                            try:
+                                start_time_val = datetime.strptime(s1_start_val, "%H:%M").time() if s1_start_val else datetime.strptime("19:45", "%H:%M").time()
+                            except:
+                                start_time_val = datetime.strptime("19:45", "%H:%M").time()
+                            
+                            try:
+                                end_time_val = datetime.strptime(s1_end_val, "%H:%M").time() if s1_end_val else datetime.strptime("20:15", "%H:%M").time()
+                            except:
+                                end_time_val = datetime.strptime("20:15", "%H:%M").time()
+                            
+                            edit_s1_start = st.time_input("Check-in Opens", value=start_time_val, key=f"edit_s1_start_{a['id']}")
+                            edit_s1_end = st.time_input("Check-in Closes", value=end_time_val, key=f"edit_s1_end_{a['id']}")
+                        
+                        with col_t2:
+                            st.markdown("**Session 2 Times**")
+                            s2_start_val = a.get('session_2_start_time', '20:45')
+                            s2_end_val = a.get('session_2_end_time', '21:15')
+                            
+                            try:
+                                start_time_val = datetime.strptime(s2_start_val, "%H:%M").time() if s2_start_val else datetime.strptime("20:45", "%H:%M").time()
+                            except:
+                                start_time_val = datetime.strptime("20:45", "%H:%M").time()
+                            
+                            try:
+                                end_time_val = datetime.strptime(s2_end_val, "%H:%M").time() if s2_end_val else datetime.strptime("21:15", "%H:%M").time()
+                            except:
+                                end_time_val = datetime.strptime("21:15", "%H:%M").time()
+                            
+                            edit_s2_start = st.time_input("Check-in Opens", value=start_time_val, key=f"edit_s2_start_{a['id']}")
+                            edit_s2_end = st.time_input("Check-in Closes", value=end_time_val, key=f"edit_s2_end_{a['id']}")
+                    
+                    st.markdown("---")
+                    
+                    # Now the form for the rest of the fields
                     with st.form(f"edit_act_form_{a['id']}"):
-                        st.subheader(f"Edit: {a['name']}")
                         edit_name = st.text_input("Activity Name", value=a['name'], key=f"edit_name_{a['id']}")
                         edit_s1_label = st.text_input("Session 1 Label", value=a.get('session_1_label', ''), key=f"edit_s1_label_{a['id']}")
                         edit_s2_label = st.text_input("Session 2 Label (Optional)", value=a.get('session_2_label', ''), key=f"edit_s2_label_{a['id']}")
-                        
-                        st.markdown("---")
-                        st.markdown("**⏰ Time-Gated Check-In (Optional)**")
-                        st.caption("Set check-in windows to prevent early/late arrivals. Leave blank for all-day check-in.")
-                        
-                        # 🔥 FIX: Use session state to track checkbox state
-                        enable_time_val = st.checkbox(
-                            "✅ Enable Check-In Time Window",
-                            value=bool(a.get('enable_time_validation', False)),
-                            key=f"edit_enable_time_{a['id']}"
-                        )
-                        
-                        # Always initialize time variables
-                        edit_s1_start = edit_s1_end = edit_s2_start = edit_s2_end = None
-                        
-                        if enable_time_val:
-                            col_t1, col_t2 = st.columns(2)
-                            with col_t1:
-                                st.markdown("**Session 1 Times**")
-                                s1_start_val = a.get('session_1_start_time', '19:45')
-                                s1_end_val = a.get('session_1_end_time', '20:15')
-                                
-                                try:
-                                    start_time_val = datetime.strptime(s1_start_val, "%H:%M").time() if s1_start_val else datetime.strptime("19:45", "%H:%M").time()
-                                except:
-                                    start_time_val = datetime.strptime("19:45", "%H:%M").time()
-                                
-                                try:
-                                    end_time_val = datetime.strptime(s1_end_val, "%H:%M").time() if s1_end_val else datetime.strptime("20:15", "%H:%M").time()
-                                except:
-                                    end_time_val = datetime.strptime("20:15", "%H:%M").time()
-                                
-                                edit_s1_start = st.time_input(
-                                    "Check-in Opens",
-                                    value=start_time_val,
-                                    key=f"edit_s1_start_{a['id']}"
-                                )
-                                edit_s1_end = st.time_input(
-                                    "Check-in Closes",
-                                    value=end_time_val,
-                                    key=f"edit_s1_end_{a['id']}"
-                                )
-                            
-                            with col_t2:
-                                st.markdown("**Session 2 Times**")
-                                s2_start_val = a.get('session_2_start_time', '20:45')
-                                s2_end_val = a.get('session_2_end_time', '21:15')
-                                
-                                try:
-                                    start_time_val = datetime.strptime(s2_start_val, "%H:%M").time() if s2_start_val else datetime.strptime("20:45", "%H:%M").time()
-                                except:
-                                    start_time_val = datetime.strptime("20:45", "%H:%M").time()
-                                
-                                try:
-                                    end_time_val = datetime.strptime(s2_end_val, "%H:%M").time() if s2_end_val else datetime.strptime("21:15", "%H:%M").time()
-                                except:
-                                    end_time_val = datetime.strptime("21:15", "%H:%M").time()
-                                
-                                edit_s2_start = st.time_input(
-                                    "Check-in Opens",
-                                    value=start_time_val,
-                                    key=f"edit_s2_start_{a['id']}"
-                                )
-                                edit_s2_end = st.time_input(
-                                    "Check-in Closes",
-                                    value=end_time_val,
-                                    key=f"edit_s2_end_{a['id']}"
-                                )
                         
                         col_save, col_cancel = st.columns(2)
                         with col_save:
@@ -345,7 +329,7 @@ def show_manage(selected_date):
                     s2 = st.text_input("Session 2 Label (Optional)", value="")
                     
                     st.markdown("---")
-                    st.markdown("**⏰ Time-Gated Check-In (Optional)**")
+                    st.markdown("** Time-Gated Check-In (Optional)**")
                     enable_time = st.checkbox("Enable Check-In Time Window", value=False, key="add_enable_time")
                     
                     if enable_time:
