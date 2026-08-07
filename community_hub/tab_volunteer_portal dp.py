@@ -89,10 +89,9 @@ def show_volunteer_portal(token, activity_param=None):
     .qr-scanner-container { background: white; padding: 20px; border-radius: 15px; margin: 20px 0; text-align: center; border: 2px dashed #667eea; }
     .qr-scanner-container .camera-wrapper { max-width: 500px; margin: 0 auto; }
     .qr-scanner-container .camera-wrapper video { border-radius: 10px; width: 100% !important; }
-    .status-success { background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; border: 2px solid #28a745; animation: fadeIn 0.5s; }
-    .status-error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 8px; border: 2px solid #dc3545; animation: fadeIn 0.5s; }
-    .status-info { background: #d1ecf1; color: #0c5460; padding: 15px; border-radius: 8px; border: 2px solid #17a2b8; animation: fadeIn 0.5s; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    .status-success { background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; border: 2px solid #28a745; }
+    .status-error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 8px; border: 2px solid #dc3545; }
+    .status-info { background: #d1ecf1; color: #0c5460; padding: 15px; border-radius: 8px; border: 2px solid #17a2b8; }
     @media (max-width: 768px) {
         .portal-header-card { padding: 20px 15px; margin: 0 10px 25px 10px; }
         .portal-header-card h2 { font-size: 24px; }
@@ -177,7 +176,7 @@ def show_volunteer_portal(token, activity_param=None):
         </div>
         """, unsafe_allow_html=True)
         
-        # QR Scanner using st.camera_input
+        # QR Scanner using st.camera_input (RELIABLE!)
         st.markdown("""
         <div class="qr-scanner-container">
             <h4 style="color: #667eea; margin-top: 0;">📸 Camera Scanner</h4>
@@ -185,37 +184,23 @@ def show_volunteer_portal(token, activity_param=None):
         </div>
         """, unsafe_allow_html=True)
         
-        # Use the native camera input with optimized width parameter
-        camera_image = st.camera_input(
-            "📸 Position the QR code in the frame and click capture", 
-            key="qr_camera",
-            disabled=False,
-            label_visibility="visible"
-        )
+        # Use the native camera input - THIS WORKS ON MOBILE!
+        camera_image = st.camera_input("📸 Position the QR code in the frame and click capture", key="qr_camera")
         
         if camera_image is not None:
             try:
                 # Convert to PIL Image
                 image = Image.open(camera_image)
                 
-                # Show preview with width parameter (replaces use_column_width)
-                st.image(
-                    image, 
-                    caption="📸 Captured Image", 
-                    width=None,  # Auto-adjusts to container width
-                    use_container_width=True  # This is the new parameter name
-                )
+                # Show preview
+                st.image(image, caption="Captured Image", use_column_width=True)
                 
                 # Decode QR code
                 with st.spinner("🔍 Scanning QR code..."):
                     qr_data = decode_qr_from_image(image)
                 
                 if qr_data:
-                    st.markdown(f'<div class="status-success">✅ QR Code detected successfully!</div>', unsafe_allow_html=True)
-                    
-                    # Show QR data in an expandable section
-                    with st.expander("📋 View QR Data"):
-                        st.code(qr_data, language="text")
+                    st.markdown(f'<div class="status-success">✅ QR Code detected: <code>{qr_data}</code></div>', unsafe_allow_html=True)
                     
                     # Process the QR code
                     extracted_pid = qr_data
@@ -228,50 +213,32 @@ def show_volunteer_portal(token, activity_param=None):
                             pass
                     
                     if extracted_pid and len(str(extracted_pid)) > 5:
-                        # Check if resident exists
+                        # Show resident info and check-in button
                         try:
                             resident = supabase.table('participants').select("*").eq('id', extracted_pid).execute()
                             if resident.data:
                                 resident_name = resident.data[0]['name']
-                                resident_type = "🆕 New" if resident.data[0].get('is_new') else "⭐ Regular"
+                                st.info(f"👤 Resident: **{resident_name}**")
                                 
-                                # Display resident info in a nice format
-                                col1, col2 = st.columns([3, 1])
-                                with col1:
-                                    st.info(f"👤 **Resident:** {resident_name}\n\n📋 **Status:** {resident_type}")
-                                with col2:
-                                    # Check-in button with confirmation
-                                    if st.button("✅ Check In Now", type="primary", use_container_width=True):
-                                        with st.spinner("Processing check-in..."):
-                                            process_portal_checkin(extracted_pid, selected_date, selected_activity, s1, s2)
-                                            # Clear the camera input after processing
-                                            st.rerun()
+                                if st.button("✅ Check In This Resident", type="primary", use_container_width=True):
+                                    process_portal_checkin(extracted_pid, selected_date, selected_activity, s1, s2)
+                                    # Clear the camera input after processing
+                                    st.rerun()
                             else:
-                                st.markdown('<div class="status-error">❌ Resident not found in database. Please check the QR code.</div>', unsafe_allow_html=True)
+                                st.error("❌ Resident not found in database")
                         except Exception as e:
                             st.error(f"Error finding resident: {e}")
                     else:
-                        st.markdown('<div class="status-error">❌ Invalid QR code format. Could not extract resident ID.</div>', unsafe_allow_html=True)
+                        st.error("❌ Invalid QR code format. Could not extract resident ID.")
                 else:
                     st.markdown('<div class="status-error">❌ No QR code detected. Please try again with a clear image.</div>', unsafe_allow_html=True)
-                    
-                    # Helpful tips with icons
-                    with st.expander("💡 Tips for better scanning"):
-                        st.markdown("""
-                        - **💡 Ensure good lighting** - Avoid shadows or glare on the QR code
-                        - **📱 Hold steady** - Keep the camera still when taking the photo
-                        - **📏 Proper distance** - QR code should fill about 30-50% of the frame
-                        - **🎯 Focus** - Tap the screen to focus on the QR code
-                        - **🔍 Clear image** - Make sure the QR code is not blurry
-                        - **📐 Full visibility** - Ensure the entire QR code is visible in the frame
-                        """)
+                    st.info("💡 Tips:\n- Ensure the QR code is well-lit\n- Hold the camera steady\n- Make sure the QR code is fully visible in the frame")
                     
             except Exception as e:
                 st.error(f"Error processing image: {e}")
-                st.info("Please try taking another photo.")
         
         st.divider()
-        st.markdown("<p style='color: #1a1a1a !important; font-weight: bold; margin-bottom: 5px;'>⌨️ Or enter manually:</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #1a1a1a !important; font-weight: bold; margin-bottom: 5px;'>Or enter manually:</p>", unsafe_allow_html=True)
         qr_input = st.text_input("Enter QR Code ID", placeholder="e.g., 2026080316562190", key="portal_qr_input")
         
         if qr_input and len(qr_input.strip()) > 5:
@@ -405,65 +372,43 @@ def show_volunteer_portal(token, activity_param=None):
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Portal | Token-based access")
 
 def process_portal_checkin(pid, date, activity, s1, s2):
-    """Process check-in for portal with improved feedback"""
+    """Process check-in for portal - WITH TIME VALIDATION"""
     try:
-        # Check if already checked in
+        # 🔥 TIME VALIDATION (The "Bouncer")
+        from utils import validate_checkin_time
+        
+        # Determine which session is being checked in
+        session_to_check = 1 if s1 else 2
+        
+        is_allowed, message = validate_checkin_time(activity, session_to_check)
+        
+        if not is_allowed:
+            st.error(message)
+            st.info("💡 If this is incorrect, please contact the admin to adjust the session times or disable time validation.")
+            return
+        
         existing = supabase.table('attendance').select("*").eq('participant_id', pid).eq('date', str(date)).eq('source', activity).execute()
+        
         if existing.data and len(existing.data) > 0:
             st.warning(f"⚠️ This person has already checked in today for {activity}!")
             return
         
-        # Get resident info
         res = supabase.table('participants').select("*").eq('id', pid).execute()
         if not res.data:
             st.error(f"❌ Resident ID not found: {pid}")
             return
         
         resident = res.data[0]
-        
-        # Insert attendance with duplicate prevention
-        try:
-            supabase.table('attendance').insert({
-                "participant_id": pid, 
-                "name": resident['name'], 
-                "date": str(date),
-                "session_1": s1, 
-                "session_2": s2, 
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "self_checkin": False, 
-                "source": activity
-            }).execute()
-            
-            refresh_data()
-            
-            # Success feedback with celebration
-            st.balloons()
-            st.markdown(f"""
-            <div class="status-success">
-                ✅ **Successfully checked in {resident['name']}** 
-                <br>
-                <span style="font-size: 14px; color: #155724;">
-                    🕐 {datetime.now().strftime('%I:%M %p')} | 📅 {date.strftime('%d %b %Y')}
-                </span>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Clear inputs
-            if 'portal_qr_input' in st.session_state:
-                st.session_state.portal_qr_input = ""
-            if 'qr_camera' in st.session_state:
-                st.session_state.qr_camera = None
-                
-        except Exception as e:
-            error_msg = str(e)
-            if 'duplicate key' in error_msg or 'idx_attendance_unique' in error_msg:
-                st.info("ℹ️ This person has already checked in today. (Duplicate prevented)")
-            else:
-                raise e
-            
+        supabase.table('attendance').insert({
+            "participant_id": pid, "name": resident['name'], "date": str(date),
+            "session_1": s1, "session_2": s2, "timestamp": datetime.now(timezone.utc).isoformat(),
+            "self_checkin": False, "source": activity
+        }).execute()
+        refresh_data()
+        st.success(f"✅ Successfully checked in **{resident['name']}**!")
     except Exception as e:
         error_msg = str(e)
         if 'duplicate key' in error_msg or 'idx_attendance_unique' in error_msg:
             st.info("ℹ️ This person has already checked in today. (Duplicate prevented)")
         else:
-            st.error(f"Error processing check-in: {e}")
+            st.error(f"Error: {e}")

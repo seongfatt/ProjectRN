@@ -6,10 +6,6 @@ from utils import clean_phone_number, find_participant_by_phone, check_returning
 import urllib.parse
 import base64
 import os
-from PIL import Image
-import cv2
-import numpy as np
-import io
 
 def _get_logo_base64(logo_path="logo.png"):
     """Convert local logo to base64 so it renders inside HTML components."""
@@ -30,30 +26,8 @@ def _get_logo_base64(logo_path="logo.png"):
         "ZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZm9udC13ZWlnaHQ9ImJvbGQiPldaNjwvdGV4dD48L3N2Zz4="
     )
 
-def decode_qr_from_image(image):
-    """Decode QR code from PIL Image using OpenCV"""
-    try:
-        # Convert PIL Image to numpy array
-        img_array = np.array(image)
-        
-        # Convert to grayscale
-        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-        
-        # Initialize QRCode detector
-        qr_detector = cv2.QRCodeDetector()
-        
-        # Detect and decode QR code
-        data, bbox, _ = qr_detector.detectAndDecode(gray)
-        
-        if data:
-            return data
-        return None
-    except Exception as e:
-        print(f"Error decoding QR: {e}")
-        return None
-
 def show_volunteer_portal(token, activity_param=None):
-    """UNIFIED VOLUNTEER PORTAL WITH RELIABLE QR SCANNING"""
+    """UNIFIED VOLUNTEER PORTAL"""
     from tab_volunteer_access import validate_volunteer_token
     is_valid, msg = validate_volunteer_token(token)
     
@@ -70,7 +44,6 @@ def show_volunteer_portal(token, activity_param=None):
 
     logo_src = _get_logo_base64()
     
-    # CSS
     st.markdown("""
     <style>
     .portal-header-card { background: #ffffff; color: #1a1a1a; border-radius: 20px; padding: 30px 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.12); max-width: 600px; margin: 0 auto 25px auto; text-align: center; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -86,23 +59,14 @@ def show_volunteer_portal(token, activity_param=None):
     .method-card h3 { margin-top: 0; color: #667eea; }
     .method-card p, .method-card div, .method-card span { color: #1a1a1a !important; }
     .stats-box { background: #e3f2fd; padding: 15px; border-radius: 10px; margin: 20px 0; text-align: center; }
-    .qr-scanner-container { background: white; padding: 20px; border-radius: 15px; margin: 20px 0; text-align: center; border: 2px dashed #667eea; }
-    .qr-scanner-container .camera-wrapper { max-width: 500px; margin: 0 auto; }
-    .qr-scanner-container .camera-wrapper video { border-radius: 10px; width: 100% !important; }
-    .status-success { background: #d4edda; color: #155724; padding: 15px; border-radius: 8px; border: 2px solid #28a745; animation: fadeIn 0.5s; }
-    .status-error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 8px; border: 2px solid #dc3545; animation: fadeIn 0.5s; }
-    .status-info { background: #d1ecf1; color: #0c5460; padding: 15px; border-radius: 8px; border: 2px solid #17a2b8; animation: fadeIn 0.5s; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
     @media (max-width: 768px) {
         .portal-header-card { padding: 20px 15px; margin: 0 10px 25px 10px; }
         .portal-header-card h2 { font-size: 24px; }
         .method-card { padding: 20px 15px; }
-        .qr-scanner-container { padding: 15px; }
     }
     </style>
     """, unsafe_allow_html=True)
 
-    # Header
     st.markdown(f"""
     <div class="portal-header-card">
         <div class="header-row">
@@ -118,7 +82,6 @@ def show_volunteer_portal(token, activity_param=None):
     </div>
     """, unsafe_allow_html=True)
 
-    # Token expiry
     try:
         token_data = supabase.table('volunteer_tokens').select("*").eq('token', token).single().execute().data
         expires_str = token_data['expires_at']
@@ -129,7 +92,7 @@ def show_volunteer_portal(token, activity_param=None):
         expires_sgt = expires.astimezone(sgt_timezone)
         st.markdown(f"""
         <div style="background: #fff3cd; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 20px; color: #1a1a1a;">
-            <strong>🔑 Access Valid Until:</strong> {expires_sgt.strftime('%d %b %Y, %I:%M %p')} (SG Time)
+            <strong>⏰ Access Valid Until:</strong> {expires_sgt.strftime('%d %b %Y, %I:%M %p')} (SG Time)
         </div>
         """, unsafe_allow_html=True)
     except Exception as e:
@@ -139,7 +102,6 @@ def show_volunteer_portal(token, activity_param=None):
         st.error("Database not connected")
         return
 
-    # Activity selection
     st.subheader("📅 Step 1: Select Activity")
     acts = load_activities()
     act_names = [a['name'] for a in acts] if acts else ["Cardio Drumming"]
@@ -152,7 +114,7 @@ def show_volunteer_portal(token, activity_param=None):
     s2_label = act_config.get('session_2_label', 'Session 2') if act_config else 'Session 2'
     has_s2 = bool(s2_label and s2_label.strip())
 
-    st.subheader("⏰ Step 2: Select Session")
+    st.subheader("🕐 Step 2: Select Session")
     if has_s2:
         session_option = st.radio("Which session(s)?", ["Both", s1_label, s2_label], horizontal=True, key="portal_session")
         s1 = session_option in ["Both", s1_label]
@@ -163,117 +125,64 @@ def show_volunteer_portal(token, activity_param=None):
 
     st.divider()
     st.subheader("📱 Step 3: Choose Check-In Method")
-    method = st.radio("How would you like to check in residents?", ["📸 Scan QR Code (Camera)", "⌨️ Phone Number Search", "📝 Register New Resident"], horizontal=False, key="portal_method")
+    method = st.radio("How would you like to check in residents?", ["📱 Scan QR Code (Camera)", "⌨️ Phone Number Search", "📝 Register New Resident"], horizontal=False, key="portal_method")
 
-    if method == "📸 Scan QR Code (Camera)":
+    if method == "📱 Scan QR Code (Camera)":
         st.markdown("""
-        <div class="method-card">
-            <h3>📸 Scan QR Code</h3>
-            <p style="font-size: 15px; font-weight: 500;">Use your camera to scan the resident's QR code instantly.</p>
-            <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin: 15px 0; color: #1a1a1a;">
-                <strong>📱 How it works:</strong> Click "Take Photo" to open your camera. Position the QR code within the frame and capture.<br>
-                <span style="font-size: 14px; color: #666;">✅ Works reliably on both iOS and Android devices.</span>
-            </div>
+        <div class="method-card" style="color: #1a1a1a !important;">
+            <h3 style="color: #667eea !important; margin-top: 0;">📱 Scan QR Code</h3>
+            <p style="color: #333333 !important; font-size: 15px; font-weight: 500;">
+                Tap the button below to open your camera. Take a clear photo of the resident's QR code.
+            </p>
         </div>
         """, unsafe_allow_html=True)
-        
-        # QR Scanner using st.camera_input
-        st.markdown("""
-        <div class="qr-scanner-container">
-            <h4 style="color: #667eea; margin-top: 0;">📸 Camera Scanner</h4>
-            <p style="color: #666; font-size: 14px;">Take a photo of the QR code to scan it</p>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Use the native camera input with optimized width parameter
-        camera_image = st.camera_input(
-            "📸 Position the QR code in the frame and click capture", 
-            key="qr_camera",
-            disabled=False,
-            label_visibility="visible"
-        )
-        
-        if camera_image is not None:
-            try:
-                # Convert to PIL Image
-                image = Image.open(camera_image)
-                
-                # Show preview with width parameter (replaces use_column_width)
-                st.image(
-                    image, 
-                    caption="📸 Captured Image", 
-                    width=None,  # Auto-adjusts to container width
-                    use_container_width=True  # This is the new parameter name
-                )
-                
-                # Decode QR code
-                with st.spinner("🔍 Scanning QR code..."):
-                    qr_data = decode_qr_from_image(image)
-                
-                if qr_data:
-                    st.markdown(f'<div class="status-success">✅ QR Code detected successfully!</div>', unsafe_allow_html=True)
+
+        # 🔥 NATIVE CAMERA INPUT (Works perfectly on Mobile)
+        st.subheader("Take Photo of QR Code")
+        img_file = st.camera_input("Position the QR code in the frame", key="portal_camera")
+
+        if img_file is not None:
+            with st.spinner("Scanning image for QR Code..."):
+                try:
+                    import cv2
+                    import numpy as np
+                    from PIL import Image
                     
-                    # Show QR data in an expandable section
-                    with st.expander("📋 View QR Data"):
-                        st.code(qr_data, language="text")
+                    # 1. Load the image taken by the camera
+                    image = Image.open(img_file)
+                    image_np = np.array(image)
                     
-                    # Process the QR code
-                    extracted_pid = qr_data
-                    if 'pid=' in qr_data:
-                        try:
-                            parsed_url = urllib.parse.urlparse(qr_data)
-                            query_params = urllib.parse.parse_qs(parsed_url.query)
-                            extracted_pid = query_params.get('pid', [None])[0]
-                        except: 
-                            pass
+                    # 2. Convert to grayscale (easier for QR detection)
+                    gray = cv2.cvtColor(image_np, cv2.COLOR_BGR2GRAY)
                     
-                    if extracted_pid and len(str(extracted_pid)) > 5:
-                        # Check if resident exists
-                        try:
-                            resident = supabase.table('participants').select("*").eq('id', extracted_pid).execute()
-                            if resident.data:
-                                resident_name = resident.data[0]['name']
-                                resident_type = "🆕 New" if resident.data[0].get('is_new') else "⭐ Regular"
-                                
-                                # Display resident info in a nice format
-                                col1, col2 = st.columns([3, 1])
-                                with col1:
-                                    st.info(f"👤 **Resident:** {resident_name}\n\n📋 **Status:** {resident_type}")
-                                with col2:
-                                    # Check-in button with confirmation
-                                    if st.button("✅ Check In Now", type="primary", use_container_width=True):
-                                        with st.spinner("Processing check-in..."):
-                                            process_portal_checkin(extracted_pid, selected_date, selected_activity, s1, s2)
-                                            # Clear the camera input after processing
-                                            st.rerun()
-                            else:
-                                st.markdown('<div class="status-error">❌ Resident not found in database. Please check the QR code.</div>', unsafe_allow_html=True)
-                        except Exception as e:
-                            st.error(f"Error finding resident: {e}")
+                    # 3. Detect QR Code using OpenCV
+                    detector = cv2.QRCodeDetector()
+                    data, bbox, straight_qrcode = detector.detectAndDecode(gray)
+                    
+                    if data:
+                        st.success("✅ QR Code Detected!")
+                        st.code(data)
+                        
+                        # 4. Process the Check-in immediately
+                        extracted_pid = data
+                        if 'pid=' in data:
+                            try:
+                                parsed_url = urllib.parse.urlparse(data)
+                                query_params = urllib.parse.parse_qs(parsed_url.query)
+                                extracted_pid = query_params.get('pid', [None])[0]
+                            except: pass
+                        
+                        if extracted_pid:
+                            process_portal_checkin(extracted_pid, selected_date, selected_activity, s1, s2)
                     else:
-                        st.markdown('<div class="status-error">❌ Invalid QR code format. Could not extract resident ID.</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown('<div class="status-error">❌ No QR code detected. Please try again with a clear image.</div>', unsafe_allow_html=True)
-                    
-                    # Helpful tips with icons
-                    with st.expander("💡 Tips for better scanning"):
-                        st.markdown("""
-                        - **💡 Ensure good lighting** - Avoid shadows or glare on the QR code
-                        - **📱 Hold steady** - Keep the camera still when taking the photo
-                        - **📏 Proper distance** - QR code should fill about 30-50% of the frame
-                        - **🎯 Focus** - Tap the screen to focus on the QR code
-                        - **🔍 Clear image** - Make sure the QR code is not blurry
-                        - **📐 Full visibility** - Ensure the entire QR code is visible in the frame
-                        """)
-                    
-            except Exception as e:
-                st.error(f"Error processing image: {e}")
-                st.info("Please try taking another photo.")
-        
+                        st.warning("⚠️ No QR code found in this photo. Please try again with better lighting.")
+                        
+                except Exception as e:
+                    st.error(f"Error processing image: {e}")
+
         st.divider()
-        st.markdown("<p style='color: #1a1a1a !important; font-weight: bold; margin-bottom: 5px;'>⌨️ Or enter manually:</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #1a1a1a !important; font-weight: bold; margin-bottom: 5px;'>Or enter ID manually:</p>", unsafe_allow_html=True)
         qr_input = st.text_input("Enter QR Code ID", placeholder="e.g., 2026080316562190", key="portal_qr_input")
-        
         if qr_input and len(qr_input.strip()) > 5:
             input_text = qr_input.strip()
             extracted_pid = input_text
@@ -282,9 +191,8 @@ def show_volunteer_portal(token, activity_param=None):
                     parsed_url = urllib.parse.urlparse(input_text)
                     query_params = urllib.parse.parse_qs(parsed_url.query)
                     extracted_pid = query_params.get('pid', [None])[0]
-                except: 
-                    pass
-            if extracted_pid and len(str(extracted_pid)) > 5:
+                except: pass
+            if extracted_pid:
                 process_portal_checkin(extracted_pid, selected_date, selected_activity, s1, s2)
 
     elif method == "⌨️ Phone Number Search":
@@ -310,14 +218,10 @@ def show_volunteer_portal(token, activity_param=None):
                             supabase.table('attendance').insert({"participant_id": resident['id'], "name": resident['name'], "date": str(selected_date), "session_1": s1, "session_2": s2, "timestamp": datetime.now(timezone.utc).isoformat(), "self_checkin": False, "source": selected_activity}).execute()
                         st.success(f"✅ {resident['name']} checked in successfully!")
                         refresh_data()
-                        st.rerun()
-                    except Exception as e: 
-                        st.error(f"Error: {e}")
+                    except Exception as e: st.error(f"Error: {e}")
             else:
                 st.warning("📱 Phone number not found. Would you like to register them?")
-                if st.button("📝 Register New Resident", key="portal_register_from_phone"):
-                    st.session_state.portal_action = "register_new"
-                    st.rerun()
+                if st.button("📝 Register New Resident", key="portal_register_from_phone"): st.session_state.portal_action = "register_new"
 
     elif method == "📝 Register New Resident":
         st.markdown("""
@@ -336,52 +240,35 @@ def show_volunteer_portal(token, activity_param=None):
             member_type = st.radio("Select member category:", ["Resident", "RN Member", "Volunteer Member"], horizontal=True, key="portal_member_type", help="RN Member = Resident Network Committee | Volunteer Member = Activity Volunteer")
             block_consent = st.checkbox("🏢 I agree to share my block information (Optional)", key="portal_block_consent")
             block_no = ""
-            if block_consent: 
-                block_no = st.text_input("Block No.", placeholder="e.g., 622, 624A", key="portal_block_no").strip().upper()
+            if block_consent: block_no = st.text_input("Block No.", placeholder="e.g., 622, 624A", key="portal_block_no").strip().upper()
             
             if st.form_submit_button("Register & Check In", type="primary", use_container_width=True):
-                if not name.strip(): 
-                    st.error("❌ Name is required")
-                elif not no_phone and not contact.strip(): 
-                    st.error("❌ Contact number is required")
+                if not name.strip(): st.error("❌ Name is required")
+                elif not no_phone and not contact.strip(): st.error("❌ Contact number is required")
                 else:
                     final_contact = "NO_PHONE" if no_phone else contact.strip()
                     clean_contact = clean_phone_number(final_contact) if final_contact != "NO_PHONE" else None
                     try:
                         if clean_contact and clean_contact != "NO_PHONE":
                             res_phone = supabase.table('participants').select('name').eq('contact', clean_contact).eq('active', True).execute()
-                            if res_phone.data: 
-                                st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**")
-                                st.stop()
+                            if res_phone.data: st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**"); st.stop()
                         res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
-                        if res_name.data: 
-                            st.error(f"⛔ **Name already exists!**")
-                            st.stop()
-                    except Exception as e: 
-                        st.error(f"Error checking for duplicates: {e}")
-                        st.stop()
+                        if res_name.data: st.error(f"⛔ **Name already exists!**"); st.stop()
+                    except Exception as e: st.error(f"Error checking for duplicates: {e}"); st.stop()
                     
                     try:
                         new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
                         supabase.table('participants').insert({
-                            "id": new_id, 
-                            "name": name.strip().upper(), 
-                            "contact": final_contact,
-                            "block_no": block_no if block_no else None, 
-                            "indemnity": indemnity,
-                            "is_new": True, 
-                            "active": True, 
-                            "registration_date": datetime.now().strftime("%Y-%m-%d"),
+                            "id": new_id, "name": name.strip().upper(), "contact": final_contact,
+                            "block_no": block_no if block_no else None, "indemnity": indemnity,
+                            "is_new": True, "active": True, "registration_date": datetime.now().strftime("%Y-%m-%d"),
                             "member_type": member_type
                         }).execute()
                         process_portal_checkin(new_id, selected_date, selected_activity, s1, s2)
                         st.success(f"✅ {name.strip().upper()} registered as **{member_type}** & checked in successfully!")
                         st.info(f"Resident ID: `{new_id}`")
-                        st.rerun()
-                    except Exception as e: 
-                        st.error(f"Registration failed: {e}")
+                    except Exception as e: st.error(f"Registration failed: {e}")
 
-    # Statistics
     st.divider()
     st.subheader("📊 Today's Statistics")
     try:
@@ -399,71 +286,47 @@ def show_volunteer_portal(token, activity_param=None):
             </div>
         </div>
         """, unsafe_allow_html=True)
-    except Exception as e: 
-        st.error(f"Error loading stats: {e}")
-    
+    except Exception as e: st.error(f"Error loading stats: {e}")
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Portal | Token-based access")
 
 def process_portal_checkin(pid, date, activity, s1, s2):
-    """Process check-in for portal with improved feedback"""
+    """Process check-in for portal - WITH TIME VALIDATION"""
     try:
-        # Check if already checked in
+        # 🔥 TIME VALIDATION (The "Bouncer")
+        from utils import validate_checkin_time
+        
+        # Determine which session is being checked in
+        session_to_check = 1 if s1 else 2
+        
+        is_allowed, message = validate_checkin_time(activity, session_to_check)
+        
+        if not is_allowed:
+            st.error(message)
+            st.info("💡 If this is incorrect, please contact the admin to adjust the session times or disable time validation.")
+            return
+        
         existing = supabase.table('attendance').select("*").eq('participant_id', pid).eq('date', str(date)).eq('source', activity).execute()
+        
         if existing.data and len(existing.data) > 0:
             st.warning(f"⚠️ This person has already checked in today for {activity}!")
             return
         
-        # Get resident info
         res = supabase.table('participants').select("*").eq('id', pid).execute()
         if not res.data:
             st.error(f"❌ Resident ID not found: {pid}")
             return
         
         resident = res.data[0]
-        
-        # Insert attendance with duplicate prevention
-        try:
-            supabase.table('attendance').insert({
-                "participant_id": pid, 
-                "name": resident['name'], 
-                "date": str(date),
-                "session_1": s1, 
-                "session_2": s2, 
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "self_checkin": False, 
-                "source": activity
-            }).execute()
-            
-            refresh_data()
-            
-            # Success feedback with celebration
-            st.balloons()
-            st.markdown(f"""
-            <div class="status-success">
-                ✅ **Successfully checked in {resident['name']}** 
-                <br>
-                <span style="font-size: 14px; color: #155724;">
-                    🕐 {datetime.now().strftime('%I:%M %p')} | 📅 {date.strftime('%d %b %Y')}
-                </span>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Clear inputs
-            if 'portal_qr_input' in st.session_state:
-                st.session_state.portal_qr_input = ""
-            if 'qr_camera' in st.session_state:
-                st.session_state.qr_camera = None
-                
-        except Exception as e:
-            error_msg = str(e)
-            if 'duplicate key' in error_msg or 'idx_attendance_unique' in error_msg:
-                st.info("ℹ️ This person has already checked in today. (Duplicate prevented)")
-            else:
-                raise e
-            
+        supabase.table('attendance').insert({
+            "participant_id": pid, "name": resident['name'], "date": str(date),
+            "session_1": s1, "session_2": s2, "timestamp": datetime.now(timezone.utc).isoformat(),
+            "self_checkin": False, "source": activity
+        }).execute()
+        refresh_data()
+        st.success(f"✅ Successfully checked in **{resident['name']}**!")
     except Exception as e:
         error_msg = str(e)
         if 'duplicate key' in error_msg or 'idx_attendance_unique' in error_msg:
             st.info("ℹ️ This person has already checked in today. (Duplicate prevented)")
         else:
-            st.error(f"Error processing check-in: {e}")
+            st.error(f"Error: {e}")
