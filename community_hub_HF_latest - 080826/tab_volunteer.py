@@ -142,7 +142,7 @@ def show_volunteer():
                     "indemnity": indemnity,
                     "is_new": True,
                     "active": True,
-                    "registration_date": datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d"),
+                    "registration_date": datetime.now().strftime("%Y-%m-%d"),
                     "member_type": member_type  # 🔥 NEW: Save member type
                 }).execute()
                 refresh_data()
@@ -154,7 +154,7 @@ def show_volunteer():
     st.divider()
     st.subheader("Recent Registrations (Today)")
     try:
-        today_str = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
+        today_str = datetime.now().strftime("%Y-%m-%d")
         recent = supabase.table('participants').select("*").eq('registration_date', today_str).order('id', desc=True).limit(10).execute().data
         if recent:
             for p in recent:

@@ -40,7 +40,7 @@ st.markdown(MOBILE_CSS, unsafe_allow_html=True)
 # Initialize session state
 for k in ['is_authenticated','user_role','show_login','participants','plots','activities','today_date','selected_plot','selected_activity','auto_checkin_done','active_page','chairman_tc_accepted']:
     if k not in st.session_state:
-        st.session_state[k] = None if k in ['user_role','selected_plot','selected_activity','active_page'] else (False if k in ['is_authenticated','auto_checkin_done','chairman_tc_accepted'] else ([] if k in ['participants','plots','activities'] else datetime.now(timezone(timedelta(hours=8))).date()))
+        st.session_state[k] = None if k in ['user_role','selected_plot','selected_activity','active_page'] else (False if k in ['is_authenticated','auto_checkin_done','chairman_tc_accepted'] else ([] if k in ['participants','plots','activities'] else datetime.now().date()))
 
 def verify_password(pwd, role):
     if role == "admin": return pwd == ADMIN_PASSWORD
@@ -62,7 +62,7 @@ if params.get("mode") == "auto":
     if not DB_CONNECTED or supabase is None:
         st.error("Database not connected. "); st.stop()
     pid = params.get("pid")
-    date_str = params.get("date", datetime.now(timezone(timedelta(hours=8))).strftime("%Y%m%d"))
+    date_str = params.get("date", datetime.now().strftime("%Y%m%d"))
     token = params.get("tk")
     act = params.get("act", "Cardio Drumming")
     session_param = params.get("session", "both")
@@ -254,7 +254,7 @@ if params.get("mode") == "volunteer":
     acts = load_activities()
     act_names = [a['name'] for a in acts] if acts else ["Cardio Drumming"]
     selected_activity = st.selectbox("Activity", act_names, index=0, key="vol_act")
-    selected_date = st.date_input("Date", value=datetime.now(timezone(timedelta(hours=8))).date(), key="vol_date")
+    selected_date = st.date_input("Date", value=datetime.now().date(), key="vol_date")
     act_config = next((a for a in acts if a['name'] == selected_activity), None)
     s1_label = act_config.get('session_1_label', 'Session 1') if act_config else 'Session 1'
     s2_label = act_config.get('session_2_label', 'Session 2') if act_config else 'Session 2'
@@ -732,8 +732,7 @@ if st.session_state.is_authenticated:
     with col1:
         st.subheader("Admin Dashboard")
     with col2:
-        # 🔥 FIX: Use Singapore Time (UTC+8)
-        st.caption(f"{datetime.now(timezone(timedelta(hours=8))).strftime('%d %b %Y')}")
+        st.caption(f"{datetime.now().strftime('%d %b %Y')}")
         if st.button("Logout", use_container_width=True):
             st.session_state.is_authenticated = False
             st.session_state.user_role = None
@@ -885,8 +884,7 @@ if st.session_state.is_authenticated:
 else:
     st.divider()
     st.subheader("Admin Dashboard")
-    # 🔥 FIX: Singapore Time (UTC+8)
-    st.caption(f"{datetime.now(timezone(timedelta(hours=8))).strftime('%d %b %Y')}")
+    st.caption(f"{datetime.now().strftime('%d %b %Y')}")
     if st.session_state.show_login:
         st.divider()
         st.subheader("Login")

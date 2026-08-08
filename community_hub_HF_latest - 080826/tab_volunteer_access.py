@@ -18,7 +18,7 @@ def create_volunteer_link(token, expires_at, created_by="admin"):
         supabase.table('volunteer_tokens').insert({
             "token": token,
             "created_by": created_by,
-            "created_at": datetime.now(timezone(timedelta(hours=8))).isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "expires_at": expires_at.isoformat(),
             "active": True,
             "usage_count": 0
@@ -134,7 +134,7 @@ def show_volunteer_access():
             try:
                 supabase.table('volunteer_tokens').insert({
                     "token": new_token,
-                    "created_at": datetime.now(timezone(timedelta(hours=8))).isoformat(),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
                     "expires_at": expires_at.isoformat(),
                     "active": True,
                     "usage_count": 0,

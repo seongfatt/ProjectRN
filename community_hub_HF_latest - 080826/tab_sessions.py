@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 import uuid
 import urllib.parse
 from config import supabase, DB_CONNECTED, APP_URL, load_activities
-from utils import clean_phone_number, find_participant_by_phone, mask_phone
+from utils import clean_phone_number, find_participant_by_phone
 
 # ─── Helpers ────────────────────────────────────────────
 def _generate_rsvp_url(token):
@@ -16,6 +16,7 @@ def _generate_rsvp_url(token):
     return f"{base}/?mode=rsvp&tk={token}"
 
 def _generate_whatsapp_link(phone, message):
+    """Generate WhatsApp click-to-chat link. Auto-prefixes +65 if missing."""
     clean_phone = str(phone).strip().replace(" ", "").replace("-", "").lstrip("+")
     if not clean_phone.startswith('65') and len(clean_phone) == 8:
         clean_phone = '65' + clean_phone
@@ -35,6 +36,7 @@ def _generate_whatsapp_message(session, rsvp_url):
     )
 
 def _is_session_expired(session):
+    """Check if current time is past the session start time."""
     try:
         date_str = session.get('session_date')
         time_str = session.get('session_time', '23:59')
@@ -43,29 +45,106 @@ def _is_session_expired(session):
             start_time = datetime.strptime(start_time_str, "%I:%M %p").time()
         except:
             start_time = datetime.strptime(start_time_str, "%H:%M").time()
+        
         session_dt = datetime.combine(datetime.strptime(date_str, "%Y-%m-%d").date(), start_time)
-        return datetime.now(timezone(timedelta(hours=8))) > session_dt
+        return datetime.now() > session_dt
     except:
         return False
 
 def _auto_close_expired_sessions(sup):
+    """PHASE 2: Automatically updates 'open' sessions to 'closed' if they have expired."""
     try:
         open_sessions = sup.table('sessions').select('*').eq('status', 'open').execute().data
         for sess in open_sessions:
             if _is_session_expired(sess):
                 sup.table('sessions').update({
                     'status': 'closed', 
-                    'updated_at': datetime.now(timezone(timedelta(hours=8))).isoformat()
+                    'updated_at': datetime.now().isoformat()
                 }).eq('id', sess['id']).execute()
     except Exception as e:
         print(f"Auto-close error: {e}")
+
+def _make_walkin_permanent(sup, rsvp_id, walkin_name):
+    """PHASE 2: Converts a walk-in into a permanent resident and updates their attendance record."""
+    try:
+        import random
+        # 1. Generate new permanent ID and insert into participants table
+        new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
+        sup.table('participants').insert({
+            "id": new_id,
+            "name": walkin_name.strip().upper(),
+            "contact": "",
+            "indemnity": False,
+            "is_new": True,
+            "active": True,
+            "registration_date": datetime.now().strftime("%Y-%m-%d")
+        }).execute()
+
+        # 2. Update the main attendance record to use the new permanent ID
+        temp_pid = f"WALKIN_{rsvp_id}"
+        att_rec = sup.table('attendance').select('id').eq('participant_id', temp_pid).execute()
+        if att_rec.data:
+            sup.table('attendance').update({
+                'participant_id': new_id, 
+                'name': walkin_name.strip().upper()
+            }).eq('id', att_rec.data[0]['id']).execute()
+
+        return True, new_id
+    except Exception as e:
+        return False, str(e)
+
+def _sync_to_main_attendance(sup, session, rsvp, s1=True, s2=False):
+    """Syncs a checked-in RSVP to the main 'attendance' table with S1/S2 flags."""
+    if rsvp.get('response') != 'attending' or not rsvp.get('checked_in'):
+        return
+    
+    session_date = session.get('session_date')
+    activity_name = session.get('activity_name')
+    name = rsvp.get('name', '').strip().upper()
+    phone = rsvp.get('phone', '').strip()
+    
+    pid = None
+    try:
+        res = sup.table('participants').select('id').eq('name', name).execute()
+        if res.data:
+            pid = res.data[0]['id']
+        elif phone and len(phone) >= 4:
+            all_p = sup.table('participants').select('id', 'contact').execute()
+            for p in all_p.data:
+                if str(p.get('contact', '')).replace(' ', '').endswith(phone[-4:]):
+                    pid = p['id']
+                    break
+    except:
+        pass
+        
+    if not pid:
+        pid = f"WALKIN_{rsvp.get('id', 'unknown')}"
+        
+    try:
+        existing = sup.table('attendance').select('id') \
+            .eq('participant_id', pid).eq('date', session_date).eq('source', activity_name).execute()
+        
+        if not existing.data:
+            sup.table('attendance').insert({
+                "participant_id": pid,
+                "name": name,
+                "date": session_date,
+                "session_1": s1,
+                "session_2": s2,
+                # 🔥 FIX: Convert to Singapore Time (UTC+8)
+                "timestamp": datetime.now(timezone(timedelta(hours=8))).isoformat(),
+                "self_checkin": False,
+                "source": activity_name
+            }).execute()
+    except Exception as e:
+        print(f"Sync to main attendance error: {e}")
 
 # ─── DB Functions ────────────────────────────────────────
 def _fetch_sessions(sup, status=None, activity=None, future_only=False):
     query = sup.table("sessions").select("*")
     if status: query = query.eq("status", status)
     if activity: query = query.eq("activity_name", activity)
-    if future_only: query = query.gte("session_date", datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d"))
+    if future_only: query = query.gte("session_date", datetime.now().strftime("%Y-%m-%d"))
     return query.order("session_date", desc=False).execute().data or []
 
 def _fetch_session_by_id(sup, session_id):
@@ -85,20 +164,20 @@ def _upsert_rsvp(sup, session_id, name, phone, response, checked_in, is_walk_in=
         "session_id": session_id, "name": name, "phone": phone,
         "response": response, "checked_in": checked_in, "is_walk_in": is_walk_in,
         "session_1": s1, "session_2": s2,
-        "updated_at": datetime.now(timezone(timedelta(hours=8))).isoformat()
+        "updated_at": datetime.now().isoformat()
     }
     if existing:
         sup.table("session_rsvp").update(data).eq("id", existing[0]['id']).execute()
     else:
         data["id"] = str(uuid.uuid4())
-        data["created_at"] = datetime.now(timezone(timedelta(hours=8))).isoformat()
+        data["created_at"] = datetime.now().isoformat()
         sup.table("session_rsvp").insert(data).execute()
 
 def _delete_rsvp(sup, rsvp_id):
     sup.table("session_rsvp").delete().eq("id", rsvp_id).execute()
 
 def _close_session(sup, session_id):
-    sup.table("sessions").update({"status": "closed", "updated_at": datetime.now(timezone(timedelta(hours=8))).isoformat()}).eq("id", session_id).execute()
+    sup.table("sessions").update({"status": "closed", "updated_at": datetime.now().isoformat()}).eq("id", session_id).execute()
 
 # ─── UI: Session Card ────────────────────────────────────
 def _render_session_card(sup, session, role, app_url):
@@ -112,9 +191,9 @@ def _render_session_card(sup, session, role, app_url):
     confirmed = len([r for r in rsvps if r.get('response') == 'attending'])
     st.caption(f"Attending: {confirmed}")
 
-# ─── UI: Live Check-In ──────────────────────────────────
+# ─── UI: Live Check-In (At Venue) ────────────────────────
 def _render_live_checkin(sup, session):
-    st.title(f"🔍 Live Check-In Desk: {session['activity_name']}")
+    st.title(f"🔍 Live Check-In: {session['activity_name']}")
     st.caption(f"{session['session_date']} | {session['session_time']} | {session.get('location', '')}")
     
     is_closed = session.get('status') == 'closed' or _is_session_expired(session)
@@ -122,239 +201,130 @@ def _render_live_checkin(sup, session):
         st.warning("⚠️ Session is CLOSED or EXPIRED. Check-in is locked.")
     st.divider()
     
-    # ─── Step 1: Smart Search by Phone or Name ───
-    st.subheader("📱 Search Resident by Phone or Name")
-    search_query = st.text_input("Enter 8-digit phone or Name", placeholder="e.g., 91234567 or SEONG FATT", key="live_search")
+    search = st.text_input("🔎 Search resident...", key="live_search")
     
-    selected_resident = None
-    
-    if search_query:
-        # Try exact phone match first
-        clean_phone = clean_phone_number(search_query)
-        if len(clean_phone) >= 8:
-            selected_resident = find_participant_by_phone(clean_phone)
+    participants = st.session_state.get('participants', [])
+    if not participants:
+        from utils import load_participants
+        participants = load_participants()
         
-        # Fallback to name search
-        if not selected_resident:
-            participants = st.session_state.get('participants', [])
-            s = search_query.lower()
-            matches = [p for p in participants if p.get('active', True) and s in p.get('name', '').lower()]
-            if matches:
-                # Let volunteer select if multiple matches
-                match_dict = {f"{p['name']} (ID: {p['id'][:8]}...)": p for p in matches}
-                selected_label = st.selectbox("Multiple residents found. Select one:", list(match_dict.keys()), key="live_match_select")
-                if selected_label:
-                    selected_resident = match_dict[selected_label]
-
-    st.divider()
-
-    # ─── Step 2: Resident Card & Action ───
-    if selected_resident:
-        # 🔥 Display FULL Resident Card (FULL ID, FULL Phone)
-        status_text = '⭐ Regular' if not selected_resident.get('is_new') else '🆕 New'
-        full_contact = selected_resident.get('contact', 'N/A')
-        if full_contact == 'NO_PHONE':
-            full_contact = '📵 No Phone'
-            
-        st.markdown(f"""
-        <div style="background: #e8f5e9; border: 2px solid #4caf50; padding: 20px; border-radius: 15px; margin: 15px 0; box-shadow: 0 4px 8px rgba(76, 175, 80, 0.2);">
-            <h3 style="margin: 0 0 5px 0; color: #1a1a1a;">✅ {selected_resident['name']}</h3>
-            <div style="display: flex; flex-wrap: wrap; gap: 15px; font-size: 14px; color: #555;">
-                <span>🆔 ID: <code style="font-size:16px;">{selected_resident['id']}</code></span>
-                <span>📞 Phone: <strong>{full_contact}</strong></span>
-                <span>📋 Status: {status_text}</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Check if already marked present for this specific session
-        existing_rsvp = sup.table('session_rsvp').select("*") \
-            .eq('session_id', session['id']) \
-            .eq('name', selected_resident['name']) \
-            .execute().data
-            
-        already_present = False
-        if existing_rsvp:
-            already_present = existing_rsvp[0].get('checked_in', False)
-
-        # ─── 🔥 PROFESSIONAL SESSION SELECTOR ───
-        st.markdown("**📅 Select Session(s) to Check In:**")
-        # Fetch activity label to show proper names
-        acts = load_activities()
-        act_config = next((a for a in acts if a['name'] == session['activity_name']), None)
-        s1_label = act_config.get('session_1_label', 'Session 1') if act_config else 'Session 1'
-        s2_label = act_config.get('session_2_label', 'Session 2') if act_config else 'Session 2'
-        
-        # Create a clean radio selection
-        session_options = [s1_label, s2_label, "Both Sessions"]
-        selected_session = st.radio(
-            "Which session are they attending?",
-            session_options,
-            horizontal=True,
-            key="live_session_select"
-        )
-        
-        # Map selection to booleans
-        if selected_session == s1_label:
-            s1, s2 = True, False
-        elif selected_session == s2_label:
-            s1, s2 = False, True
-        else:  # Both Sessions
-            s1, s2 = True, True
-
-        # ─── Action Buttons ───
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            if already_present:
-                st.success("✅ Already Marked Present")
-            else:
-                if st.button("✅ Mark Present", type="primary", use_container_width=True, disabled=is_closed):
-                    # 🔥 SAFE SAVE (No ON CONFLICT crash)
-                    try:
-                        # 1. Save to session_rsvp
-                        _upsert_rsvp(
-                            sup, session['id'], 
-                            selected_resident['name'], 
-                            selected_resident.get('contact', ''), 
-                            'attending', 
-                            True,
-                            s1=s1, s2=s2
-                        )
-                        
-                        # 2. Save to session_attendance (Safe Upsert manually)
-                        # Check if record exists first
-                        existing_sess_att = sup.table('session_attendance').select("id") \
-                            .eq('session_id', session['id']) \
-                            .eq('participant_id', selected_resident['id']) \
-                            .execute()
-                            
-                        if existing_sess_att.data:
-                            # Update existing
-                            sup.table('session_attendance').update({
-                                "status": "checked_in",
-                                "marked_at": datetime.now(timezone(timedelta(hours=8))).isoformat(),
-                                "marked_by": st.session_state.get('user_role', 'admin')
-                            }).eq('id', existing_sess_att.data[0]['id']).execute()
-                        else:
-                            # Insert new
-                            sup.table('session_attendance').insert({
-                                "session_id": session['id'],
-                                "participant_id": selected_resident['id'],
-                                "name": selected_resident['name'],
-                                "status": "checked_in",
-                                "marked_at": datetime.now(timezone(timedelta(hours=8))).isoformat(),
-                                "marked_by": st.session_state.get('user_role', 'admin')
-                            }).execute()
-
-                        # 3. Sync to master attendance
-                        formatted_date = session.get('session_date')
-                        existing_att = sup.table('attendance').select("*") \
-                            .eq('participant_id', selected_resident['id']) \
-                            .eq('date', formatted_date) \
-                            .eq('source', session['activity_name']) \
-                            .execute()
-                        
-                        if existing_att.data:
-                            # Update existing
-                            record = existing_att.data[0]
-                            updates = {
-                                "session_1": record.get('session_1', False) or s1,
-                                "session_2": record.get('session_2', False) or s2,
-                                "timestamp": datetime.now(timezone(timedelta(hours=8))).isoformat()
-                            }
-                            sup.table('attendance').update(updates).eq('id', record['id']).execute()
-                        else:
-                            # Insert new
-                            sup.table('attendance').insert({
-                                "participant_id": selected_resident['id'],
-                                "name": selected_resident['name'],
-                                "date": formatted_date,
-                                "session_1": s1,
-                                "session_2": s2,
-                                "timestamp": datetime.now(timezone(timedelta(hours=8))).isoformat(),
-                                "self_checkin": False,
-                                "source": session['activity_name']
-                            }).execute()
-                            
-                        st.success(f"✅ {selected_resident['name']} marked Present for {session['activity_name']} ({selected_session})!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error saving check-in: {e}")
-                        
-        with c2:
-            if st.button("👎 No-Show", use_container_width=True, disabled=is_closed or already_present):
-                _upsert_rsvp(sup, session['id'], selected_resident['name'], selected_resident.get('contact', ''), 'not_attending', False)
-                st.rerun()
-        with c3:
-            if st.button("⏳ Skip", use_container_width=True, disabled=is_closed):
-                _upsert_rsvp(sup, session['id'], selected_resident['name'], selected_resident.get('contact', ''), 'maybe', False)
-                st.rerun()
-                
-    else:
-        st.info("🔍 Enter a phone number or name above to search for the resident.")
-
-    st.divider()
-    
-    # ─── Walk-ins Section ──────────────────────────────────────
-    st.subheader("🚶 Walk-ins")
-    st.caption("Note: Walk-ins are automatically marked for Session 1.")
-    walkin_name = st.text_input("Add walk-in name (No phone)", key="walkin_name")
-    
-    if st.button("➕ Add Walk-in", disabled=is_closed):
-        if walkin_name.strip():
-            try:
-                # 1. Insert into RSVP (as walk-in)
-                _upsert_rsvp(
-                    sup, session['id'], 
-                    walkin_name.strip().upper(), 
-                    "WALKIN", 
-                    'attending', 
-                    True,
-                    is_walk_in=True,
-                    s1=True, s2=False
-                )
-                
-                # 2. Insert into session_attendance (No conflict)
-                temp_pid = f"WALKIN_{uuid.uuid4().hex[:8]}"
-                sup.table('session_attendance').insert({
-                    "session_id": session['id'],
-                    "participant_id": temp_pid,
-                    "name": walkin_name.strip().upper(),
-                    "status": "checked_in",
-                    "marked_at": datetime.now(timezone(timedelta(hours=8))).isoformat(),
-                    "marked_by": st.session_state.get('user_role', 'admin')
-                }).execute()
-
-                # 3. Sync to master attendance
-                formatted_date = session.get('session_date')
-                sup.table('attendance').insert({
-                    "participant_id": temp_pid,
-                    "name": walkin_name.strip().upper(),
-                    "date": formatted_date,
-                    "session_1": True,
-                    "session_2": False,
-                    "timestamp": datetime.now(timezone(timedelta(hours=8))).isoformat(),
-                    "self_checkin": False,
-                    "source": session['activity_name']
-                }).execute()
-                
-                st.success(f"✅ Walk-in {walkin_name.strip().upper()} added!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Error adding walk-in: {e}")
-                
-    # ─── RSVP Counters ─────────────────────────────────────────
-    st.divider()
     rsvps = _fetch_rsvps(sup, session['id'])
-    confirmed = len([r for r in rsvps if r.get('response') == 'attending' and r.get('checked_in')])
-    total_rsvps = len([r for r in rsvps if r.get('response') == 'attending'])
-    pending = len([r for r in rsvps if r.get('response') == 'maybe'])
+    rsvp_dict = {r['name'].lower().strip(): r for r in rsvps}
+    
+    active_p = [p for p in participants if p.get('active', True)]
+    if search:
+        s = search.lower()
+        active_p = [p for p in active_p if s in p['name'].lower() or s in p.get('contact', '')[-4:]]
+        
+    # 🔥 PHASE 5: PHONE-FIRST SMART CHECK-IN ROUTER (Replaces the long resident list)
+    st.subheader("📱 Smart Check-In (Phone Number)")
+    st.caption("Enter the resident's 8-digit mobile number to instantly check them in.")
+
+    phone_input = st.text_input(
+        "Mobile Number", 
+        placeholder="e.g., 91234567", 
+        key="live_phone_input"
+    )
+
+    if phone_input and len(clean_phone_number(phone_input)) >= 8:
+        clean_phone = clean_phone_number(phone_input)
+        resident = find_participant_by_phone(clean_phone)
+
+        if resident:
+            # ✅ RESIDENT FOUND
+            rsvp = rsvp_dict.get(resident['name'].lower().strip())
+            
+            st.markdown(f"""
+            <div style="background: #e8f5e9; border-left: 4px solid #4caf50; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                <h4 style="margin:0; color:#1a1a1a;">✅ Resident Found: {resident['name']}</h4>
+                <p style="margin:5px 0 0 0; font-size:14px; color:#666;">Status: {'⭐ Regular' if not resident.get('is_new') else '🆕 New'}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                if st.button("👍 Present", key=f"live_p_{resident['id']}", disabled=is_closed, use_container_width=True):
+                    _upsert_rsvp(sup, session['id'], resident['name'], clean_phone, 'attending', True, s1=True, s2=False)
+                    _sync_to_main_attendance(sup, session, {'name': resident['name'], 'phone': clean_phone, 'response': 'attending', 'checked_in': True, 'id': resident['id']}, s1=True, s2=False)
+                    st.rerun()
+            with col2:
+                if st.button("👎 No-Show", key=f"live_n_{resident['id']}", disabled=is_closed, use_container_width=True):
+                    _upsert_rsvp(sup, session['id'], resident['name'], clean_phone, 'not_attending', False)
+                    st.rerun()
+            with col3:
+                if st.button("⏳ Skip", key=f"live_s_{resident['id']}", disabled=is_closed, use_container_width=True):
+                    _upsert_rsvp(sup, session['id'], resident['name'], clean_phone, 'maybe', False)
+                    st.rerun()
+        else:
+            # ❌ PHONE NOT FOUND
+            st.markdown(f"""
+            <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                <h4 style="margin:0; color:#1a1a1a;">❓ Phone number not found.</h4>
+                <p style="margin:5px 0 0 0;">Add them as a Walk-in below.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Auto-fill the walk-in name input if they want to add them quickly
+            st.session_state['walkin_phone_prefill'] = clean_phone
+
+    st.divider()
+    
+    # Walk-ins Section
+    st.subheader("Walk-ins")
+    walkins = [r for r in rsvps if r.get('is_walk_in')]
+    
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        walkin_name = st.text_input("Add walk-in name", key="walkin_name")
+    with c2:
+        st.write(""); st.write("")
+        if st.button("➕ Add", disabled=is_closed):
+            if walkin_name.strip():
+                phone_to_use = st.session_state.get('walkin_phone_prefill', '')
+                _upsert_rsvp(sup, session['id'], walkin_name.strip(), phone_to_use, 'attending', True, is_walk_in=True, s1=True, s2=False)
+                _sync_to_main_attendance(sup, session, {'name': walkin_name.strip(), 'phone': phone_to_use, 'response': 'attending', 'checked_in': True, 'id': 'walkin'}, s1=True, s2=False)
+                st.session_state['walkin_phone_prefill'] = None
+                st.rerun()
+                
+    # 🔥 PHASE 2 FIX: Walk-in list with "Make Permanent" button properly spaced
+    if walkins:
+        for w in walkins:
+            # Adjusted column ratios [2, 2, 1] to give the button more horizontal space
+            c1, c2, c3 = st.columns([2, 2, 1]) 
+            
+            with c1: 
+                st.write(f"🚶 **{w['name']}**")
+                st.caption(f"📞 {w.get('phone', 'No phone')}")
+            
+            with c2:
+                # Added use_container_width=True so the button fills the wider column nicely
+                if st.button("⭐ Make Permanent", key=f"perm_{w['id']}", disabled=is_closed, help="Register as permanent resident", use_container_width=True):
+                    success, msg = _make_walkin_permanent(sup, w['id'], w['name'])
+                    if success:
+                        st.success(f"✅ Registered! New ID: {msg}")
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        st.error(f"Error: {msg}")
+            
+            with c3:
+                # Existing Delete Button
+                if st.button("🗑️", key=f"del_{w['id']}", disabled=is_closed, use_container_width=True):
+                    _delete_rsvp(sup, w['id'])
+                    st.rerun()
+    else:
+        st.caption("No walk-ins added yet.")
+        
+    st.divider()
+    
+    # Footer Counters & Close Button
+    confirmed = len([r for r in rsvps if r.get('response') == 'attending'])
     noshow = len([r for r in rsvps if r.get('response') == 'not_attending'])
     
     c1, c2, c3 = st.columns(3)
-    c1.metric("✅ Checked-In", confirmed)
-    c2.metric("📋 Total RSVPs", total_rsvps)
-    c3.metric("⏳ Pending", pending)
+    c1.metric("✅ Confirmed", confirmed)
+    c2.metric("❌ No-Show", noshow)
+    c3.metric("⏳ Pending", len(rsvps) - confirmed - noshow)
     
     if not is_closed:
         if st.button("🔒 Close Session", type="primary", use_container_width=True):
@@ -364,14 +334,14 @@ def _render_live_checkin(sup, session):
     else:
         st.success("✅ Session Closed & Locked")
 
-# ─── UI: Create Session ──────────────────────────────────
+# ── UI: Create Session (Before Session) ─────────────────
 def _render_session_form(sup, app_url=None, form_key_suffix=""):
     st.subheader("➕ Create New Session")
     with st.form(f"create_sess_{form_key_suffix}"):
         acts = load_activities()
         act_names = [a['name'] for a in acts]
         activity = st.selectbox("Activity", act_names, index=0)
-        date = st.date_input("Date", value=datetime.now(timezone(timedelta(hours=8))).date())
+        date = st.date_input("Date", value=datetime.now().date())
         time = st.text_input("Time", value="7:00 PM - 9:00 PM")
         location = st.text_input("Location", value="Woodlands Zone 6")
         
@@ -382,7 +352,7 @@ def _render_session_form(sup, app_url=None, form_key_suffix=""):
                 "session_date": date.strftime("%Y-%m-%d"), "session_time": time,
                 "location": location, "status": "open",
                 "rsvp_link_token": str(uuid.uuid4())[:8],
-                "created_at": datetime.now(timezone(timedelta(hours=8))).isoformat()
+                "created_at": datetime.now().isoformat()
             }
             sup.table("sessions").insert(data).execute()
             st.session_state['new_session_token'] = data['rsvp_link_token']
@@ -547,7 +517,7 @@ def show(supabase, role):
 
     elif role == "checker":
         with tabs[0]:
-            today = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
+            today = datetime.now().strftime("%Y-%m-%d")
             sessions = _fetch_sessions(sup)
             today_sessions = [s for s in sessions if s.get('session_date') == today]
 
