@@ -45,13 +45,9 @@ def show_checkin(selected_date):
         st.error("Database not connected")
         return
     
-    # ── LOAD ACTIVITY ───────────────────────────────────────────
-    acts = load_activities()
-    act_list = list(acts.values()) if isinstance(acts, dict) else acts
-    
     activity = st.session_state.get('selected_activity', 'Cardio Drumming')
-    act_config = next((a for a in act_list if a['name'] == activity), None)
-    
+    acts = load_activities()
+    act_config = next((a for a in acts if a['name'] == activity), None)
     s1_label = act_config.get('session_1_label', 'Session 1') if act_config else 'Session 1'
     s2_label = act_config.get('session_2_label', 'Session 2') if act_config else 'Session 2'
     has_s2 = bool(s2_label and s2_label.strip())
@@ -62,12 +58,12 @@ def show_checkin(selected_date):
         s1 = session_option in ["Both", s1_label]
         s2 = session_option in ["Both", s2_label]
     else:
-        st.info(f"ℹ️ Only one session: {s1_label}")
+        st.info(f"️ Only one session: {s1_label}")
         s1, s2 = True, False
     
     st.divider()
     
-    # ── QR / ID SCANNER INPUT ──────────────────────────────────
+    # 🔥 QR / ID SCANNER INPUT
     st.subheader("📱 Scan QR Code or Enter ID")
     st.caption("💡 Tip: If using a USB scanner, click the box below and scan. The system will auto-detect the ID.")
     scanned_input = st.text_input(
@@ -77,10 +73,7 @@ def show_checkin(selected_date):
         label_visibility="collapsed"
     )
     
-    if 'processing_checkin' not in st.session_state:
-        st.session_state.processing_checkin = False
-        
-    if scanned_input and len(scanned_input.strip()) > 5 and not st.session_state.processing_checkin:
+    if scanned_input and len(scanned_input.strip()) > 5:
         input_text = scanned_input.strip()
         extracted_pid = None
         
@@ -95,14 +88,12 @@ def show_checkin(selected_date):
             extracted_pid = input_text
         
         if extracted_pid:
-            st.session_state.processing_checkin = True
             process_checkin_by_id(extracted_pid, selected_date, activity, s1, s2)
-            st.session_state.processing_checkin = False
             st.rerun()
     
     st.divider()
     
-    # ── PHONE SEARCH ───────────────────────────────────────────
+    # ── PHONE SEARCH ──────────────────
     st.markdown('<div class="phone-section">', unsafe_allow_html=True)
     st.subheader("📱 Quick Check-In by Phone")
     phone_input = st.text_input("Enter 8-digit mobile number", placeholder="e.g., 91234567", key="checkin_phone")
@@ -145,38 +136,26 @@ def show_checkin(selected_date):
     st.markdown('</div>', unsafe_allow_html=True)
     st.divider()
     
-    # ── NAME LIST (PROVEN FILTER LOGIC + SORT TOGGLE) ────────
+    # ── NAME LIST ─────────────────
     show_names = st.checkbox("👁️ Show participant names", value=True, key="show_names_toggle")
     if show_names:
-        st.subheader("🔍 Find by Name")
+        st.subheader(" Find by Name")
         participants = st.session_state.get('participants', [])
         active_participants = [p for p in participants if p.get('active', True)]
         
-        # Build activity attendee set
         try:
             att_data = supabase.table('attendance').select('participant_id').eq('source', activity).execute().data
             activity_attendees = {rec['participant_id'] for rec in att_data}
-            # Sort: Put regulars at the top by default
-            active_participants.sort(key=lambda p: p['id'] in activity_attendees, reverse=True)
+            active_participants = [p for p in active_participants if p['id'] in activity_attendees]
         except:
-            activity_attendees = set()
-        
-        # 🔥 NEW: Alphabetical Sort Toggle
-        sort_az = st.checkbox("📋 Sort A–Z (Alphabetical)", value=False, key="sort_az_toggle")
+            pass
         
         name_search = st.text_input("Type name to search...", key="checkin_name_search")
         if name_search:
             s = name_search.lower()
             active_participants = [p for p in active_participants if s in p['name'].lower()]
-        else:
-            # If no search, apply sorting
-            if sort_az:
-                active_participants.sort(key=lambda p: p['name'].lower())  # A-Z Sort
-            else:
-                # Default: Show top 20 regulars
-                active_participants = active_participants[:20]
         
-        st.caption(f"Showing {len(active_participants)} participant(s)")
+        st.caption(f" Showing {len(active_participants)} participant(s)")
         
         if active_participants:
             cols = st.columns(4)
@@ -192,13 +171,10 @@ def show_checkin(selected_date):
                     except:
                         already_checked = False
                     
-                    is_regular = p['id'] in activity_attendees
-                    badge = "⭐ Regular" if is_regular else "🆕 New"
-                    
                     st.markdown(f"""
                     <div class="participant-card">
                         <h3>{p['name']}</h3>
-                        <div class="participant-info">🆔 ID: {p['id'][:12]}... | {badge}</div>
+                        <div class="participant-info">🆔 ID: {p['id'][:12]}...</div>
                     </div>
                     """, unsafe_allow_html=True)
                     

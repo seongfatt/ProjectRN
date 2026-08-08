@@ -457,10 +457,10 @@ def show_volunteer_portal(token, activity_param=None):
         # ── Option 2: Name / ID / Browse All ──
         st.markdown("**🔍 Browse Residents**")
         
-        # 🔥 Radio button to switch between Search and Browse All
+        # 🔥 NEW: Radio button to switch between Search and Browse All
         browse_mode = st.radio(
             "Select mode:",
-            ["🔎 Search by Name or ID", "📋 Show All (Filtered by Activity)"],
+            ["🔎 Search by Name or ID", "📋 Show All"],
             horizontal=True,
             key="portal_browse_mode"
         )
@@ -470,14 +470,6 @@ def show_volunteer_portal(token, activity_param=None):
             fresh_participants = supabase.table('participants').select("*").eq('active', True).execute().data
         except:
             fresh_participants = []
-        
-        # 🔥 PROVEN LOGIC FROM tab_checkin.py:
-        # Build a set of participant IDs who have attended this specific activity
-        try:
-            att_data = supabase.table('attendance').select('participant_id').eq('source', selected_activity).execute().data
-            activity_attendees = {rec['participant_id'] for rec in att_data}
-        except:
-            activity_attendees = set()
         
         filtered_participants = []
         
@@ -492,25 +484,9 @@ def show_volunteer_portal(token, activity_param=None):
             else:
                 filtered_participants = []
         else:
-            # 📋 Show All (Filtered strictly by the attendance set)
-            st.caption(f"Showing active residents for '{selected_activity}'.")
-            filtered_participants = [
-                p for p in fresh_participants 
-                if p['id'] in activity_attendees
-            ]
-            # If for some reason no one has attended before, show the top 10 active residents
-            if not filtered_participants:
-                filtered_participants = fresh_participants[:10]
-        
-        # 🔥 NEW: Sort Toggle (Regulars vs A-Z)
-        sort_az = st.checkbox("📋 Sort A–Z (Alphabetical)", value=False, key="portal_sort_az")
-        
-        # Apply sorting
-        if sort_az:
-            filtered_participants.sort(key=lambda p: p['name'].lower())
-        else:
-            # Default: Regulars (people in activity_attendees) first
-            filtered_participants.sort(key=lambda p: p['id'] in activity_attendees, reverse=True)
+            # 📋 Show All
+            st.caption("Showing all active residents.")
+            filtered_participants = fresh_participants
         
         if not filtered_participants:
             st.info("No residents found matching your search.")
@@ -519,13 +495,10 @@ def show_volunteer_portal(token, activity_param=None):
             
             # Display results in a clean list
             for p in filtered_participants:
-                is_regular = p['id'] in activity_attendees
-                badge = "⭐ Regular" if is_regular else "🆕 New"
-                
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.markdown(f"**{p['name']}**")
-                    st.caption(f"ID: {p['id'][:8]}... | {badge}")
+                    st.caption(f"ID: {p['id'][:8]}...")
                 with col2:
                     if st.button(f"✅ Check In", key=f"portal_name_check_{p['id']}", use_container_width=True):
                         with st.spinner("Processing..."):
