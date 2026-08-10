@@ -34,54 +34,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 🔥 RESPONSIVE UI: wide on desktop, auto-fit on tablet/phone
-st.set_page_config(
-    page_title="Woodlands Zone 6 Community Hub",
-    page_icon="🏘️",
-    layout="wide",                 # ← full width on PC
-    initial_sidebar_state="collapsed"
-)
+st.set_page_config(page_title="Woodlands Zone 6 - Community Hub", layout="centered", initial_sidebar_state="collapsed")
 st.markdown(MOBILE_CSS, unsafe_allow_html=True)
-
-def inject_responsive_css():
-    st.markdown("""
-    <style>
-    /* ═══════════ GLOBAL RESPONSIVE UI ═══════════ */
-    /* Desktop: use the full width nicely */
-    section.main .block-container { max-width: 1500px; padding-top: 2rem; }
-
-    /* Comfortable touch targets everywhere */
-    div[data-testid="stButton"] button {
-        min-height: 44px;
-        border-radius: 10px;
-        transition: all .15s ease;
-    }
-
-    /* Garden plot cards: fluid instead of fixed 100px */
-    .plot-box { width: 100%; max-width: 110px; min-height: 85px; }
-
-    /* ── TABLET (≤1024px) ── */
-    @media (max-width: 1024px) {
-        section.main .block-container { padding-left: 1.2rem; padding-right: 1.2rem; }
-    }
-
-    /* ── PHONE (≤640px) : big buttons, readable text ── */
-    @media (max-width: 640px) {
-        section.main .block-container { padding-left: .7rem; padding-right: .7rem; }
-        h1 { font-size: 1.55rem !important; }
-        h2 { font-size: 1.3rem !important; }
-        h3 { font-size: 1.1rem !important; }
-        div[data-testid="stButton"] button { min-height: 52px; font-size: 17px; }
-        input, select, textarea { font-size: 16px !important; min-height: 46px; }
-        div[data-testid="stMetric"] div { font-size: 1.5rem !important; }
-        div[data-testid="stMetric"] label { font-size: .85rem !important; }
-        div[data-testid="stRadio"] label, div[data-testid="stCheckbox"] label { font-size: 16px !important; }
-        .plot-box { max-width: 100% !important; min-height: 64px !important; font-size: 14px !important; }
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-inject_responsive_css()   # ← call it once
 
 # Initialize session state
 for k in ['is_authenticated','user_role','show_login','participants','plots','activities','today_date','selected_plot','selected_activity','auto_checkin_done','active_page','chairman_tc_accepted']:
@@ -904,7 +858,7 @@ if st.session_state.is_authenticated:
             {"id": "settings", "icon": "⚙️", "title": "Settings"},
             {"id": "reports", "icon": "📑", "title": "Reports"},
             {"id": "manage", "icon": "️", "title": "Manage"},
-            {"id": "garden", "icon": "", "title": "Garden"},
+            {"id": "garden", "icon": "", "title": "622 Garden"},
             {"id": "residents", "icon": "🏡", "title": "Residents"},
             {"id": "meeting", "icon": "", "title": "Meeting"},
         ]
@@ -916,7 +870,7 @@ if st.session_state.is_authenticated:
             {"id": "sessions", "icon": "📅", "title": "Sessions"},
             {"id": "vol_access", "icon": "🪪", "title": "Vol Access"},
             {"id": "reports", "icon": "📑", "title": "Reports"},
-            {"id": "garden", "icon": "🌱", "title": "Garden"},
+            {"id": "garden", "icon": "🌱", "title": "622 Garden"},
             {"id": "residents", "icon": "🏡", "title": "Residents"},
             {"id": "meeting", "icon": "📋", "title": "Meeting"},
         ]

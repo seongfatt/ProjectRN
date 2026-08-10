@@ -3,11 +3,6 @@ import random
 from datetime import datetime, timedelta, timezone
 from config import supabase, DB_CONNECTED, load_activities, refresh_data, APP_URL
 from utils import clean_phone_number, find_participant_by_phone, check_returning_guest, mask_phone, validate_checkin_time
-try:
-    from utils import sync_session_attendance_async
-except ImportError:
-    def sync_session_attendance_async(*args, **kwargs):
-        pass
 import urllib.parse
 import base64
 import os
@@ -46,10 +41,18 @@ def _get_logo_base64(logo_path="logo.png"):
 def decode_qr_from_image(image):
     """Decode QR code from PIL Image using OpenCV"""
     try:
+        # Convert PIL Image to numpy array
         img_array = np.array(image)
+        
+        # Convert to grayscale
         gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        
+        # Initialize QRCode detector
         qr_detector = cv2.QRCodeDetector()
+        
+        # Detect and decode QR code
         data, bbox, _ = qr_detector.detectAndDecode(gray)
+        
         if data:
             return data
         return None
@@ -58,14 +61,22 @@ def decode_qr_from_image(image):
         return None
 
 # ============================================
-# PROCESS CHECK-IN FUNCTION (1-4 SESSIONS)
+# PROCESS CHECK-IN FUNCTION (MATCHING REFERENCE)
 # ============================================
 
-def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
-    """Core logic: Time Validation + SESSION UPDATE (1-4 sessions). Returns True/False."""
+def process_portal_checkin(pid, date, activity, s1, s2):
+    """Core logic to mark attendance - with Time Validation"""
     try:
-        selected = [s1, s2, s3, s4]
-
+        # 🔥 TIME VALIDATION (The "Bouncer")
+        session_to_check = 1 if s1 else 2
+        is_allowed, message = validate_checkin_time(activity, session_to_check)
+        
+        if not is_allowed:
+            st.error(message)
+            st.info("💡 If this is incorrect, please contact the admin to adjust the session times or disable time validation.")
+            return False
+        
+        # Handle date format
         if isinstance(date, str):
             if len(date) == 8 and date.isdigit():
                 formatted_date = datetime.strptime(date, "%Y%m%d").strftime("%Y-%m-%d")
@@ -73,73 +84,79 @@ def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
                 formatted_date = date
         else:
             formatted_date = date.strftime("%Y-%m-%d")
-
+        
+        # 🔥 FIX: Fetch the participant details FIRST, so we have resident['name']
         res = supabase.table('participants').select("*").eq('id', pid).execute()
         if not res.data:
             st.error(f"❌ Resident ID not found: {pid}")
             return False
         resident = res.data[0]
-
+        
+        # Check existing attendance for this SPECIFIC activity
         existing = supabase.table('attendance').select("*") \
             .eq('participant_id', pid).eq('date', formatted_date).eq('source', activity).execute()
-
+        
         if existing.data and len(existing.data) > 0:
             record = existing.data[0]
-            missing = [i + 1 for i, f in enumerate(selected) if f and not record.get(f'session_{i + 1}', False)]
-
-            if not missing:
-                st.info(f"ℹ️ **{resident['name']}** is already fully checked in for {activity} today.")
-                return False
-
-            is_allowed, message = validate_checkin_time(activity, missing[0])
-            if not is_allowed:
-                st.error(message)
-                st.info("💡 If this is incorrect, please contact the admin to adjust the session times or disable time validation.")
-                return False
-
-            updates = {"timestamp": datetime.now(timezone(timedelta(hours=8))).isoformat()}
-            for n in missing:
-                updates[f'session_{n}'] = True
-            current_activities = record.get('activities') or []
-            if activity not in current_activities:
-                current_activities.append(activity)
-            updates['activities'] = current_activities
-            supabase.table('attendance').update(updates).eq('id', record['id']).execute()
-
-            sync_session_attendance_async(pid, resident['name'], activity, formatted_date,
-                                          st.session_state.get('user_role', 'volunteer'))
-            st.success(f"✅ Updated {resident['name']} with additional session(s)!")
-            return True
-
-        first_selected = next((i + 1 for i, f in enumerate(selected) if f), 1)
-        is_allowed, message = validate_checkin_time(activity, first_selected)
-        if not is_allowed:
-            st.error(message)
-            st.info("💡 If this is incorrect, please contact the admin to adjust the session times or disable time validation.")
+            current_s1 = record.get('session_1', False)
+            current_s2 = record.get('session_2', False)
+            
+            # If they are missing a session, update the record instead of blocking
+            if (s1 and not current_s1) or (s2 and not current_s2):
+                updates = {}
+                if s1 and not current_s1: updates['session_1'] = True
+                if s2 and not current_s2: updates['session_2'] = True
+                supabase.table('attendance').update(updates).eq('id', record['id']).execute()
+                
+                # Also update session_attendance
+                try:
+                    sess_records = supabase.table('sessions').select("id").eq('activity_name', activity).eq('session_date', formatted_date).execute().data
+                    for sess in sess_records:
+                        existing_sess = supabase.table('session_attendance').select("*") \
+                            .eq('participant_id', pid).eq('session_id', sess['id']).execute()
+                        if not existing_sess.data:
+                            supabase.table('session_attendance').insert({
+                                "session_id": sess['id'], 
+                                "participant_id": pid, 
+                                "name": resident['name'],  # ✅ now safe to use
+                                "status": "checked_in", 
+                                "marked_at": datetime.now(timezone(timedelta(hours=8))).isoformat()
+                            }).execute()
+                except:
+                    pass
+                    
+                st.success(f"✅ Updated {resident['name']} with additional sessions!")
+                return True
+            
+            # If both sessions are already done, then truly block
+            st.info(f"ℹ️ **{resident['name']}** is already fully checked in for {activity} today.")
             return False
-
+        
+        # If we reach here, it's a brand new check-in
+        # Insert
         supabase.table('attendance').insert({
-            "participant_id": pid, "name": resident['name'], "date": formatted_date,
-            "session_1": s1, "session_2": s2, "session_3": s3, "session_4": s4,
+            "participant_id": pid, 
+            "name": resident['name'], 
+            "date": formatted_date,
+            "session_1": s1, 
+            "session_2": s2, 
             "timestamp": datetime.now(timezone(timedelta(hours=8))).isoformat(),
-            "self_checkin": False, "source": activity,
-            "activities": [activity]
+            "self_checkin": False, 
+            "source": activity
         }).execute()
+        
         refresh_data()
-
-        sync_session_attendance_async(pid, resident['name'], activity, formatted_date,
-                                      st.session_state.get('user_role', 'volunteer'))
-
-        # Safe success message formatting
+        
+        # Professional success message
         session_text = []
-        if s1: session_text.append("Session 1")
-        if s2: session_text.append("Session 2")
-        if s3: session_text.append("Session 3")
-        if s4: session_text.append("Session 4")
-        session_display = " & ".join(session_text) if session_text else "Attendance"
+        if s1:
+            session_text.append("Session 1")
+        if s2:
+            session_text.append("Session 2")
+        session_display = " & ".join(session_text) if session_text else "No sessions"
         
         st.markdown(f"""
-        <div style="background: #e8f5e9; color: #1e7e34; padding: 20px; border-radius: 8px; border-left: 5px solid #28a745; margin: 15px 0;">
+        <div style="background: #e8f5e9; color: #1e7e34; padding: 20px; border-radius: 8px; border-left: 5px solid #28a745; margin: 15px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             <div style="display: flex; align-items: center; gap: 12px;">
                 <span style="font-size: 28px;">✅</span>
                 <div>
@@ -156,11 +173,71 @@ def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
             </div>
         </div>
         """, unsafe_allow_html=True)
+        
+        # Set flag to clear camera
         st.session_state.checkin_success = True
+        
         return True
+        
     except Exception as e:
         if 'duplicate key' in str(e):
-            st.info(f"ℹ️ Already checked in for **{activity}** today.")
+            st.info("ℹ️ Already checked in today.")
+            return False
+        else:
+            st.error(f"Error: {e}")
+            return False
+        
+        resident = res.data[0]
+        
+        # Insert
+        supabase.table('attendance').insert({
+            "participant_id": pid, 
+            "name": resident['name'], 
+            "date": formatted_date,
+            "session_1": s1, 
+            "session_2": s2, 
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "self_checkin": False, 
+            "source": activity
+        }).execute()
+        
+        refresh_data()
+        
+        # Professional success message
+        session_text = []
+        if s1:
+            session_text.append("Session 1")
+        if s2:
+            session_text.append("Session 2")
+        session_display = " & ".join(session_text) if session_text else "No sessions"
+        
+        st.markdown(f"""
+        <div style="background: #e8f5e9; color: #1e7e34; padding: 20px; border-radius: 8px; border-left: 5px solid #28a745; margin: 15px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 28px;">✅</span>
+                <div>
+                    <h4 style="margin: 0; color: #1e7e34;">Check-in Successful</h4>
+                    <p style="margin: 4px 0 0 0; font-size: 16px; font-weight: 500;">{resident['name']}</p>
+                </div>
+            </div>
+            <hr style="margin: 12px 0; border: none; border-top: 1px solid #c8e6c9;">
+            <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 14px; color: #2e7d32;">
+                <span>🕐 {datetime.now().strftime('%I:%M %p')}</span>
+                <span>📅 {datetime.strptime(formatted_date, '%Y-%m-%d').strftime('%d %b %Y')}</span>
+                <span>📋 {activity}</span>
+                <span>✅ {session_display}</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Set flag to clear camera
+        st.session_state.checkin_success = True
+        
+        return True
+        
+    except Exception as e:
+        if 'duplicate key' in str(e):
+            st.info("ℹ️ Already checked in today.")
             return False
         else:
             st.error(f"Error: {e}")
@@ -265,36 +342,26 @@ def show_volunteer_portal(token, activity_param=None):
     selected_date = st.date_input("Date", value=datetime.now().date(), key="portal_date")
     
     act_config = next((a for a in acts if a['name'] == selected_activity), None)
-    
-    # 🔥 Dynamic sessions (1-4)
-    session_labels = []
-    if act_config:
-        for i in range(1, 5):
-            lbl = (act_config.get(f'session_{i}_label') or '').strip()
-            if lbl:
-                session_labels.append(lbl)
-    if not session_labels:
-        session_labels = ['Session 1']
+    s1_label = act_config.get('session_1_label', 'Session 1') if act_config else 'Session 1'
+    s2_label = act_config.get('session_2_label', 'Session 2') if act_config else 'Session 2'
+    has_s2 = bool(s2_label and s2_label.strip())
 
     st.subheader("⏰ Step 2: Select Session")
-    if len(session_labels) == 1:
-        st.info(f"ℹ️ This activity has only one session: {session_labels[0]}")
-        flags = [True]
+    if has_s2:
+        session_option = st.radio("Which session(s)?", ["Both", s1_label, s2_label], horizontal=True, key="portal_session")
+        s1 = session_option in ["Both", s1_label]
+        s2 = session_option in ["Both", s2_label]
     else:
-        session_option = st.radio("Which session(s)?", ["All Sessions"] + session_labels, horizontal=True, key="portal_session")
-        flags = [(session_option == "All Sessions") or (session_option == lbl) for lbl in session_labels]
-    flags = (flags + [False, False, False, False])[:4]
-    s1, s2, s3, s4 = flags
+        st.info(f"ℹ️ This activity has only one session: {s1_label}")
+        s1, s2 = True, False
 
-    # Show session time info if available (🔥 Dynamically checks up to 4 sessions)
+    # Show session time info if available
     if act_config:
         time_info = []
-        for i in range(1, 5):
-            lbl = act_config.get(f'session_{i}_label', '')
-            start = act_config.get(f'session_{i}_start_time', '')
-            end = act_config.get(f'session_{i}_end_time', '')
-            if lbl and start and end:
-                time_info.append(f"🕐 {lbl}: {start} - {end}")
+        if s1 and act_config.get('session_1_start') and act_config.get('session_1_end'):
+            time_info.append(f"🕐 {s1_label}: {act_config['session_1_start']} - {act_config['session_1_end']}")
+        if s2 and act_config.get('session_2_start') and act_config.get('session_2_end'):
+            time_info.append(f"🕐 {s2_label}: {act_config['session_2_start']} - {act_config['session_2_end']}")
         
         if time_info:
             st.markdown('<div class="time-info-box">', unsafe_allow_html=True)
@@ -319,10 +386,12 @@ def show_volunteer_portal(token, activity_param=None):
         </div>
         """, unsafe_allow_html=True)
         
+        # Clear check-in success flag to reset camera
         if st.session_state.get('checkin_success', False):
             st.session_state.checkin_success = False
             st.rerun()
         
+        # QR Scanner using st.camera_input
         st.markdown("""
         <div class="qr-scanner-container">
             <h4 style="color: #667eea; margin-top: 0;">📸 Camera Scanner</h4>
@@ -330,6 +399,7 @@ def show_volunteer_portal(token, activity_param=None):
         </div>
         """, unsafe_allow_html=True)
         
+        # Use the native camera input
         camera_image = st.camera_input(
             "📸 Position the QR code in the frame and click capture", 
             key="qr_camera",
@@ -339,40 +409,57 @@ def show_volunteer_portal(token, activity_param=None):
         
         if camera_image is not None:
             try:
+                # Convert to PIL Image
                 image = Image.open(camera_image)
-                st.image(image, caption="📸 Captured Image", width=None, use_container_width=True)
                 
+                # Show preview
+                st.image(
+                    image, 
+                    caption="📸 Captured Image", 
+                    width=None,
+                    use_container_width=True
+                )
+                
+                # Decode QR code
                 with st.spinner("🔍 Scanning QR code..."):
                     qr_data = decode_qr_from_image(image)
                 
                 if qr_data:
                     st.markdown('<div class="status-success">✅ QR Code detected successfully!</div>', unsafe_allow_html=True)
+                    
+                    # Show QR data in an expandable section
                     with st.expander("📋 View QR Data"):
                         st.code(qr_data, language="text")
                     
+                    # Process the QR code
                     extracted_pid = qr_data
                     if 'pid=' in qr_data:
                         try:
                             parsed_url = urllib.parse.urlparse(qr_data)
                             query_params = urllib.parse.parse_qs(parsed_url.query)
                             extracted_pid = query_params.get('pid', [None])[0]
-                        except: pass
+                        except: 
+                            pass
                     
                     if extracted_pid and len(str(extracted_pid)) > 5:
+                        # Check if resident exists
                         try:
                             resident = supabase.table('participants').select("*").eq('id', extracted_pid).execute()
                             if resident.data:
                                 resident_name = resident.data[0]['name']
                                 resident_type = "🆕 New" if resident.data[0].get('is_new') else "⭐ Regular"
+                                
+                                # Display resident info in a nice format
                                 col1, col2 = st.columns([3, 1])
                                 with col1:
                                     st.info(f"👤 **Resident:** {resident_name}\n\n📋 **Status:** {resident_type}")
                                 with col2:
+                                    # Check-in button with confirmation
                                     if st.button("✅ Check In Now", type="primary", use_container_width=True, key="checkin_btn"):
                                         with st.spinner("Processing check-in..."):
-                                            # 🔥 Pass s1, s2, s3, s4
-                                            success = process_portal_checkin(extracted_pid, selected_date, selected_activity, s1, s2, s3, s4)
+                                            success = process_portal_checkin(extracted_pid, selected_date, selected_activity, s1, s2)
                                             if success:
+                                                # Clear the camera input by rerunning
                                                 st.rerun()
                             else:
                                 st.markdown('<div class="status-error">❌ Resident not found in database. Please check the QR code.</div>', unsafe_allow_html=True)
@@ -382,17 +469,23 @@ def show_volunteer_portal(token, activity_param=None):
                         st.markdown('<div class="status-error">❌ Invalid QR code format. Could not extract resident ID.</div>', unsafe_allow_html=True)
                 else:
                     st.markdown('<div class="status-error">❌ No QR code detected. Please try again with a clear image.</div>', unsafe_allow_html=True)
+                    
+                    # Helpful tips with icons
                     with st.expander("💡 Tips for better scanning"):
                         st.markdown("""
                         - **💡 Ensure good lighting** - Avoid shadows or glare on the QR code
                         - **📱 Hold steady** - Keep the camera still when taking the photo
                         - **📏 Proper distance** - QR code should fill about 30-50% of the frame
                         - **🎯 Focus** - Tap the screen to focus on the QR code
+                        - **🔍 Clear image** - Make sure the QR code is not blurry
+                        - **📐 Full visibility** - Ensure the entire QR code is visible in the frame
                         """)
+                    
             except Exception as e:
                 st.error(f"Error processing image: {e}")
                 st.info("Please try taking another photo.")
         else:
+            # Show ready message when camera is idle
             st.markdown("""
             <div style="text-align: center; color: #666; padding: 10px;">
                 <span style="font-size: 14px;">📷 Ready for next scan. Take a photo to continue.</span>
@@ -402,6 +495,7 @@ def show_volunteer_portal(token, activity_param=None):
         st.divider()
         st.markdown("<p style='color: #1a1a1a !important; font-weight: bold; margin-bottom: 5px;'>⌨️ Or enter manually:</p>", unsafe_allow_html=True)
         
+        # 🔥 FIX: Use a separate session_state flag to trigger a clear, NOT modify the widget's key directly
         if 'clear_manual_qr' not in st.session_state:
             st.session_state.clear_manual_qr = False
             
@@ -427,11 +521,12 @@ def show_volunteer_portal(token, activity_param=None):
                     parsed_url = urllib.parse.urlparse(input_text)
                     query_params = urllib.parse.parse_qs(parsed_url.query)
                     extracted_pid = query_params.get('pid', [None])[0]
-                except: pass
+                except: 
+                    pass
             if extracted_pid and len(str(extracted_pid)) > 5:
-                # 🔥 Pass s1, s2, s3, s4
-                success = process_portal_checkin(extracted_pid, selected_date, selected_activity, s1, s2, s3, s4)
+                success = process_portal_checkin(extracted_pid, selected_date, selected_activity, s1, s2)
                 if success:
+                    # 🔥 FIX: Set the clear flag, do NOT modify the widget key directly
                     st.session_state.clear_manual_qr = True
                     st.rerun()
 
@@ -443,6 +538,7 @@ def show_volunteer_portal(token, activity_param=None):
         </div>
         """, unsafe_allow_html=True)
         
+        # ── Option 1: Phone Search ──
         st.markdown("**📞 Quick Phone Check-In**")
         phone_input = st.text_input("Enter 8-digit mobile number", placeholder="e.g., 91234567", key="portal_phone")
         if phone_input and len(clean_phone_number(phone_input)) >= 8:
@@ -453,16 +549,18 @@ def show_volunteer_portal(token, activity_param=None):
                 st.success(f"✅ **Resident Found:** {resident['name']} ({status_text})")
                 if st.button("✅ Check In (Phone)", type="primary", use_container_width=True, key="portal_checkin_phone"):
                     with st.spinner("Processing check-in..."):
-                        # 🔥 Pass s1, s2, s3, s4
-                        success = process_portal_checkin(resident['id'], selected_date, selected_activity, s1, s2, s3, s4)
+                        success = process_portal_checkin(resident['id'], selected_date, selected_activity, s1, s2)
                         if success:
                             st.rerun()
             else:
                 st.info("📱 Phone number not found. Try searching by name below.")
 
         st.divider()
+        
+        # ── Option 2: Name / ID / Browse All ──
         st.markdown("**🔍 Browse Residents**")
         
+        # 🔥 Radio button to switch between Search and Browse All
         browse_mode = st.radio(
             "Select mode:",
             ["🔎 Search by Name or ID", "📋 Show All (All Active Residents)"],
@@ -470,6 +568,7 @@ def show_volunteer_portal(token, activity_param=None):
             key="portal_browse_mode"
         )
         
+        # Fetch fresh data directly from Supabase
         try:
             fresh_participants = supabase.table('participants').select("*").eq('active', True).execute().data
         except:
@@ -488,9 +587,12 @@ def show_volunteer_portal(token, activity_param=None):
             else:
                 filtered_participants = []
         else:
+            # 📋 Show All (No filtering by attendance, just show EVERY active resident)
             st.caption(f"Showing ALL active residents in the system.")
             filtered_participants = fresh_participants
         
+        # 🔥 Sort Toggle (Regulars vs A-Z)
+        # Build a set of regulars so we can sort them to the top
         try:
             att_data = supabase.table('attendance').select('participant_id').eq('source', selected_activity).execute().data
             activity_attendees = {rec['participant_id'] for rec in att_data}
@@ -499,18 +601,23 @@ def show_volunteer_portal(token, activity_param=None):
             
         sort_az = st.checkbox("📋 Sort A–Z (Alphabetical)", value=False, key="portal_sort_az")
         
+        # Apply sorting
         if sort_az:
             filtered_participants.sort(key=lambda p: p['name'].lower())
         else:
+            # Default: Regulars (people in activity_attendees) first
             filtered_participants.sort(key=lambda p: p['id'] in activity_attendees, reverse=True)
         
         if not filtered_participants:
             st.info("No residents found matching your search.")
         else:
             st.caption(f"Showing {len(filtered_participants)} resident(s). Tap the button to check in.")
+            
+            # Display results in a clean list
             for p in filtered_participants:
                 is_regular = p['id'] in activity_attendees
                 badge = "⭐ Regular" if is_regular else "🆕 New"
+                
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.markdown(f"**{p['name']}**")
@@ -518,8 +625,7 @@ def show_volunteer_portal(token, activity_param=None):
                 with col2:
                     if st.button(f"✅ Check In", key=f"portal_name_check_{p['id']}", use_container_width=True):
                         with st.spinner("Processing..."):
-                            # 🔥 Pass s1, s2, s3, s4
-                            success = process_portal_checkin(p['id'], selected_date, selected_activity, s1, s2, s3, s4)
+                            success = process_portal_checkin(p['id'], selected_date, selected_activity, s1, s2)
                             if success:
                                 st.rerun()
 
@@ -531,6 +637,7 @@ def show_volunteer_portal(token, activity_param=None):
         </div>
         """, unsafe_allow_html=True)
         
+        # 🔥 FIX: REMOVED st.form TO ALLOW INSTANT CHECKBOX REACTIVITY
         name = st.text_input("Full Name *", placeholder="e.g., AHMAD BIN ISMAIL", key="portal_reg_name")
         contact = st.text_input("Contact Number", placeholder="e.g., 91234567", key="portal_reg_contact")
         no_phone = st.checkbox("👴 I do not have a phone", key="portal_reg_no_phone")
@@ -540,11 +647,13 @@ def show_volunteer_portal(token, activity_param=None):
         st.markdown("**👤 Member Type:**")
         member_type = st.radio("Select member category:", ["Resident", "RN Member", "Volunteer Member", "Gardener"], horizontal=True, key="portal_reg_member_type", help="RN Member = Resident Network Committee | Volunteer Member = Activity Volunteer")
         
+        # 🔥 This checkbox now works instantly because it's outside the form
         block_consent = st.checkbox("🏢 I agree to share my block information (Optional)", key="portal_reg_block_consent")
         block_no = ""
         if block_consent: 
             block_no = st.text_input("Block No.", placeholder="e.g., 622, 624A", key="portal_reg_block_no").strip().upper()
         
+        # Use a standard button instead of st.form_submit_button
         if st.button("Register & Check In", type="primary", use_container_width=True, key="portal_reg_submit"):
             if not name.strip(): 
                 st.error("❌ Name is required")
@@ -580,8 +689,7 @@ def show_volunteer_portal(token, activity_param=None):
                         "registration_date": datetime.now().strftime("%Y-%m-%d"),
                         "member_type": member_type
                     }).execute()
-                    # 🔥 Pass s1, s2, s3, s4
-                    success = process_portal_checkin(new_id, selected_date, selected_activity, s1, s2, s3, s4)
+                    success = process_portal_checkin(new_id, selected_date, selected_activity, s1, s2)
                     if success:
                         st.success(f"✅ {name.strip().upper()} registered as **{member_type}** & checked in successfully!")
                         st.info(f"Resident ID: `{new_id}`")
@@ -611,3 +719,7 @@ def show_volunteer_portal(token, activity_param=None):
         st.error(f"Error loading stats: {e}")
     
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Portal | Token-based access")
+
+# ============================================
+# END OF FILE
+# ============================================

@@ -48,10 +48,13 @@ def show_checkin(selected_date):
         st.error("Database not connected")
         return
 
+    # ── LOAD ACTIVITY ───────────────────────────────────────────
     acts = load_activities()
     act_list = list(acts.values()) if isinstance(acts, dict) else acts
+
     activity = st.session_state.get('selected_activity', 'Cardio Drumming')
 
+    # 🔥 Clear old banner when date/activity changes
     ctx = f"{selected_date}|{activity}"
     if st.session_state.get('checkin_ctx') != ctx:
         st.session_state['checkin_ctx'] = ctx
@@ -81,6 +84,7 @@ def show_checkin(selected_date):
     flags = (flags + [False, False, False, False])[:4]
     s1, s2, s3, s4 = flags
 
+    # 🔥 Session-aware: "fully checked" = ALL selected sessions done
     def _fully_checked(rec):
         if not rec:
             return False
@@ -257,6 +261,7 @@ def process_checkin_by_id(pid, date, activity, s1, s2, s3=False, s4=False):
     try:
         selected = [s1, s2, s3, s4]
 
+        # Handle date format
         if isinstance(date, str):
             if len(date) == 8 and date.isdigit():
                 formatted_date = datetime.strptime(date, "%Y%m%d").strftime("%Y-%m-%d")
@@ -265,23 +270,27 @@ def process_checkin_by_id(pid, date, activity, s1, s2, s3=False, s4=False):
         else:
             formatted_date = date.strftime("%Y-%m-%d")
 
+        # Fetch resident FIRST
         res = supabase.table('participants').select("*").eq('id', pid).execute()
         if not res.data:
             st.error(f"❌ Resident ID not found: {pid}")
             return False
         resident = res.data[0]
 
+        # Check existing attendance for THIS activity + date
         existing = supabase.table('attendance').select("*") \
             .eq('participant_id', pid).eq('date', formatted_date).eq('source', activity).execute()
 
         if existing.data and len(existing.data) > 0:
             record = existing.data[0]
+            # 🔥 Which SELECTED sessions are still missing?
             missing = [i + 1 for i, f in enumerate(selected) if f and not record.get(f'session_{i + 1}', False)]
 
             if not missing:
                 st.info(f"ℹ️ **{resident['name']}** is already fully checked in for {activity} today.")
                 return False
 
+            # 🔥 UPDATE the record with the missing session(s) — no more "already checked in" block
             is_allowed, message = validate_checkin_time(activity, missing[0])
             if not is_allowed:
                 st.error(message)
@@ -291,11 +300,10 @@ def process_checkin_by_id(pid, date, activity, s1, s2, s3=False, s4=False):
             updates = {"timestamp": datetime.now(timezone.utc).isoformat()}
             for n in missing:
                 updates[f'session_{n}'] = True
-            current_activities = record.get('activities') or []
-            if activity not in current_activities:
-                current_activities.append(activity)
-            updates['activities'] = current_activities
-
+                current_activities = record.get('activities') or []
+                if activity not in current_activities:
+                    current_activities.append(activity)
+            updates['activities'] = current_activities   # 🔥 NEW   
             supabase.table('attendance').update(updates).eq('id', record['id']).execute()
             refresh_data()
 
@@ -305,6 +313,7 @@ def process_checkin_by_id(pid, date, activity, s1, s2, s3=False, s4=False):
             st.session_state['scan_banner'] = ('success', f"✅ Updated **{resident['name']}** with additional session(s)!")
             return True
 
+        # ── Brand new check-in ──
         first_selected = next((i + 1 for i, f in enumerate(selected) if f), 1)
         is_allowed, message = validate_checkin_time(activity, first_selected)
         if not is_allowed:

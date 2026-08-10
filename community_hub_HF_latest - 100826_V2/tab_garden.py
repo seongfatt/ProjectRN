@@ -25,13 +25,12 @@ def load_garden_layout(block_name):
         print(f"Error loading layout: {e}")
         return []
 
-def save_garden_layout(block_name, plot_num, row, col, plot_type, section=None):
+def save_garden_layout(block_name, plot_num, row, col, plot_type):
     if not DB_CONNECTED: return False
     try:
         supabase.table('garden_layout').upsert({
             'block_name': block_name, 'plot_number': plot_num,
-            'grid_row': row, 'grid_col': col, 'plot_type': plot_type,
-            'section': section
+            'grid_row': row, 'grid_col': col, 'plot_type': plot_type
         }, on_conflict='block_name, plot_number').execute()
         return True
     except Exception as e:
@@ -60,15 +59,15 @@ def get_plot_type_color(plot_type):
     return PLOT_TYPES.get(plot_type, PLOT_TYPES["B"])["colour"]
 
 def generate_default_layout(block_name, total_plots=76):
+    """Generates a default layout. Now supports dynamic plot counts."""
     rows = []
     for i in range(1, total_plots + 1):
         rows.append({'block_name': block_name, 'plot_number': i,
-                     'grid_row': (i - 1) // 10, 'grid_col': (i - 1) % 10,
-                     'plot_type': 'B', 'section': None})
+                     'grid_row': (i - 1) // 10, 'grid_col': (i - 1) % 10, 'plot_type': 'B'})
     return rows
 
 def seed_block_plots(block_name, layout_items):
-    """Create empty garden_plots rows for layout plots that don't exist yet."""
+    """🔥 Create empty garden_plots rows for layout plots that don't exist yet."""
     if not DB_CONNECTED: return 0
     try:
         existing = supabase.table('garden_plots').select('plot_number').eq('block_name', block_name).execute().data or []
@@ -84,6 +83,7 @@ def seed_block_plots(block_name, layout_items):
         return 0
 
 def rename_garden_block(old_name, new_name):
+    """🔥 Renames BOTH layout and plots so they never desync."""
     if not DB_CONNECTED: return False
     try:
         supabase.table('garden_layout').update({'block_name': new_name}).eq('block_name', old_name).execute()
@@ -102,26 +102,6 @@ def delete_garden_block(block_name):
         print(f"Error deleting block: {e}")
         return False
 
-def _fallback_section(pn):
-    """Old mapping for legacy rows that have no section value."""
-    if pn <= 9: return "Section 1"
-    if pn <= 20: return "Section 2"
-    if pn <= 29: return "Section 3"
-    if pn <= 38: return "Section 4"
-    if pn <= 47: return "Section 5"
-    if pn <= 58: return "Section 6"
-    if pn <= 67: return "Section 7"
-    return "Section 8"
-
-def _group_sections(layout_data):
-    """Group layout rows by section, ordered by first plot number."""
-    sections = {}
-    for item in layout_data:
-        sec = item.get('section') or _fallback_section(item['plot_number'])
-        sections.setdefault(sec, []).append(item)
-    ordered = sorted(sections.keys(), key=lambda s: min(p['plot_number'] for p in sections[s]))
-    return {s: sorted(sections[s], key=lambda x: x['plot_number']) for s in ordered}
-
 # ─── MAIN FUNCTION ───────────────────────────────────────────
 def show_garden():
     st.header("🌱 Roof Top Garden")
@@ -138,9 +118,8 @@ def show_garden():
         existing_blocks = ['Block 622']
     selected_block = st.selectbox("📍 Select Garden Block", existing_blocks, index=0, key="garden_block_selector")
 
-    # ── 2. Load Data (STRICT BLOCK ISOLATION) ─────────────────
+    # ── 2. Load Data (🔥 TRUE BLOCK ISOLATION) ─────────────────
     plots = load_plots()
-    # 🔥 CRITICAL FIX: Define block_plots here so it's available everywhere
     block_plots = [p for p in plots if (p.get('block_name') or '').strip() == selected_block]
     plots_dict = {p['plot_number']: p for p in block_plots}
     current_block_layout = load_garden_layout(selected_block)
@@ -152,7 +131,8 @@ def show_garden():
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("💲 Paid", 0); c2.metric("🤝 Unpaid (Pending)", 0)
         c3.metric("🌱 Community Stewarded", 0); c4.metric("🟩 Available", 0)
-        st.caption(f"📊 **System Wide:** {len([p for p in plots if p.get('occupied')])} plots occupied across all blocks.")
+        total_occupied_all_blocks = len([p for p in plots if p.get('occupied')])
+        st.caption(f"📊 **System Wide:** {total_occupied_all_blocks} plots occupied across all blocks.")
         st.markdown("---")
         st.markdown("### Garden Grid Overview")
         st.info("No plots to display for this block.")
@@ -160,7 +140,7 @@ def show_garden():
     else:
         current_block_plot_nums = [item['plot_number'] for item in current_block_layout]
         total_plots_in_block = len(current_block_plot_nums)
-        occupied = paid_count = unpaid_count = community_count = 0
+        occupied = 0; paid_count = 0; unpaid_count = 0; community_count = 0
         for p in block_plots:
             if p['plot_number'] not in current_block_plot_nums:
                 continue
@@ -177,7 +157,8 @@ def show_garden():
         c1.metric("💲 Paid", paid_count); c2.metric("🤝 Unpaid (Pending)", unpaid_count)
         c3.metric("🌱 Community Stewarded", community_count)
         c4.metric("🟩 Available", total_plots_in_block - occupied)
-        st.caption(f"📊 **System Wide:** {len([p for p in plots if p.get('occupied')])} plots occupied across all blocks.")
+        total_occupied_all_blocks = len([p for p in plots if p.get('occupied')])
+        st.caption(f"📊 **System Wide:** {total_occupied_all_blocks} plots occupied across all blocks.")
         st.markdown("---")
         st.markdown("### Legend")
         l1, l2, l3, l4 = st.columns(4)
@@ -186,75 +167,85 @@ def show_garden():
         with l3: st.markdown("🌱 **Community Stewarded** – Dashed border")
         with l4: st.markdown("⬛ **Empty Plot** – Unplanted")
         st.markdown("---")
-
-        # ── 3. Visual Grid Display (🔥 SECTION-DRIVEN) ─────────
+        
+        # ── 3. Visual Grid Display (block-scoped) ─────────────
         st.markdown("### Garden Grid Overview")
         price = float(get_setting('garden_monthly_rent', '15.00'))
-        sections = _group_sections(layout_data)
-        for sec_name, sec_items in sections.items():
-            st.subheader(f"{sec_name} ({len(sec_items)} plots)")
-            max_row = max([i['grid_row'] for i in sec_items]) + 1
-            max_col = max([i['grid_col'] for i in sec_items]) + 1
-            grid = [[None for _ in range(max_col)] for _ in range(max_row)]
-            for item in sec_items:
-                grid[item['grid_row']][item['grid_col']] = item['plot_number']
-            for row in grid:
-                cols_ui = st.columns(len(row))
-                for col_idx, plot_num in enumerate(row):
-                    with cols_ui[col_idx]:
-                        if plot_num is None:
-                            st.empty(); continue
-                        layout_item = next((item for item in layout_data if item['plot_number'] == plot_num), None)
-                        plot_type = layout_item['plot_type'] if layout_item and 'plot_type' in layout_item else 'B'
-                        pd_item = plots_dict.get(plot_num, {'occupied': False, 'user_id': None})
-                        occ = pd_item.get('occupied', False)
-                        is_paid = pd_item.get('paid', False)
-                        color = get_plot_type_color(plot_type)
-                        if occ and is_paid:
-                            border_style = "border: 2px solid #ffffff; box-shadow: 0 2px 5px rgba(255,255,255,0.2);"
-                            opacity_style = "opacity: 1.0;"
-                            icon_html = '<div style="position:absolute; top:4px; right:6px; font-size:14px; font-weight:bold; color:#ffffff; text-shadow: 0 0 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.6), 0 0 12px rgba(0,0,0,0.4);">💲</div>'
-                            renewal_date_str = pd_item.get('renewal_due_date')
-                            if renewal_date_str:
-                                try:
-                                    renewal_date = datetime.strptime(str(renewal_date_str)[:10], "%Y-%m-%d").date()
-                                    days_left = (renewal_date - datetime.now().date()).days
-                                    if 0 <= days_left <= 30:
-                                        border_style = "border: 3px solid #ff4444; box-shadow: 0 0 10px #ff4444;"
-                                except: pass
-                        elif occ and not is_paid:
-                            border_style = "border: 2px solid #ffffff; box-shadow: 0 2px 5px rgba(255,255,255,0.2);"
-                            opacity_style = "opacity: 1.0;"
-                            icon_html = '<div style="position:absolute; top:4px; right:6px; font-size:12px;">🤝</div>'
-                        elif not occ:
-                            border_style = "border: 2px dashed #00ffff; box-shadow: 0 0 8px #00ffff;"
-                            opacity_style = "opacity: 0.8;"
-                            icon_html = '<div style="position:absolute; top:4px; right:6px; font-size:12px;">🌱</div>'
-                        box_count = PLOT_TYPES.get(plot_type, PLOT_TYPES["B"]).get("boxes", 0)
-                        st.markdown(
-                            f'<div class="plot-box" style="position:relative; background:{color}; {opacity_style} {border_style} border-radius:8px; width:100%; max-width:110px; min-height:85px; margin:0 auto; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; color:white; font-weight:bold; font-size:16px; box-sizing:border-box;">'
-                            f'{icon_html}{plot_num}'
-                            f'<div style="font-size:10px;color:#fff;margin-top:2px;">${price:.0f}/mo</div>'
-                            f'<div style="font-size:8px;color:#ddd;margin-top:1px;">{box_count} boxes</div></div>',
-                            unsafe_allow_html=True)
+        if layout_data:
+            sections = {}
+            for item in layout_data:
+                if item['plot_number'] <= 9: sec = "Section 1"
+                elif item['plot_number'] <= 20: sec = "Section 2"
+                elif item['plot_number'] <= 29: sec = "Section 3"
+                elif item['plot_number'] <= 38: sec = "Section 4"
+                elif item['plot_number'] <= 47: sec = "Section 5"
+                elif item['plot_number'] <= 58: sec = "Section 6"
+                elif item['plot_number'] <= 67: sec = "Section 7"
+                else: sec = "Section 8"
+                sections.setdefault(sec, []).append(item)
+            for sec_name, sec_items in sections.items():
+                st.subheader(sec_name)
+                max_row = max([i['grid_row'] for i in sec_items]) + 1
+                max_col = max([i['grid_col'] for i in sec_items]) + 1
+                grid = [[None for _ in range(max_col)] for _ in range(max_row)]
+                for item in sec_items:
+                    grid[item['grid_row']][item['grid_col']] = item['plot_number']
+                for row in grid:
+                    cols_ui = st.columns(len(row))
+                    for col_idx, plot_num in enumerate(row):
+                        with cols_ui[col_idx]:
+                            if plot_num is None:
+                                st.empty(); continue
+                            layout_item = next((item for item in layout_data if item['plot_number'] == plot_num), None)
+                            plot_type = layout_item['plot_type'] if layout_item and 'plot_type' in layout_item else 'B'
+                            pd_item = plots_dict.get(plot_num, {'occupied': False, 'user_id': None})
+                            occ = pd_item.get('occupied', False)
+                            is_paid = pd_item.get('paid', False)
+                            color = get_plot_type_color(plot_type)
+                            if occ and is_paid:
+                                border_style = "border: 2px solid #ffffff; box-shadow: 0 2px 5px rgba(255,255,255,0.2);"
+                                opacity_style = "opacity: 1.0;"
+                                icon_html = '<div style="position:absolute; top:4px; right:6px; font-size:14px; font-weight:bold; color:#ffffff; text-shadow: 0 0 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.6), 0 0 12px rgba(0,0,0,0.4);">💲</div>'
+                                renewal_date_str = pd_item.get('renewal_due_date')
+                                if renewal_date_str:
+                                    try:
+                                        renewal_date = datetime.strptime(str(renewal_date_str)[:10], "%Y-%m-%d").date()
+                                        days_left = (renewal_date - datetime.now().date()).days
+                                        if 0 <= days_left <= 30:
+                                            border_style = "border: 3px solid #ff4444; box-shadow: 0 0 10px #ff4444;"
+                                    except: pass
+                            elif occ and not is_paid:
+                                border_style = "border: 2px solid #ffffff; box-shadow: 0 2px 5px rgba(255,255,255,0.2);"
+                                opacity_style = "opacity: 1.0;"
+                                icon_html = '<div style="position:absolute; top:4px; right:6px; font-size:12px;">🤝</div>'
+                            elif not occ:
+                                border_style = "border: 2px dashed #00ffff; box-shadow: 0 0 8px #00ffff;"
+                                opacity_style = "opacity: 0.8;"
+                                icon_html = '<div style="position:absolute; top:4px; right:6px; font-size:12px;">🌱</div>'
+                            box_count = PLOT_TYPES.get(plot_type, PLOT_TYPES["B"]).get("boxes", 0)
+                            st.markdown(
+                                f'<div style="position:relative; background:{color}; {opacity_style} {border_style} border-radius:8px; width:100px; height:85px; margin:0 auto; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; color:white; font-weight:bold; font-size:16px; box-sizing:border-box;">'
+                                f'{icon_html}{plot_num}'
+                                f'<div style="font-size:10px;color:#fff;margin-top:2px;">${price:.0f}/mo</div>'
+                                f'<div style="font-size:8px;color:#ddd;margin-top:1px;">{box_count} boxes</div></div>',
+                                unsafe_allow_html=True)
     st.divider()
 
     # ── 4. Admin Operation Panel ──────────────────────────────
-    if st.session_state.user_role == 'admin':
+    if st.session_state.get('user_role') == 'admin':
         st.subheader("🛠️ Admin Operation Panel")
         if 'admin_garden_tab' not in st.session_state:
             st.session_state.admin_garden_tab = "🗺️ Edit Garden Map"
-        # 🔥 FIX: radio persists across reruns (st.tabs always resets to first tab)
-        admin_panel = st.radio("Panel", ["➕ Smart Assignment", "📋 Manage Existing", "🗺️ Edit Garden Map"],
-                            horizontal=True, key="admin_garden_tab", label_visibility="collapsed")
-        if admin_panel == "➕ Smart Assignment":
+        tab_assign, tab_list, tab_layout = st.tabs(["➕ Smart Assignment", "📋 Manage Existing", "🗺️ Edit Garden Map"])
+        
+        with tab_assign:
             st.markdown("#### Quick Assign or Swap a Plot")
             search_query = st.text_input("🔍 Search Resident (Type Name, Phone, or ID)", placeholder="e.g., 91234567 or AHMAD", key="admin_search")
             selected_participant = None
             current_plot_num = None
             if search_query:
                 s = search_query.strip().lower()
-                participants = st.session_state.participants
+                participants = st.session_state.get('participants', [])
                 clean_phone = clean_phone_number(search_query)
                 if len(clean_phone) >= 8:
                     selected_participant = find_participant_by_phone(clean_phone)
@@ -275,8 +266,7 @@ def show_garden():
                     st.warning(f"⚠️ {selected_participant['name']} owns **Plot {current_plot_num} in {selected_block}**. Assigning below will SWAP it.")
                 if own_elsewhere:
                     st.info(f"🏢 **Gentle reminder:** {selected_participant['name']} also owns Plot {own_elsewhere['plot_number']} in {own_elsewhere.get('block_name')}. Assigning here is an **ADDITIONAL** rental — that plot will NOT be released.")
-                available_plots = [plots_dict.get(i['plot_number']) for i in current_block_layout if not plots_dict.get(i['plot_number'], {}).get('occupied')]
-                available_plots = [p for p in available_plots if p]
+                available_plots = [p for p in plots_dict.values() if not p.get('occupied')]
                 if current_plot_num:
                     available_plots = [p for p in available_plots if p.get('plot_number') != current_plot_num]
                 if not available_plots:
@@ -317,15 +307,16 @@ def show_garden():
                             st.error(f"Error during assignment: {e}")
             else:
                 st.info("🔍 Start typing above to search for a resident.")
-
-        elif admin_panel == "📋 Manage Existing":
+                
+        with tab_list:
             st.markdown("#### Manage All Plots")
+            # 🔥 Dynamic max_value based on actual plots in block
             max_plot_search = max([76] + [p['plot_number'] for p in block_plots] + [i['plot_number'] for i in layout_data]) if (block_plots or layout_data) else 76
             plot_edit_num = st.number_input("🔍 Enter Plot Number to Edit", min_value=1, max_value=max_plot_search, value=1, step=1, key="plot_edit_search")
             found_plot = next((p for p in block_plots if p['plot_number'] == plot_edit_num), None)
             found_layout = next((l for l in layout_data if l['plot_number'] == plot_edit_num), None)
             if not found_layout:
-                st.warning(f"⚠️ Plot {plot_edit_num} does not exist in the layout for {selected_block}. Please add it first in 'Edit Garden Map'.")
+                st.warning(f"⚠️ Plot {plot_edit_num} does not exist in the layout for {selected_block}.")
             else:
                 is_occupied = found_plot.get('occupied', False) if found_plot else False
                 owner_id = found_plot.get('user_id') if found_plot else None
@@ -350,10 +341,9 @@ def show_garden():
                         if new_plot_type != current_plot_type:
                             try:
                                 supabase.table('garden_layout').update({'plot_type': new_plot_type}).eq('block_name', selected_block).eq('plot_number', plot_edit_num).execute()
-                                if found_plot:
-                                    supabase.table('garden_plots').update({'plot_type': new_plot_type}).eq('block_name', selected_block).eq('plot_number', plot_edit_num).execute()
+                                supabase.table('garden_plots').update({'plot_type': new_plot_type}).eq('block_name', selected_block).eq('plot_number', plot_edit_num).execute()
                                 log_action(st.session_state.user_role, "CHANGE_PLOT_SIZE", f"Plot {plot_edit_num} ({selected_block}) {current_plot_type}→{new_plot_type}", str(plot_edit_num))
-                                st.success(f"✅ Plot {plot_edit_num} size updated to Type {new_plot_type}!")
+                                st.success(f"✅ Plot {plot_edit_num} size updated!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error updating size: {e}")
@@ -395,88 +385,14 @@ def show_garden():
                             log_action('admin', 'RELEASE_PLOT', f"Plot {plot_edit_num} ({selected_block}) force released", str(plot_edit_num))
                             st.success(f"Plot {plot_edit_num} released!")
                             st.rerun()
-
-        elif admin_panel == "🗺️ Edit Garden Map":
+                            
+        with tab_layout:
             st.markdown("#### Design Your Garden Map")
-            st.caption("💡 Create, rename or delete blocks, build custom sections, or fine-tune with the interactive grid.")
-
-            # ══════════ 🧩 SECTION BUILDER (full-width card) ══════════
-            st.markdown("""
-            <style>
-                .sb-card {background:#161616;border:1px solid #2e2e2e;border-radius:12px;padding:18px 18px 10px 18px;margin:10px 0 16px 0;}
-                .sb-title {font-size:17px;font-weight:800;color:#ffffff;margin:0;}
-                .sb-sub {font-size:12px;color:#9a9a9a;margin:4px 0 14px 0;}
-                .sb-head {font-size:10px;font-weight:800;color:#7f7f7f;text-transform:uppercase;letter-spacing:1px;}
-                .sb-total {background:#1f2937;border:1px solid #374151;border-radius:8px;padding:8px 12px;color:#e5e7eb;font-size:13px;}
-            </style>
-            """, unsafe_allow_html=True)
-
-            st.markdown('<div class="sb-card">', unsafe_allow_html=True)
-            st.markdown('<p class="sb-title">🧩 Section Builder</p>', unsafe_allow_html=True)
-            st.markdown('<p class="sb-sub">Define each section with its own Rows × Cols. Plot numbers run sequentially across sections (e.g. WCC = one 2×7 section = 14 plots).</p>', unsafe_allow_html=True)
-
-            sb_key = f"sb_rows_{selected_block}"
-            if sb_key not in st.session_state:
-                st.session_state[sb_key] = [{"name": "Section 1", "rows": 2, "cols": 7, "ptype": "B"}]
-            sb_rows = st.session_state[sb_key]
-
-            # Header row
-            hd = st.columns([3, 1, 1, 1, 1, 0.6])
-            hd[0].markdown('<span class="sb-head">Section Name</span>', unsafe_allow_html=True)
-            hd[1].markdown('<span class="sb-head">Rows</span>', unsafe_allow_html=True)
-            hd[2].markdown('<span class="sb-head">Cols</span>', unsafe_allow_html=True)
-            hd[3].markdown('<span class="sb-head">Type</span>', unsafe_allow_html=True)
-            hd[4].markdown('<span class="sb-head">Plots</span>', unsafe_allow_html=True)
-
-            for i, r in enumerate(sb_rows):
-                c = st.columns([3, 1, 1, 1, 1, 0.6])
-                r['name'] = c[0].text_input("Section Name", r['name'], key=f"sb_name_{selected_block}_{i}", label_visibility="collapsed")
-                r['rows'] = int(c[1].number_input("Rows", 1, 20, r['rows'], 1, key=f"sb_r_{selected_block}_{i}", label_visibility="collapsed"))
-                r['cols'] = int(c[2].number_input("Cols", 1, 20, r['cols'], 1, key=f"sb_c_{selected_block}_{i}", label_visibility="collapsed"))
-                r['ptype'] = c[3].selectbox("Type", ["A", "B", "C", "D"], index=["A", "B", "C", "D"].index(r['ptype']), key=f"sb_t_{selected_block}_{i}", label_visibility="collapsed")
-                c[4].markdown(f"**{r['rows'] * r['cols']}** 🌱")
-                if c[5].button("🗑️", key=f"sb_del_{selected_block}_{i}", help="Remove this section"):
-                    sb_rows.pop(i)
-                    st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
-
-            t1, t2, t3 = st.columns([1.2, 1.6, 2.2])
-            if t1.button("➕ Add Section Row", key=f"sb_add_{selected_block}"):
-                sb_rows.append({"name": f"Section {len(sb_rows) + 1}", "rows": 2, "cols": 7, "ptype": "B"})
-                st.rerun()
-            total_sb = sum(r['rows'] * r['cols'] for r in sb_rows)
-            t2.markdown(f'<div class="sb-total">📐 Total plots to generate: <b>{total_sb}</b></div>', unsafe_allow_html=True)
-            confirm_gen = st.checkbox(
-                f"⚠️ I understand this will OVERWRITE the current layout of {selected_block}",
-                key=f"sb_confirm_{selected_block}"
-            )
-            if t3.button("⚡ Generate Layout from Sections", type="primary", use_container_width=True, key=f"sb_gen_{selected_block}"):
-                if not confirm_gen:
-                    st.error("Please tick the confirmation checkbox first.")
-                    st.stop()
-                clear_garden_layout(selected_block)
-                items = []
-                plot_num = 1
-                for r in sb_rows:
-                    for rr in range(r['rows']):
-                        for cc in range(r['cols']):
-                            items.append({'block_name': selected_block, 'plot_number': plot_num,
-                                        'grid_row': rr, 'grid_col': cc,
-                                        'plot_type': r['ptype'], 'section': r['name']})
-                            plot_num += 1
-                for it in items:
-                    save_garden_layout(it['block_name'], it['plot_number'], it['grid_row'], it['grid_col'], it['plot_type'], it['section'])
-                seed_block_plots(selected_block, items)
-                st.success(f"✅ Generated {len(items)} plots across {len(sb_rows)} section(s) for {selected_block}!")
-                st.rerun()
-
-            st.divider()
-
-            # ══════════ BLOCK OPS + INTERACTIVE EDITOR ══════════
             col_left, col_right = st.columns([1, 2])
             with col_left:
                 with st.expander("➕ Create New Block", expanded=False):
                     new_block_name = st.text_input("New Block Name", placeholder="e.g., Block 624, WCC RTG", key="new_block_input_garden")
+                    # 🔥 Dynamic plot count for new blocks
                     new_block_plots = st.number_input("How many plots for new block?", min_value=1, max_value=200, value=76, step=1, key="new_block_plot_count")
                     if st.button("Create New Block", type="secondary", use_container_width=True):
                         if new_block_name.strip():
@@ -485,14 +401,14 @@ def show_garden():
                             else:
                                 default_data = generate_default_layout(new_block_name.strip(), int(new_block_plots))
                                 for item in default_data:
-                                    save_garden_layout(item['block_name'], item['plot_number'], item['grid_row'], item['grid_col'], item['plot_type'], item.get('section'))
+                                    save_garden_layout(item['block_name'], item['plot_number'], item['grid_row'], item['grid_col'], item['plot_type'])
                                 seed_block_plots(new_block_name.strip(), default_data)
                                 st.success(f"✅ Created layout + plot rows for {new_block_name.strip()} ({new_block_plots} plots)!")
                                 st.info(f"👉 Select '{new_block_name.strip()}' from the dropdown at the top to edit it.")
                         else:
                             st.error("Please enter a name.")
+                            
                 with st.expander("✏️ Rename Current Block", expanded=False):
-                    st.caption(f"Rename '{selected_block}' to a new name.")
                     new_block_name_rename = st.text_input("New Name", placeholder="e.g., Woodlands CC RTG", key="rename_block_input")
                     if st.button("Rename Block", type="secondary", use_container_width=True):
                         if new_block_name_rename.strip() and new_block_name_rename.strip() != selected_block:
@@ -506,6 +422,7 @@ def show_garden():
                                     st.error("Error renaming block.")
                         else:
                             st.error("Please enter a valid new name.")
+                            
                 with st.expander("🗑️ Delete Current Block", expanded=False):
                     st.warning(f"⚠️ This deletes the '{selected_block}' LAYOUT only. garden_plots rows are kept (safe).")
                     confirm_delete = st.checkbox("I understand this action is permanent.", key="confirm_delete_block")
@@ -516,137 +433,85 @@ def show_garden():
                                 st.rerun()
                             else:
                                 st.error("Error deleting block.")
-
-                st.markdown("**🗂️ Section to Edit**")
-                sections = _group_sections(layout_data) if layout_data else {}
-                section_options = list(sections.keys()) or ["Section 1"]
-                selected_section = st.selectbox("Select Section to Edit", section_options, index=0, key="edit_section_dropdown")
-                sec_items = sections.get(selected_section, [])
-                def_rows = (max([i['grid_row'] for i in sec_items]) + 1) if sec_items else 2
-                def_cols = (max([i['grid_col'] for i in sec_items]) + 1) if sec_items else 7
-                er_key = f"editor_rows_{selected_block}_{selected_section}"
-                ec_key = f"editor_cols_{selected_block}_{selected_section}"
-                if er_key not in st.session_state: st.session_state[er_key] = def_rows
-                if ec_key not in st.session_state: st.session_state[ec_key] = def_cols
-                e1, e2 = st.columns(2)
-                editor_rows = int(e1.number_input("Editor Rows", min_value=1, max_value=20, value=int(def_rows), step=1, key=er_key))
-                editor_cols = int(e2.number_input("Editor Columns", min_value=1, max_value=20, value=int(def_cols), step=1, key=ec_key))
-                st.caption(f"🔍 *Debug: System is rendering **{int(editor_rows)} rows × {int(editor_cols)} cols***")
+                                
+                st.markdown("**⚡ Bulk Auto-Generate Layout**")
+                # 🔥 Dynamic plot count for bulk generation
+                bulk_plot_count = st.number_input("How many plots to generate?", min_value=1, max_value=200, value=76, step=1, key="bulk_plot_count")
+                if st.button(f"Generate {bulk_plot_count} Plots", type="primary", use_container_width=True):
+                    clear_garden_layout(selected_block)
+                    default_data = generate_default_layout(selected_block, int(bulk_plot_count))
+                    for item in default_data:
+                        save_garden_layout(item['block_name'], item['plot_number'], item['grid_row'], item['grid_col'], item['plot_type'])
+                    seed_block_plots(selected_block, default_data)
+                    st.success(f"✅ Generated {bulk_plot_count} plots for {selected_block}!")
+                    st.rerun()
+                    
+                st.markdown("**🔢 Grid Canvas Size**")
+                editor_rows = st.number_input("Editor Rows", min_value=1, max_value=20, value=5, step=1, key="editor_rows")
+                editor_cols = st.number_input("Editor Columns", min_value=1, max_value=20, value=10, step=1, key="editor_cols")
                 st.divider()
-
-                max_plot_num = max([76] + [i['plot_number'] for i in layout_data] + list(plots_dict.keys())) if (layout_data or plots_dict) else 76
+                
+                # 🔥 DYNAMIC DROPDOWN: Adapts to actual plot count in the block
+                max_plot_num = max([76] + [i['plot_number'] for i in layout_data] + [p['plot_number'] for p in block_plots]) if (layout_data or block_plots) else 76
                 all_plot_options = {}
                 for p_num in range(1, max_plot_num + 1):
                     is_in_block = p_num in [i['plot_number'] for i in layout_data]
-                    is_occ = plots_dict.get(p_num, {}).get('occupied', False)
-                    if is_in_block:
-                        label = str(p_num) + (" (Occupied)" if is_occ else "")
-                    else:
-                        label = f"{p_num} (Unassigned)"
-                    all_plot_options[label] = p_num
+                    plot_data = plots_dict.get(p_num, {})
+                    is_occ = plot_data.get('occupied', False)
+                    all_plot_options[str(p_num) + (" (Occupied)" if (is_in_block and is_occ) else "") + ("" if is_in_block else " (Unassigned)")] = p_num
+                    
                 all_labels = list(all_plot_options.keys())
                 if 'selected_plot_label' not in st.session_state or st.session_state.selected_plot_label not in all_labels:
                     st.session_state.selected_plot_label = next((l for l in all_labels if "(Unassigned)" in l), all_labels[0] if all_labels else "")
-                selected_plot_label = st.selectbox(
-                    "Select a plot (Occupied plots will auto-swap)",
-                    all_labels,
-                    index=all_labels.index(st.session_state.selected_plot_label),
-                    key="new_plot_dropdown"
-                )
+                    
+                selected_plot_label = st.selectbox("Select a plot", all_labels, index=all_labels.index(st.session_state.selected_plot_label), key="new_plot_dropdown")
                 st.session_state.selected_plot_label = selected_plot_label
                 selected_new_plot = all_plot_options[selected_plot_label]
+                
                 existing_layout_item = next((item for item in layout_data if item['plot_number'] == selected_new_plot), None)
                 default_type = existing_layout_item['plot_type'] if existing_layout_item else 'B'
-                st.markdown("**📏 Plot Size (For NEW plots only)**")
-                st.caption("ℹ️ **Smart Swap:** Moving an existing plot automatically keeps its original size. This selector only applies when adding a brand-new plot. To change an existing plot's size, use the **📋 Manage Existing** tab.")
-                selected_size = st.radio(
-                    "Select Size",
-                    ["A", "B", "C", "D"],
-                    index=["A", "B", "C", "D"].index(default_type) if default_type in ["A", "B", "C", "D"] else 1,
-                    horizontal=True,
-                    key="global_size_selector"
-                )
-                st.divider()
+                st.markdown("**📏 Plot Size**")
+                selected_size = st.radio("Select Size", ["A", "B", "C", "D"], index=["A", "B", "C", "D"].index(default_type), horizontal=True, key="global_size_selector")
                 
-                # 🔥 SAFE CLEAR ALL PLOTS
-                st.markdown("**🗑️ Clear All Plots**")
-                st.caption("⚠️ Removes only the MAP LAYOUT of this block. Owners & payments are safe.")
-                confirm_clear = st.checkbox(f"I understand this clears the {selected_block} layout", key=f"confirm_clear_{selected_block}")
-                if st.button("🗑️ Clear All Plots", type="secondary", use_container_width=True, disabled=not confirm_clear):
+                if st.button("🗑️ Clear All Plots", type="secondary", use_container_width=True):
                     if clear_garden_layout(selected_block):
-                        st.success("Map cleared!")
-                        st.rerun()
-
+                        st.success("Map cleared!"); st.rerun()
+                        
             with col_right:
-                st.markdown(f"### 🎯 Interactive Grid — {selected_section}")
-                st.caption(f"📐 {int(editor_rows)} rows × {int(editor_cols)} cols  •  🌱 {len(sec_items)} plots placed in this section")
-                st.caption("👆 Tap an empty box to assign the selected plot. Tap a colored box to remove.")
-                st.markdown("""
-                <style>
-                    div[data-testid="stButton"] button {
-                        white-space: nowrap !important;
-                        font-size: 14px !important;
-                        padding: 2px 0 !important;
-                        min-height: 44px !important;
-                        width: 100% !important;
-                    }
-                    div[data-testid="stButton"] button p {
-                        white-space: nowrap !important;
-                        overflow: hidden !important;
-                        margin: 0 !important;
-                    }
-                </style>
-                """, unsafe_allow_html=True)
-
-                # 🔥 Build the matrix STRICTLY from Editor Rows × Editor Columns
-                n_rows = int(editor_rows)
-                n_cols = int(editor_cols)
-                editor_grid = [[None for _ in range(n_cols)] for _ in range(n_rows)]
-                for item in sec_items:
-                    r = item['grid_row']
-                    c = item['grid_col']
-                    if 0 <= r < n_rows and 0 <= c < n_cols:
-                        editor_grid[r][c] = item['plot_number']
-
-                for r in range(n_rows):
-                    cols_ui = st.columns(n_cols)          # 🔥 one row of n_cols cells
-                    for c in range(n_cols):
-                        with cols_ui[c]:
-                            plot_num = editor_grid[r][c]
-                            if plot_num is None:
-                                # ── EMPTY CELL → Add button ──
-                                if st.button("+", key=f"add_{r}_{c}_{selected_block}_{selected_section}", use_container_width=True):
-                                    existing_spot = next((item for item in layout_data if item['plot_number'] == selected_new_plot), None)
-                                    if existing_spot:
-                                        remove_garden_layout(selected_block, selected_new_plot)
-                                    stored_plot = plots_dict.get(selected_new_plot)
-                                    if existing_spot:
-                                        final_type = existing_spot.get('plot_type', 'B')          # keep size when moving
-                                    elif stored_plot and stored_plot.get('plot_type'):
-                                        final_type = stored_plot.get('plot_type')                  # keep stored size
-                                    else:
-                                        final_type = selected_size                                  # new plot uses selector
-                                    if save_garden_layout(selected_block, selected_new_plot, r, c, final_type):
-                                        st.rerun()
-                            else:
-                                # ── PLOT CELL → colored remove button ──
-                                layout_item = next((item for item in layout_data if item['plot_number'] == plot_num), None)
-                                plot_type = layout_item['plot_type'] if layout_item and 'plot_type' in layout_item else 'B'
-                                color = get_plot_type_color(plot_type)
-                                if st.button(label=str(plot_num), key=f"remove_{plot_num}_{selected_block}_{r}_{c}", use_container_width=True, type="primary"):
-                                    if remove_garden_layout(selected_block, plot_num):
-                                        st.session_state["new_plot_dropdown"] = f"{plot_num} (Unassigned)"
-                                        st.rerun()
-                                st.markdown(
-                                    f'<style> div[data-testid="stButton"] button[key="remove_{plot_num}_{selected_block}_{r}_{c}"], '
-                                    f'div[data-testid="stButton"] button[key="remove_{plot_num}_{selected_block}_{r}_{c}"] p '
-                                    f'{{ background-color: {color} !important; color: white !important; border: none; font-weight: bold; font-size: 14px; white-space: nowrap !important; }}</style>',
-                                    unsafe_allow_html=True
-                                )
+                st.markdown(f"### 🎯 Interactive Grid ({editor_rows} x {editor_cols})")
+                grid_container = st.container()
+                with grid_container:
+                    # Show all plots in the editor grid
+                    section_data = layout_data if layout_data else []
+                    editor_grid = [[None for _ in range(editor_cols)] for _ in range(editor_rows)]
+                    for item in section_data:
+                        if item['grid_row'] < editor_rows and item['grid_col'] < editor_cols:
+                            editor_grid[item['grid_row']][item['grid_col']] = item['plot_number']
+                    for r in range(editor_rows):
+                        cols_ui = st.columns(editor_cols)
+                        for c in range(editor_cols):
+                            with cols_ui[c]:
+                                plot_num = editor_grid[r][c]
+                                if plot_num is None:
+                                    if st.button("+", key=f"add_{r}_{c}_{selected_block}", use_container_width=True):
+                                        existing_spot = next((item for item in layout_data if item['plot_number'] == selected_new_plot), None)
+                                        if existing_spot:
+                                            remove_garden_layout(selected_block, selected_new_plot)
+                                        if save_garden_layout(selected_block, selected_new_plot, r, c, selected_size):
+                                            seed_block_plots(selected_block, [{'plot_number': selected_new_plot, 'plot_type': selected_size}])
+                                            st.rerun()
+                                else:
+                                    layout_item = next((item for item in layout_data if item['plot_number'] == plot_num), None)
+                                    plot_type = layout_item['plot_type'] if layout_item else 'B'
+                                    color = get_plot_type_color(plot_type)
+                                    if st.button(label=f"{plot_num}", key=f"remove_{plot_num}_{selected_block}", use_container_width=True, type="primary"):
+                                        if remove_garden_layout(selected_block, plot_num):
+                                            st.rerun()
+                                    st.markdown(f'<style> div[data-testid="stButton"] button[key="remove_{plot_num}_{selected_block}"] {{ background-color: {color} !important; color: white !important; border: none; font-weight: bold; }}</style>', unsafe_allow_html=True)
     else:
         st.caption("🔒 Interactive Map Editor is restricted to System Admins.")
-
-    # ── 5. STATISTICS ──────────────────────────────────────────
+        
+    # ── 5. STATISTICS (per selected block) ─────────────────────
     st.markdown("---")
     st.markdown("## Statistics")
     c1, c2, c3, c4 = st.columns(4)
@@ -661,10 +526,4 @@ def show_garden():
             to = len([p for p in block_plots if p.get('plot_type') == tk and p.get('occupied')])
             block_total = len([x for x in layout_data if x.get('plot_type') == tk]) if layout_data else ti["total"]
             pc = (to / block_total) * 100 if block_total > 0 else 0
-            st.markdown(
-                f'<div style="background:{ti["colour"]};color:white;padding:10px;border-radius:8px;text-align:center;">'
-                f'<div style="font-size:14px;font-weight:bold;">Type {tk}</div>'
-                f'<div style="font-size:20px;margin:3px 0;">{to}/{block_total}</div>'
-                f'<div>{ti["area"]} m²</div>'
-                f'<div>({pc:.1f}%)</div></div>',
-                unsafe_allow_html=True)
+            st.markdown(f'<div style="background:{ti["colour"]};color:white;padding:10px;border-radius:8px;text-align:center;"><div style="font-size:14px;font-weight:bold;">Type {tk}</div><div style="font-size:20px;margin:3px 0;">{to}/{block_total}</div><div>{ti["area"]} m²</div><div>({pc:.1f}%)</div></div>', unsafe_allow_html=True)
