@@ -11,19 +11,19 @@ update_request_status, get_occupied_count, clean_phone_number,
 find_participant_by_phone, check_returning_guest)
 
 # ===== IMPORT TAB FUNCTIONS =====
-from tab_checkin import show_checkin
-from tab_reports import show_reports
-from tab_manage import show_manage
-from tab_garden import show_garden
-from tab_residents import show_residents
-from tab_meeting import show_meeting
-from tab_volunteer import show_volunteer
-from tab_volunteer_access import show_volunteer_access
-from tab_sessions import show_sessions
-from tab_chairman import show_chairman
-from tab_dashboard import show_dashboard
-from tab_settings import show_settings
-from tab_volunteer_portal import show_volunteer_portal
+from pages.checkin import show_checkin
+from pages.reports import show_reports
+from pages.manage import show_manage
+from pages.garden import show_garden
+from pages.residents import show_residents
+from pages.meeting import show_meeting
+from pages.volunteer import show_volunteer
+from pages.volunteer_access import show_volunteer_access
+from pages.sessions import show_sessions
+from pages.chairman import show_chairman
+from pages.dashboard import show_dashboard
+from pages.settings import show_settings
+from pages.volunteer_portal import show_volunteer_portal
 
 # Hide sidebar
 st.markdown("""

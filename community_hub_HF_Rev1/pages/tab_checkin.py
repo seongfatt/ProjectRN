@@ -1,6 +1,6 @@
 import streamlit as st
-from datetime import datetime, timezone
-from config import supabase, DB_CONNECTED, load_activities, refresh_data
+from datetime import datetime
+from config import supabase, DB_CONNECTED, load_activities, refresh_data, now_sgt
 from utils import clean_phone_number, find_participant_by_phone, validate_checkin_time
 try:
     from utils import sync_session_attendance_async
