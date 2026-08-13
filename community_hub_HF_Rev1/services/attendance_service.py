@@ -3,8 +3,8 @@
 
 import streamlit as st
 from datetime import datetime
-from config import supabase, DB_CONNECTED, now_sgt, load_activities
-from utils import validate_checkin_time, sync_session_attendance_async, refresh_data
+from config import supabase, DB_CONNECTED, now_sgt, load_activities, refresh_data  # ← ADD refresh_data here
+from utils import validate_checkin_time, sync_session_attendance_async
 
 class AttendanceService:
     """Handles all check-in operations with S1-S4 session support."""
