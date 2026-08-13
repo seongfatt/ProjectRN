@@ -47,7 +47,6 @@ def show_manage(selected_date):
                 no_phone = st.checkbox("👴 Elderly without phone", key="new_p_no_phone")
                 indemnity = st.checkbox("Indemnity Signed", key="new_p_indemnity")
                 st.markdown("---")
-                show_face_enrollment()
                 st.markdown("**👤 Member Type:**")
                 member_type = st.radio(
                     "Select member category:",
@@ -150,7 +149,6 @@ def show_manage(selected_date):
                         st.caption("No participants found matching that name.")
             
             with st.expander("✏️ Update Resident Contact Info"):
-
                 st.caption("Use this to add a phone number, block info, or change member type.")
                 update_search = st.text_input("Search resident by Name or ID", key="update_search_contact")
                 if update_search:
@@ -209,6 +207,12 @@ def show_manage(selected_date):
                                         if st.form_submit_button("Cancel"):
                                             st.session_state[f"edit_mode_{p['id']}"] = False
                                             st.rerun()
+            
+            # ─── ✅ FACE ENROLLMENT ───
+            # This appears at the bottom of the Participants tab
+            st.markdown("---")
+            show_face_enrollment()
+            
         else:
             st.info("🔒 Participant management is restricted to System Admins.")
 
