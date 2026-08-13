@@ -1,30 +1,52 @@
-# config.py — Updated with environment variables and timezone
+# config.py — Updated with environment variables, timezone, and HF secrets support
 import streamlit as st
 from supabase import create_client
 import os
 from datetime import timezone, timedelta, datetime
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables from .env (local development only)
 load_dotenv()
 
+# ========== HELPER: Get Secrets (HF Compatible) ==========
+def get_secret(key, default=None):
+    """
+    Get secret from:
+    1. st.secrets (Hugging Face Spaces)
+    2. os.environ (local .env file)
+    3. default value if provided
+    """
+    # Try st.secrets first (for Hugging Face Spaces)
+    try:
+        if hasattr(st, 'secrets') and key in st.secrets:
+            return st.secrets[key]
+    except:
+        pass
+    
+    # Fallback to environment variables (local development)
+    return os.environ.get(key, default)
+
+
 # ========== DATABASE CONFIG ==========
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+SUPABASE_URL = get_secret("SUPABASE_URL")
+SUPABASE_KEY = get_secret("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise ValueError("Missing Supabase credentials! Set SUPABASE_URL and SUPABASE_KEY in .env")
+    raise ValueError("Missing Supabase credentials! Set SUPABASE_URL and SUPABASE_KEY in .env or HF secrets.")
+
 
 # ========== APP URL ==========
-APP_URL = os.environ.get("APP_URL", "https://wrnz6-community-hub.hf.space")
+APP_URL = get_secret("APP_URL", "https://wrnz6-community-hub.hf.space")
+
 
 # ========== PASSWORDS ==========
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
-CHECKER_PASSWORD = os.environ.get("CHECKER_PASSWORD")
-CHAIRMAN_PASSWORD = os.environ.get("CHAIRMAN_PASSWORD")
+ADMIN_PASSWORD = get_secret("ADMIN_PASSWORD")
+CHECKER_PASSWORD = get_secret("CHECKER_PASSWORD")
+CHAIRMAN_PASSWORD = get_secret("CHAIRMAN_PASSWORD")
 
 if not all([ADMIN_PASSWORD, CHECKER_PASSWORD, CHAIRMAN_PASSWORD]):
-    raise ValueError("Missing passwords! Set ADMIN_PASSWORD, CHECKER_PASSWORD, CHAIRMAN_PASSWORD in .env")
+    raise ValueError("Missing passwords! Set ADMIN_PASSWORD, CHECKER_PASSWORD, CHAIRMAN_PASSWORD in .env or HF secrets.")
+
 
 # ========== TIMEZONE ==========
 SGT = timezone(timedelta(hours=8))
@@ -32,6 +54,7 @@ SGT = timezone(timedelta(hours=8))
 def now_sgt():
     """Return current datetime in Singapore Time (UTC+8)."""
     return datetime.now(SGT)
+
 
 # ========== SUPABASE CLIENT ==========
 @st.cache_resource
@@ -46,11 +69,13 @@ def get_db():
 
 supabase, DB_CONNECTED = get_db()
 
+
 # ========== CACHE MANAGEMENT ==========
 def refresh_data():
     """Clear all cached data."""
     st.cache_data.clear()
     st.cache_resource.clear()
+
 
 # ========== ACTIVITIES ==========
 DEFAULT_ACTIVITIES = [
@@ -66,6 +91,7 @@ def load_activities():
         return r.data if r.data else DEFAULT_ACTIVITIES
     except:
         return DEFAULT_ACTIVITIES
+
 
 # ============================================================
 # 🔥 PLOT TYPES WITH BOX MATH
@@ -119,6 +145,7 @@ TYPE_MAP = {
     61: "A", 62: "B", 63: "A", 64: "D", 65: "D", 66: "B", 67: "B", 68: "D", 69: "C", 70: "A",
     71: "D", 72: "B", 73: "C", 74: "A", 75: "C", 76: "C"
 }
+
 
 # ========== MOBILE CSS ==========
 MOBILE_CSS = """<style>
