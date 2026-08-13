@@ -1,6 +1,8 @@
+from email import message
+
 import streamlit as st
-from datetime import datetime
-from config import supabase, DB_CONNECTED, load_activities, refresh_data, now_sgt
+from datetime import datetime, timezone
+from config import supabase, DB_CONNECTED, load_activities, refresh_data
 from utils import clean_phone_number, find_participant_by_phone, validate_checkin_time
 try:
     from utils import sync_session_attendance_async
@@ -8,6 +10,7 @@ except ImportError:
     def sync_session_attendance_async(*args, **kwargs):
         pass
 import urllib.parse
+from services import AttendanceService
 
 def show_checkin(selected_date):
     st.markdown("""
@@ -136,7 +139,8 @@ def show_checkin(selected_date):
         if extracted_pid:
             st.session_state.processing_checkin = True
             st.session_state['scan_banner'] = None
-            success = process_checkin_by_id(extracted_pid, selected_date, activity, s1, s2, s3, s4)
+            success, message, _ = AttendanceService.process_checkin(extracted_pid, selected_date, activity, s1, s2, s3, s4)
+            st.session_state['scan_banner'] = ('success', message) if success else ('error', message)
             st.session_state.processing_checkin = False
             if success:
                 st.session_state.clear_scanner = True
@@ -179,7 +183,9 @@ def show_checkin(selected_date):
                     </div>
                     """, unsafe_allow_html=True)
                     if st.button(btn_label, type="primary", key=f"confirm_{resident['id']}", use_container_width=True):
-                        process_checkin_by_id(resident['id'], selected_date, activity, s1, s2, s3, s4)
+                        success, message, _ = AttendanceService.process_checkin(resident['id'], selected_date, activity, s1, s2, s3, s4)
+                    if st.success:
+                        st.rerun()
                         st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
@@ -249,7 +255,9 @@ def show_checkin(selected_date):
                     else:
                         btn_label = "➕ Add Session" if has_record else "Check In"
                         if st.button(btn_label, key=f"btn_{p['id']}", use_container_width=True, type="primary"):
-                            process_checkin_by_id(p['id'], selected_date, activity, s1, s2, s3, s4)
+                            success, message, _ = AttendanceService.process_checkin(p['id'], selected_date, activity, s1, s2, s3, s4)
+                        if st.success:
+                            st.rerun()
                             st.rerun()
 
 def process_checkin_by_id(pid, date, activity, s1, s2, s3=False, s4=False):

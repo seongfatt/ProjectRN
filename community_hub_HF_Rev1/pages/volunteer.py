@@ -5,6 +5,8 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 from config import supabase, DB_CONNECTED, refresh_data, APP_URL
 from utils import mask_phone, clean_phone_number
+# pages/volunteer.py — Add this import
+from services import RegistrationService
 
 def show_volunteer():
     st.header("🤝 Volunteer Registration")
@@ -133,18 +135,19 @@ def show_volunteer():
                 st.stop()
             
             try:
-                new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
-                supabase.table('participants').insert({
-                    "id": new_id,
-                    "name": name.strip().upper(),
-                    "contact": final_contact,
-                    "block_no": block_no if block_no else None,
-                    "indemnity": indemnity,
-                    "is_new": True,
-                    "active": True,
-                    "registration_date": datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d"),
-                    "member_type": member_type  # 🔥 NEW: Save member type
-                }).execute()
+                success, message, new_id = RegistrationService.register_resident(
+                    name=name,
+                    contact=contact,
+                    no_phone=no_phone,
+                    indemnity=indemnity,
+                    member_type=member_type,
+                    block_no=block_no
+                )
+                if success:
+                    st.success(f"✅ {name.strip().upper()} registered as **{member_type}** successfully!")
+                    st.info(f"Resident ID: `{new_id}`")
+                else:
+                    st.error(message)
                 refresh_data()
                 st.success(f"✅ {name.strip().upper()} registered as **{member_type}** successfully!")
                 st.info(f"Resident ID: `{new_id}`")

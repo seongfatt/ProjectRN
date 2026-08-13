@@ -2,6 +2,7 @@ import streamlit as st
 from datetime import datetime
 from config import supabase, DB_CONNECTED, load_activities
 from utils import clean_phone_number, find_participant_by_phone, mask_phone
+from services import AttendanceService
 
 def show_kiosk():
     st.set_page_config(layout="wide")
@@ -101,9 +102,10 @@ def show_kiosk():
             with col1:
                 checkin_text = "Update Check-In" if not already_checked_in else "✅ Checked In"
                 if st.button(checkin_text, key="kiosk_checkin_yes", use_container_width=True, type="primary"):
-                    mark_kiosk_attendance(resident['id'], resident['name'], today, selected_activity, s1, s2, s3, s4)
+                    success, message, _ = AttendanceService.process_checkin(resident['id'], today, selected_activity, s1, s2, s3, s4)
+                if success:
                     st.success(f"Welcome {resident['name']}! Checked in for {session_option}")
-                    st.balloons()
+                    # st.balloons()
                     st.rerun()
             with col2:
                 if st.button("❌ Not Attending", key="kiosk_checkin_no", use_container_width=True):
@@ -156,12 +158,11 @@ def show_kiosk():
                     <div class="resident-id">{badge} | ID: {short_id}</div>
                 </div>
                 """, unsafe_allow_html=True)
-                if st.button("✅ Check In", key=f"kiosk_name_{p['id']}", use_container_width=True, type="primary"):
-                    mark_kiosk_attendance(p['id'], p['name'], today, selected_activity, s1, s2, s3, s4)
+                success, message, _ = AttendanceService.process_checkin(p['id'], today, selected_activity, s1, s2, s3, s4)
+                if success:
                     st.success(f"Welcome {p['name']}! Checked in for {session_option}")
-                    st.balloons()
+                    # st.balloons()
                     st.rerun()
-    else:
         st.info("No residents found matching your search. Please see a volunteer.")
 
     st.divider()

@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from config import supabase, DB_CONNECTED, load_activities
+# pages/dashboard.py — Add this import
+from services import AnalyticsService
 
 def show_dashboard():
     """
@@ -396,18 +398,14 @@ def show_dashboard():
     st.subheader("👥 Community Membership Breakdown")
 
     # Filter active participants for accurate percentages
-    active_participants = [p for p in st.session_state.participants if p.get('active', True)]
-    total_active = len(active_participants)
-
-    # Count member types (defaults to 'Resident' if not set yet)
-    resident_count = sum(1 for p in active_participants if p.get('member_type', 'Resident') == 'Resident')
-    rn_count = sum(1 for p in active_participants if p.get('member_type') == 'RN Member')
-    volunteer_count = sum(1 for p in active_participants if p.get('member_type') == 'Volunteer Member')
-
-    # Calculate percentages safely
-    res_pct = (resident_count / total_active * 100) if total_active > 0 else 0
-    rn_pct = (rn_count / total_active * 100) if total_active > 0 else 0
-    vol_pct = (volunteer_count / total_active * 100) if total_active > 0 else 0
+    breakdown = AnalyticsService.get_member_breakdown(st.session_state.participants)
+    resident_count = breakdown['resident']
+    rn_count = breakdown['rn']
+    volunteer_count = breakdown['volunteer']
+    res_pct = breakdown['resident_pct']
+    rn_pct = breakdown['rn_pct']
+    vol_pct = breakdown['volunteer_pct']
+    total_active = breakdown['total']
 
     # Display top-level metrics
     c1, c2, c3, c4 = st.columns(4)

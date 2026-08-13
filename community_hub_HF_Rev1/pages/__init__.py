@@ -1,5 +1,5 @@
-# pages/__init__.py
-"""Page modules for Woodlands Zone 6 Community Hub"""
+# _pages/__init__.py
+"""Tab modules for Woodlands Zone 6 Community Hub"""
 
 from .checkin import show_checkin
 from .reports import show_reports

@@ -1,14 +1,76 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta, timezone  # ✅ This is all you need
+from datetime import datetime, timedelta, timezone
 import urllib.parse
-from config import (CHAIRMAN_PASSWORD, supabase, DB_CONNECTED, MOBILE_CSS, ADMIN_PASSWORD,
-CHECKER_PASSWORD, APP_URL, load_activities, PLOT_TYPES, TOTAL_PLOTS, TYPE_MAP, refresh_data)
-from utils import (mask_phone, get_attendance_count, check_and_convert_status,
-generate_token, verify_token, load_participants, load_plots, get_plot,
-update_plot, get_user_plot, create_request, get_pending_requests,
-update_request_status, get_occupied_count, clean_phone_number,
-find_participant_by_phone, check_returning_guest)
+
+# ===== DISABLE STREAMLIT AUTO-SIDEBAR =====
+st.set_page_config(
+    page_title="Woodlands Zone 6 Community Hub",
+    page_icon="🏘️",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# Force hide sidebar with CSS
+st.markdown("""
+<style>
+    [data-testid="stSidebar"] {
+        display: none !important;
+    }
+    [data-testid="stSidebarCollapseButton"] {
+        display: none !important;
+    }
+    [data-testid="collapsedControl"] {
+        display: none !important;
+    }
+    .st-emotion-cache-1y4p8pa {
+        display: none !important;
+    }
+    .st-emotion-cache-1l268km {
+        display: none !important;
+    }
+    .st-emotion-cache-1v0mbdj {
+        max-width: 100% !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+from config import (
+    CHAIRMAN_PASSWORD,
+    supabase,
+    DB_CONNECTED,
+    MOBILE_CSS,
+    ADMIN_PASSWORD,
+    CHECKER_PASSWORD,
+    APP_URL,
+    load_activities,
+    PLOT_TYPES,
+    TOTAL_PLOTS,
+    TYPE_MAP,
+    refresh_data
+)
+
+from utils import (
+    mask_phone,
+    get_attendance_count,
+    check_and_convert_status,
+    generate_token,
+    verify_token,
+    load_participants,
+    load_plots,
+    get_plot,
+    update_plot,
+    get_user_plot,
+    create_request,
+    get_pending_requests,
+    update_request_status,
+    get_occupied_count,
+    clean_phone_number,
+    find_participant_by_phone,
+    check_returning_guest
+)
 
 # ===== IMPORT TAB FUNCTIONS =====
 from pages.checkin import show_checkin
@@ -25,47 +87,22 @@ from pages.dashboard import show_dashboard
 from pages.settings import show_settings
 from pages.volunteer_portal import show_volunteer_portal
 
-# Hide sidebar
-st.markdown("""
-<style>
-[data-testid="stSidebar"] {display: none !important;}
-[data-testid="stSidebarCollapseButton"] {display: none !important;}
-[data-testid="collapsedControl"] {display: none !important;}
-</style>
-""", unsafe_allow_html=True)
-
-# 🔥 RESPONSIVE UI: wide on desktop, auto-fit on tablet/phone
-st.set_page_config(
-    page_title="Woodlands Zone 6 Community Hub",
-    page_icon="🏘️",
-    layout="wide",                 # ← full width on PC
-    initial_sidebar_state="collapsed"
-)
+# ===== APPLY MOBILE CSS =====
 st.markdown(MOBILE_CSS, unsafe_allow_html=True)
 
 def inject_responsive_css():
     st.markdown("""
     <style>
-    /* ═══════════ GLOBAL RESPONSIVE UI ═══════════ */
-    /* Desktop: use the full width nicely */
     section.main .block-container { max-width: 1500px; padding-top: 2rem; }
-
-    /* Comfortable touch targets everywhere */
     div[data-testid="stButton"] button {
         min-height: 44px;
         border-radius: 10px;
         transition: all .15s ease;
     }
-
-    /* Garden plot cards: fluid instead of fixed 100px */
     .plot-box { width: 100%; max-width: 110px; min-height: 85px; }
-
-    /* ── TABLET (≤1024px) ── */
     @media (max-width: 1024px) {
         section.main .block-container { padding-left: 1.2rem; padding-right: 1.2rem; }
     }
-
-    /* ── PHONE (≤640px) : big buttons, readable text ── */
     @media (max-width: 640px) {
         section.main .block-container { padding-left: .7rem; padding-right: .7rem; }
         h1 { font-size: 1.55rem !important; }
@@ -81,7 +118,7 @@ def inject_responsive_css():
     </style>
     """, unsafe_allow_html=True)
 
-inject_responsive_css()   # ← call it once
+inject_responsive_css()
 
 # Initialize session state
 for k in ['is_authenticated','user_role','show_login','participants','plots','activities','today_date','selected_plot','selected_activity','auto_checkin_done','active_page','chairman_tc_accepted']:
@@ -89,15 +126,17 @@ for k in ['is_authenticated','user_role','show_login','participants','plots','ac
         st.session_state[k] = None if k in ['user_role','selected_plot','selected_activity','active_page'] else (False if k in ['is_authenticated','auto_checkin_done','chairman_tc_accepted'] else ([] if k in ['participants','plots','activities'] else datetime.now(timezone(timedelta(hours=8))).date()))
 
 def verify_password(pwd, role):
-    if role == "admin": return pwd == ADMIN_PASSWORD
-    elif role == "chairman": return pwd == CHAIRMAN_PASSWORD
-    elif role == "checker": return pwd == CHECKER_PASSWORD
+    if role == "admin":
+        return pwd == ADMIN_PASSWORD
+    elif role == "chairman":
+        return pwd == CHAIRMAN_PASSWORD
+    elif role == "checker":
+        return pwd == CHECKER_PASSWORD
     return False
 
 # ===== URL PARAMETER ROUTING =====
 params = st.query_params
 
-# 🔥 METHOD 1 & 2: Restore Activity from URL if it exists
 url_act = params.get("act")
 if url_act:
     decoded_act = urllib.parse.unquote(url_act)
@@ -106,7 +145,8 @@ if url_act:
 # ===== AUTO CHECK-IN MODE =====
 if params.get("mode") == "auto":
     if not DB_CONNECTED or supabase is None:
-        st.error("Database not connected. "); st.stop()
+        st.error("Database not connected.")
+        st.stop()
     pid = params.get("pid")
     date_str = params.get("date", datetime.now(timezone(timedelta(hours=8))).strftime("%Y%m%d"))
     token = params.get("tk")
@@ -117,7 +157,7 @@ if params.get("mode") == "auto":
         st.title("Woodlands Zone 6 Community Hub")
         st.markdown("""
         <div style="background: #e3f2fd; border-left: 5px solid #2196f3; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="margin-top:0; color: #0d47a1;"> Hello!</h3>
+            <h3 style="margin-top:0; color: #0d47a1;">Hello!</h3>
             <p style="font-size: 18px; color: #1a1a1a;">
                 Please present this QR code to the <strong>Volunteer at the entrance</strong> to check in.
             </p>
@@ -129,22 +169,21 @@ if params.get("mode") == "auto":
     try:
         p = supabase.table('participants').select("*").eq('id', pid).execute().data[0]
     except:
-        st.error("Participant not found"); st.stop()
+        st.error("Participant not found")
+        st.stop()
 
     formatted_date = datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
     
-    # Load the current activity to get its ACTIVE session IDs
     acts = load_activities()
     act_config = next((a for a in acts if a['name'] == act), None)
     
     if not act_config:
-        st.error("Activity configuration not found."); st.stop()
+        st.error("Activity configuration not found.")
+        st.stop()
     
-    # Determine which sessions to mark
     s1 = session_param in ['1', 'both']
     s2 = session_param in ['2', 'both']
     
-    # Fetch the sessions for this activity on this date
     session_records = supabase.table('sessions').select("id, status") \
         .eq('activity_name', act) \
         .eq('session_date', formatted_date) \
@@ -155,14 +194,12 @@ if params.get("mode") == "auto":
         st.stop()
 
     try:
-        # 🔥 1. Check if they have ANY attendance for today (for any activity)
         any_att_today = supabase.table('attendance').select("*") \
             .eq('participant_id', pid) \
             .eq('date', formatted_date) \
             .execute()
             
         if any_att_today.data and len(any_att_today.data) > 0:
-            # Check if they have already checked into THIS specific activity
             existing_att = supabase.table('attendance').select("*") \
                 .eq('participant_id', pid) \
                 .eq('date', formatted_date) \
@@ -170,7 +207,6 @@ if params.get("mode") == "auto":
                 .execute()
                 
             if existing_att.data and len(existing_att.data) > 0:
-                # They are already checked into this activity. Update sessions.
                 record = existing_att.data[0]
                 current_activities = record.get('activities', [])
                 if act not in current_activities:
@@ -187,22 +223,16 @@ if params.get("mode") == "auto":
                 st.success(f"✅ Updated {p['name']} with additional sessions!")
                 st.stop()
                 
-            # 🔥 CRITICAL: Check if the OTHER activity has ended
-            # Fetch the session times for the OTHER activity
             other_activities = [a for a in any_att_today.data if a['source'] != act]
             if other_activities:
-                # Get the first other activity
                 other_act = other_activities[0]
                 other_act_name = other_act['source']
-                
-                # Fetch the session record for this other activity from the sessions table
                 other_session = supabase.table('sessions').select("*") \
                     .eq('activity_name', other_act_name) \
                     .eq('session_date', formatted_date) \
                     .execute().data
                     
                 if other_session:
-                    # Parse the time
                     time_str = other_session[0].get('session_time', '')
                     end_time_str = time_str.split('-')[1].strip() if '-' in time_str else "23:59"
                     try:
@@ -210,37 +240,32 @@ if params.get("mode") == "auto":
                     except:
                         end_time = datetime.strptime(end_time_str, "%H:%M").time()
                     
-                    # Combine with today's date
                     end_datetime = datetime.combine(datetime.strptime(formatted_date, "%Y-%m-%d").date(), end_time)
-                    # Add timezone for comparison
                     sgt_tz = timezone(timedelta(hours=8))
                     end_datetime = end_datetime.replace(tzinfo=sgt_tz)
                     now = datetime.now(sgt_tz)
                     
                     if now < end_datetime:
-                        # The other activity hasn't finished yet!
                         st.error(f"⏳ You are currently in an active session: {other_act_name}.")
                         st.info(f"Please wait until the session ends at {end_time.strftime('%I:%M %p')} before checking in to {act}.")
                         st.stop()
-                    # If now > end_datetime, it has finished. Allow the new check-in.
             
-        # Create new attendance record
         supabase.table('attendance').insert({
-            "participant_id": pid, "name": p['name'], "date": formatted_date,
-            "session_1": s1, "session_2": s2, 
+            "participant_id": pid,
+            "name": p['name'],
+            "date": formatted_date,
+            "session_1": s1,
+            "session_2": s2,
             "timestamp": datetime.now(timezone(timedelta(hours=8))).isoformat(),
-            "self_checkin": True, "source": act,
-            "activities": [act]  # Store the first activity
+            "self_checkin": True,
+            "source": act,
+            "activities": [act]
         }).execute()
 
-        # 🔥 2. Record specific check-ins in session_attendance
         for session in session_records:
-            # If the session is closed, skip it
             if session.get('status') == 'closed':
                 continue
-                
             session_id = session['id']
-            # Check if this participant already checked into this specific session
             existing_session = supabase.table('session_attendance').select("*") \
                 .eq('participant_id', pid) \
                 .eq('session_id', session_id) \
@@ -252,20 +277,21 @@ if params.get("mode") == "auto":
                     "participant_id": pid,
                     "name": p['name'],
                     "status": "checked_in",
-                    # 🔥 FIX: Use Singapore Time (UTC+8)
                     "marked_at": datetime.now(timezone(timedelta(hours=8))).isoformat()
                 }).execute()
 
         st.session_state.auto_checkin_done = True
         check_and_convert_status(pid, p['name'])
         
-        # Display Success
         st.title(f"{act}")
         st.success(f"Welcome {p['name']}!")
         st.info(f"Attendance confirmed for {formatted_date}")
-        if s1 and s2: st.markdown("### Both sessions auto-registered!")
-        elif s1: st.markdown("### Session 1 confirmed!")
-        elif s2: st.markdown("### Session 2 confirmed!")
+        if s1 and s2:
+            st.markdown("### Both sessions auto-registered!")
+        elif s1:
+            st.markdown("### Session 1 confirmed!")
+        elif s2:
+            st.markdown("### Session 2 confirmed!")
         st.caption("Thank you for joining! See you at Woodlands Zone 6!")
         st.stop()
         
@@ -281,17 +307,20 @@ if params.get("mode") == "auto":
 # ===== LEGACY CHECK-IN MODE =====
 if params.get("mode") == "checkin":
     if not DB_CONNECTED or supabase is None:
-        st.error("Database not connected. "); st.stop()
+        st.error("Database not connected.")
+        st.stop()
     pid = params.get("pid")
     date_str = params.get("date", datetime.now().strftime("%Y%m%d"))
     token = params.get("tk")
     act = params.get("act", "Cardio Drumming")
     if not verify_token(pid, date_str, token):
-        st.error("Invalid or expired link. "); st.stop()
+        st.error("Invalid or expired link.")
+        st.stop()
     try:
         p = supabase.table('participants').select("*").eq('id', pid).execute().data[0]
     except:
-        st.error("Participant not found "); st.stop()
+        st.error("Participant not found")
+        st.stop()
     st.title(f"{act}")
     st.markdown(f"<h2 style='text-align:center;color:#0066CC;'>Hello {p['name']}!</h2>", unsafe_allow_html=True)
     st.subheader(f"{datetime.strptime(date_str, '%Y%m%d').strftime('%d %B %Y')}")
@@ -308,23 +337,31 @@ if params.get("mode") == "checkin":
         else:
             try:
                 supabase.table('attendance').insert({
-                    "participant_id": pid, "name": p['name'], "date": datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d"),
-                    "session_1": s1, "session_2": s2, "timestamp": datetime.now().isoformat(),
-                    "self_checkin": True, "source": act
+                    "participant_id": pid,
+                    "name": p['name'],
+                    "date": datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d"),
+                    "session_1": s1,
+                    "session_2": s2,
+                    "timestamp": datetime.now().isoformat(),
+                    "self_checkin": True,
+                    "source": act
                 }).execute()
-                st.success("Thank You! "); st.info("Attendance confirmed! ")
+                st.success("Thank You!")
+                st.info("Attendance confirmed!")
             except:
-                st.error("Error saving. Contact admin. ")
+                st.error("Error saving. Contact admin.")
     st.stop()
 
 # ===== VOLUNTEER CHECK-IN MODE =====
 if params.get("mode") == "volunteer":
     if not DB_CONNECTED or supabase is None:
-        st.error("Database not connected. "); st.stop()
+        st.error("Database not connected.")
+        st.stop()
     token = params.get("tk")
     if not token:
-        st.error("❌ Invalid volunteer link. No token provided. "); st.stop()
-    from tab_volunteer_access import validate_volunteer_token
+        st.error("❌ Invalid volunteer link. No token provided.")
+        st.stop()
+    from pages.volunteer_access import validate_volunteer_token
     is_valid, msg = validate_volunteer_token(token)
     if not is_valid:
         st.error(f"❌ {msg}")
@@ -336,7 +373,7 @@ if params.get("mode") == "volunteer":
         </div>
         """, unsafe_allow_html=True)
         st.stop()
-    st.title("🤝 Volunteer Check-In  & Registration")
+    st.title("🤝 Volunteer Check-In & Registration")
     st.markdown("<h4 style='text-align:center;'>Woodlands Zone 6 Community Hub</h4>", unsafe_allow_html=True)
     st.success("✅ Volunteer access active — link expires automatically")
     st.divider()
@@ -383,7 +420,8 @@ if params.get("mode") == "volunteer":
                     existing_att = supabase.table('attendance').select('id').eq('participant_id', resident['id']).eq('date', str(selected_date)).execute()
                     if existing_att.data:
                         supabase.table('attendance').update({
-                            "session_1": s1, "session_2": s2,
+                            "session_1": s1,
+                            "session_2": s2,
                             "timestamp": datetime.now().isoformat(),
                             "source": selected_activity
                         }).eq('id', existing_att.data[0]['id']).execute()
@@ -392,9 +430,11 @@ if params.get("mode") == "volunteer":
                             "participant_id": resident['id'],
                             "name": resident['name'],
                             "date": str(selected_date),
-                            "session_1": s1, "session_2": s2,
+                            "session_1": s1,
+                            "session_2": s2,
                             "timestamp": datetime.now().isoformat(),
-                            "self_checkin": False, "source": selected_activity
+                            "self_checkin": False,
+                            "source": selected_activity
                         }).execute()
                     st.success(f"✅ {resident['name']} checked in successfully!")
                     st.balloons()
@@ -449,9 +489,13 @@ if params.get("mode") == "volunteer":
                                 new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
                                 final_contact = "NO_PHONE" if no_phone_vol else clean_phone_check
                                 supabase.table('participants').insert({
-                                    "id": new_id, "name": new_name.strip().upper(), "contact": final_contact,
+                                    "id": new_id,
+                                    "name": new_name.strip().upper(),
+                                    "contact": final_contact,
                                     "block_no": block_no_vol if block_no_vol else None,
-                                    "indemnity": new_indemnity, "is_new": True, "active": True,
+                                    "indemnity": new_indemnity,
+                                    "is_new": True,
+                                    "active": True,
                                     "registration_date": str(selected_date)
                                 }).execute()
                                 st.success(f"✅ {new_name.strip().upper()} registered & checked in!")
@@ -472,8 +516,11 @@ if params.get("mode") == "volunteer":
                                 supabase.table('attendance').insert({
                                     "participant_id": f"GUEST_{clean_phone}",
                                     "name": walkin_name.strip().upper(),
-                                    "date": str(selected_date), "session_1": s1, "session_2": s2,
-                                    "timestamp": datetime.now().isoformat(), "self_checkin": False,
+                                    "date": str(selected_date),
+                                    "session_1": s1,
+                                    "session_2": s2,
+                                    "timestamp": datetime.now().isoformat(),
+                                    "self_checkin": False,
                                     "source": selected_activity
                                 }).execute()
                                 st.success(f"🚶 {walkin_name.strip().upper()} added as walk-in!")
@@ -487,13 +534,16 @@ if params.get("mode") == "volunteer":
         with st.form("no_phone_form"):
             np_name = st.text_input("Full Name *", placeholder="e.g., TAN AH KOW")
             c1, c2 = st.columns(2)
-            with c1: search_np = st.form_submit_button("🔍 Search Existing")
-            with c2: register_np = st.form_submit_button(" Register New")
+            with c1:
+                search_np = st.form_submit_button("🔍 Search Existing")
+            with c2:
+                register_np = st.form_submit_button(" Register New")
             if search_np and np_name.strip():
                 matches = [p for p in all_participants if np_name.strip().upper() in p.get('name', '').upper()]
                 st.session_state['np_matches'] = matches
             else:
-                if 'np_matches' not in st.session_state: st.session_state['np_matches'] = []
+                if 'np_matches' not in st.session_state:
+                    st.session_state['np_matches'] = []
             matches = st.session_state.get('np_matches', [])
             if matches:
                 st.success(f"Found {len(matches)} match(es). Please select one:")
@@ -507,9 +557,11 @@ if params.get("mode") == "volunteer":
                                 "participant_id": selected_resident['id'],
                                 "name": selected_resident['name'],
                                 "date": str(selected_date),
-                                "session_1": s1, "session_2": s2,
+                                "session_1": s1,
+                                "session_2": s2,
                                 "timestamp": datetime.now().isoformat(),
-                                "self_checkin": False, "source": selected_activity
+                                "self_checkin": False,
+                                "source": selected_activity
                             }).execute()
                             st.success(f"✅ {selected_resident['name']} checked in!")
                             st.session_state['np_matches'] = []
@@ -527,15 +579,23 @@ if params.get("mode") == "volunteer":
                         import random
                         new_id = datetime.now().strftime("%Y%m%d%H%M%S") + str(random.randint(10, 99))
                         new_data = {
-                            "id": new_id, "name": np_name.strip().upper(), "contact": "NO_PHONE",
-                            "indemnity": False, "is_new": True, "active": True,
+                            "id": new_id,
+                            "name": np_name.strip().upper(),
+                            "contact": "NO_PHONE",
+                            "indemnity": False,
+                            "is_new": True,
+                            "active": True,
                             "registration_date": str(selected_date)
                         }
                         supabase.table('participants').insert(new_data).execute()
                         supabase.table('attendance').insert({
-                            "participant_id": new_id, "name": np_name.strip().upper(),
-                            "date": str(selected_date), "session_1": s1, "session_2": s2,
-                            "timestamp": datetime.now().isoformat(), "self_checkin": False,
+                            "participant_id": new_id,
+                            "name": np_name.strip().upper(),
+                            "date": str(selected_date),
+                            "session_1": s1,
+                            "session_2": s2,
+                            "timestamp": datetime.now().isoformat(),
+                            "self_checkin": False,
                             "source": selected_activity
                         }).execute()
                         st.success(f"✅ {np_name.strip().upper()} registered & checked in!")
@@ -549,7 +609,8 @@ if params.get("mode") == "volunteer":
 # ===== UNIFIED VOLUNTEER PORTAL MODE =====
 if params.get("mode") == "volunteer_portal":
     if not DB_CONNECTED or supabase is None:
-        st.error("Database not connected."); st.stop()
+        st.error("Database not connected.")
+        st.stop()
     token = params.get("tk")
     activity_param = params.get("act")
     if not token:
@@ -558,16 +619,17 @@ if params.get("mode") == "volunteer_portal":
     show_volunteer_portal(token, activity_param)
     st.stop()
 
-# ===== VOLUNTEER REGISTRATION MODE (Token-protected, time-limited) =====
+# ===== VOLUNTEER REGISTRATION MODE =====
 if params.get("mode") == "register":
     import random
     if not DB_CONNECTED or supabase is None:
-        st.error("Database not connected."); st.stop()
+        st.error("Database not connected.")
+        st.stop()
     token = params.get("tk")
     if not token:
         st.error("❌ Invalid registration link. No token provided.")
         st.stop()
-    from tab_volunteer_access import validate_volunteer_token
+    from pages.volunteer_access import validate_volunteer_token
     is_valid, msg = validate_volunteer_token(token)
     if not is_valid:
         st.error(f" {msg}")
@@ -583,7 +645,6 @@ if params.get("mode") == "register":
     no_phone = st.checkbox("👴 I do not have a phone", key="reg_no_phone")
     indemnity = st.checkbox("Indemnity Form Signed (Optional)", value=False, key="reg_indemnity")
     
-    # 🔥 NEW: Member Type Selection
     st.markdown("---")
     st.markdown("**👤 Member Type:**")
     member_type = st.radio(
@@ -634,7 +695,7 @@ if params.get("mode") == "register":
                     "is_new": True,
                     "active": True,
                     "registration_date": datetime.now().strftime("%Y-%m-%d"),
-                    "member_type": member_type  # 🔥 NEW: Save member type
+                    "member_type": member_type
                 }).execute()
                 refresh_data()
                 st.success(f"✅ {name.strip().upper()} registered as **{member_type}** successfully!")
@@ -649,23 +710,28 @@ if params.get("mode") == "register":
 # ===== PUBLIC RSVP MODE =====
 if params.get("mode") == "rsvp":
     if not DB_CONNECTED or supabase is None:
-        st.error("Database not connected. "); st.stop()
+        st.error("Database not connected.")
+        st.stop()
     token = params.get("tk")
     if not token:
-        st.error("❌ Invalid RSVP link. "); st.stop()
+        st.error("❌ Invalid RSVP link.")
+        st.stop()
     try:
         sess = supabase.table('sessions').select("*").eq('rsvp_link_token', token).single().execute().data
     except:
         sess = None
     if not sess:
-        st.error("❌ Session not found or link is invalid. "); st.stop()
+        st.error("❌ Session not found or link is invalid.")
+        st.stop()
     is_locked = sess.get('status') in ['closed', 'cancelled']
     try:
         date_str = sess.get('session_date')
         time_str = sess.get('session_time', '23:59')
         start_time_str = time_str.split('-')[0].strip()
-        try: start_time = datetime.strptime(start_time_str, "%I:%M %p").time()
-        except: start_time = datetime.strptime(start_time_str, "%H:%M").time()
+        try:
+            start_time = datetime.strptime(start_time_str, "%I:%M %p").time()
+        except:
+            start_time = datetime.strptime(start_time_str, "%H:%M").time()
         session_dt = datetime.combine(datetime.strptime(date_str, "%Y-%m-%d").date(), start_time)
         if datetime.now() > session_dt + timedelta(hours=2):
             is_locked = True
@@ -712,16 +778,24 @@ if params.get("mode") == "rsvp":
                         existing = supabase.table('session_rsvp').select("*").eq('session_id', sess['id']).eq('name', resident['name']).execute().data
                         if existing:
                             supabase.table('session_rsvp').update({
-                                "response": resp_map[response], "checked_in": False,
-                                "session_1": s1_attend, "session_2": s2_attend, "phone": clean_phone,
+                                "response": resp_map[response],
+                                "checked_in": False,
+                                "session_1": s1_attend,
+                                "session_2": s2_attend,
+                                "phone": clean_phone,
                                 "updated_at": datetime.now().isoformat()
                             }).eq('id', existing[0]['id']).execute()
                         else:
                             supabase.table('session_rsvp').insert({
-                                "id": str(uuid.uuid4()), "session_id": sess['id'],
-                                "name": resident['name'], "phone": clean_phone,
-                                "response": resp_map[response], "checked_in": False, "is_walk_in": False,
-                                "session_1": s1_attend, "session_2": s2_attend,
+                                "id": str(uuid.uuid4()),
+                                "session_id": sess['id'],
+                                "name": resident['name'],
+                                "phone": clean_phone,
+                                "response": resp_map[response],
+                                "checked_in": False,
+                                "is_walk_in": False,
+                                "session_1": s1_attend,
+                                "session_2": s2_attend,
                                 "created_at": datetime.now().isoformat()
                             }).execute()
                         st.success(f"✅ RSVP updated: {response}")
@@ -751,10 +825,15 @@ if params.get("mode") == "rsvp":
                             import uuid
                             resp_map = {"👍 Attending": "attending", "👎 Not Attending": "not_attending", "⏳ Maybe": "maybe"}
                             supabase.table('session_rsvp').insert({
-                                "id": str(uuid.uuid4()), "session_id": sess['id'],
-                                "name": new_name.strip().upper(), "phone": clean_phone,
-                                "response": resp_map[response], "checked_in": False, "is_walk_in": True,
-                                "session_1": s1_attend, "session_2": s2_attend,
+                                "id": str(uuid.uuid4()),
+                                "session_id": sess['id'],
+                                "name": new_name.strip().upper(),
+                                "phone": clean_phone,
+                                "response": resp_map[response],
+                                "checked_in": False,
+                                "is_walk_in": True,
+                                "session_1": s1_attend,
+                                "session_2": s2_attend,
                                 "created_at": datetime.now().isoformat()
                             }).execute()
                             st.success(f"✅ RSVP submitted: {response}")
@@ -778,10 +857,14 @@ if params.get("mode") == "rsvp":
                             resp_map = {"👍 Attending": "attending", "👎 Not Attending": "not_attending", "⏳ Maybe": "maybe"}
                             existing = supabase.table('session_rsvp').select("*").eq('session_id', sess['id']).eq('name', np_name.strip().upper()).execute().data
                             rsvp_data = {
-                                "session_id": sess['id'], "name": np_name.strip().upper(),
-                                "phone": "NO_PHONE", "response": resp_map[response],
-                                "checked_in": False, "is_walk_in": False,
-                                "session_1": True, "session_2": False,
+                                "session_id": sess['id'],
+                                "name": np_name.strip().upper(),
+                                "phone": "NO_PHONE",
+                                "response": resp_map[response],
+                                "checked_in": False,
+                                "is_walk_in": False,
+                                "session_1": True,
+                                "session_2": False,
                                 "updated_at": datetime.now().isoformat()
                             }
                             if existing:
@@ -798,7 +881,7 @@ if params.get("mode") == "rsvp":
     st.caption("Woodlands Zone 6 Community Hub | RSVP System")
     st.stop()
 
-# ===== MAIN APP (Admin Dashboard) =====
+# ===== MAIN APP =====
 c1, c2 = st.columns([1, 4])
 with c1:
     try:
@@ -810,7 +893,8 @@ with c2:
     st.markdown("<div class='pdpa-notice'><strong>PDPA Compliant:</strong> Phone numbers masked for privacy</div>", unsafe_allow_html=True)
 
 if not DB_CONNECTED or supabase is None:
-    st.error("Database Not Connected"); st.stop()
+    st.error("Database Not Connected")
+    st.stop()
 
 if not st.session_state.participants:
     st.session_state.participants = load_participants()
@@ -819,13 +903,11 @@ if not st.session_state.plots:
 if not st.session_state.activities:
     st.session_state.activities = load_activities()
 
-# 🔥 AUTHENTICATED DASHBOARD
 if st.session_state.is_authenticated:
     col1, col2 = st.columns([3,1])
     with col1:
         st.subheader("Admin Dashboard")
     with col2:
-        # 🔥 FIX: Use Singapore Time (UTC+8)
         st.caption(f"{datetime.now(timezone(timedelta(hours=8))).strftime('%d %b %Y')}")
         if st.button("Logout", use_container_width=True):
             st.session_state.is_authenticated = False
@@ -881,7 +963,8 @@ if st.session_state.is_authenticated:
             else:
                 st.session_state.selected_activity = "Cardio Drumming"
         with m3:
-            st.write(" "); st.write(" ")
+            st.write(" ")
+            st.write(" ")
             if st.button("🔄", key="mobile_refresh"):
                 refresh_data()
                 st.session_state.participants = load_participants()
@@ -893,7 +976,6 @@ if st.session_state.is_authenticated:
 
     st.divider()
 
-    # ===== NAVIGATION BUTTONS =====
     if st.session_state.user_role == "admin":
         nav_items = [
             {"id": "dashboard", "icon": "📊", "title": "Dashboard"},
@@ -904,9 +986,9 @@ if st.session_state.is_authenticated:
             {"id": "settings", "icon": "⚙️", "title": "Settings"},
             {"id": "reports", "icon": "📑", "title": "Reports"},
             {"id": "manage", "icon": "️", "title": "Manage"},
-            {"id": "garden", "icon": "", "title": "Garden"},
+            {"id": "garden", "icon": "🌱", "title": "Garden"},
             {"id": "residents", "icon": "🏡", "title": "Residents"},
-            {"id": "meeting", "icon": "", "title": "Meeting"},
+            {"id": "meeting", "icon": "📋", "title": "Meeting"},
         ]
     elif st.session_state.user_role == "chairman":
         nav_items = [
@@ -925,7 +1007,7 @@ if st.session_state.is_authenticated:
             {"id": "checkin", "icon": "🎟️", "title": "Check-In"},
             {"id": "sessions", "icon": "📅", "title": "Sessions"},
             {"id": "volunteer", "icon": "🤝", "title": "Volunteer"},
-            {"id": "reports", "icon": "", "title": "Reports"},
+            {"id": "reports", "icon": "📑", "title": "Reports"},
             {"id": "meeting", "icon": "📋", "title": "Meeting"},
         ]
 
@@ -948,7 +1030,6 @@ if st.session_state.is_authenticated:
 
     st.divider()
 
-    # ===== PAGE ROUTING =====
     page = st.session_state.active_page
     if page == "dashboard":
         show_dashboard()
@@ -978,7 +1059,6 @@ if st.session_state.is_authenticated:
 else:
     st.divider()
     st.subheader("Admin Dashboard")
-    # 🔥 FIX: Singapore Time (UTC+8)
     st.caption(f"{datetime.now(timezone(timedelta(hours=8))).strftime('%d %b %Y')}")
     if st.session_state.show_login:
         st.divider()
@@ -988,7 +1068,8 @@ else:
             pwd = st.text_input("Password", type="password", key="login_pwd")
             st.caption("Checker: Attendance | Chairman: Oversight | Admin: Free Access")
         with c2:
-            st.write(" "); st.write(" ")
+            st.write(" ")
+            st.write(" ")
             if st.button("Login", type="primary", use_container_width=True):
                 if verify_password(pwd, "admin"):
                     st.session_state.is_authenticated = True

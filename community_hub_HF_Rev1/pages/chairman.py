@@ -1,6 +1,8 @@
 import streamlit as st
 from config import supabase, DB_CONNECTED, load_activities, PLOT_TYPES, TOTAL_PLOTS
 from utils import load_plots, get_occupied_count
+# pages/chairman.py — Add this import
+from services import AnalyticsService
 
 def show_chairman():
     st.header("🧭 Community Overview")
@@ -24,14 +26,14 @@ def show_chairman():
     st.subheader("👥 Community Membership Breakdown")
     
     # Count member types (defaults to 'Resident' if not set yet)
-    resident_count = sum(1 for p in active_participants if p.get('member_type', 'Resident') == 'Resident')
-    rn_count = sum(1 for p in active_participants if p.get('member_type') == 'RN Member')
-    volunteer_count = sum(1 for p in active_participants if p.get('member_type') == 'Volunteer Member')
-    
-    # Calculate percentages safely
-    res_pct = (resident_count / total_active * 100) if total_active > 0 else 0
-    rn_pct = (rn_count / total_active * 100) if total_active > 0 else 0
-    vol_pct = (volunteer_count / total_active * 100) if total_active > 0 else 0
+    breakdown = AnalyticsService.get_member_breakdown(participants)
+    resident_count = breakdown['resident']
+    rn_count = breakdown['rn']
+    volunteer_count = breakdown['volunteer']
+    res_pct = breakdown['resident_pct']
+    rn_pct = breakdown['rn_pct']
+    vol_pct = breakdown['volunteer_pct']
+    total_active = breakdown['total']
     
     # Display top-level metrics
     c1, c2, c3, c4 = st.columns(4)
