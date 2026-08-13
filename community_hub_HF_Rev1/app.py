@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone
 import urllib.parse
+import streamlit.components.v1 as components
 
 # ===== DISABLE STREAMLIT AUTO-SIDEBAR =====
 st.set_page_config(
@@ -903,26 +904,29 @@ if not st.session_state.plots:
 if not st.session_state.activities:
     st.session_state.activities = load_activities()
 
+# app.py — In the authenticated section
+
 if st.session_state.is_authenticated:
     col1, col2 = st.columns([3, 1])
     with col1:
         st.subheader("Admin Dashboard")
     with col2:
-        # 📅 Date Display
+        # Date
         st.caption(f"{datetime.now(timezone(timedelta(hours=8))).strftime('%d %b %Y')}")
         
-        # 🕐 Live Clock
-        st.markdown("""
+        # Live Clock using components.html()
+        components.html("""
         <style>
             .clock-container {
                 background: #1a1a2e;
                 border-radius: 10px;
-                padding: 6px 15px;
+                padding: 8px 15px;
                 display: inline-block;
                 border: 1px solid #333;
                 text-align: center;
                 margin-top: 4px;
                 width: 100%;
+                font-family: 'Segoe UI', sans-serif;
             }
             .clock-container .time {
                 color: #00ff88;
@@ -948,8 +952,8 @@ if st.session_state.is_authenticated:
             }
         </style>
         <div class="clock-container">
-            <span class="time" id="clockTime">00:00:00</span>
-            <span class="ampm" id="clockAMPM">AM</span>
+            <span class="time" id="clockTime">--:--:--</span>
+            <span class="ampm" id="clockAMPM">--</span>
             <span class="separator">|</span>
             <span class="date-text" id="clockDate">Loading...</span>
         </div>
@@ -969,11 +973,11 @@ if st.session_state.is_authenticated:
             updateClock();
             setInterval(updateClock, 1000);
         </script>
-        """, unsafe_allow_html=True)
+        """, height=70)
         
+        # Logout button
         if st.button("Logout", use_container_width=True):
             st.session_state.is_authenticated = False
-            # ... rest of logout logic
             st.session_state.user_role = None
             st.session_state.show_login = False
             st.session_state.active_page = None
@@ -996,6 +1000,7 @@ if st.session_state.is_authenticated:
                 st.session_state.chairman_tc_accepted = True
                 st.rerun()
         st.stop()
+
 
     st.markdown("""
     <style>
