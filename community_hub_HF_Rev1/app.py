@@ -904,13 +904,76 @@ if not st.session_state.activities:
     st.session_state.activities = load_activities()
 
 if st.session_state.is_authenticated:
-    col1, col2 = st.columns([3,1])
+    col1, col2 = st.columns([3, 1])
     with col1:
         st.subheader("Admin Dashboard")
     with col2:
+        # 📅 Date Display
         st.caption(f"{datetime.now(timezone(timedelta(hours=8))).strftime('%d %b %Y')}")
+        
+        # 🕐 Live Clock
+        st.markdown("""
+        <style>
+            .clock-container {
+                background: #1a1a2e;
+                border-radius: 10px;
+                padding: 6px 15px;
+                display: inline-block;
+                border: 1px solid #333;
+                text-align: center;
+                margin-top: 4px;
+                width: 100%;
+            }
+            .clock-container .time {
+                color: #00ff88;
+                font-size: 20px;
+                font-weight: 700;
+                font-family: 'Courier New', monospace;
+                letter-spacing: 1px;
+            }
+            .clock-container .ampm {
+                color: #888;
+                font-size: 12px;
+                font-weight: 600;
+                margin-left: 4px;
+            }
+            .clock-container .date-text {
+                color: #aaa;
+                font-size: 11px;
+                margin-left: 10px;
+            }
+            .clock-container .separator {
+                color: #444;
+                margin: 0 6px;
+            }
+        </style>
+        <div class="clock-container">
+            <span class="time" id="clockTime">00:00:00</span>
+            <span class="ampm" id="clockAMPM">AM</span>
+            <span class="separator">|</span>
+            <span class="date-text" id="clockDate">Loading...</span>
+        </div>
+        <script>
+            function updateClock() {
+                const now = new Date();
+                let h = now.getHours();
+                const ampm = h >= 12 ? 'PM' : 'AM';
+                h = h % 12 || 12;
+                const m = String(now.getMinutes()).padStart(2, '0');
+                const s = String(now.getSeconds()).padStart(2, '0');
+                const opts = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
+                document.getElementById('clockTime').textContent = `${h}:${m}:${s}`;
+                document.getElementById('clockAMPM').textContent = ampm;
+                document.getElementById('clockDate').textContent = now.toLocaleDateString('en-SG', opts);
+            }
+            updateClock();
+            setInterval(updateClock, 1000);
+        </script>
+        """, unsafe_allow_html=True)
+        
         if st.button("Logout", use_container_width=True):
             st.session_state.is_authenticated = False
+            # ... rest of logout logic
             st.session_state.user_role = None
             st.session_state.show_login = False
             st.session_state.active_page = None
