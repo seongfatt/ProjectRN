@@ -917,63 +917,64 @@ if st.session_state.is_authenticated:
         # Live Clock using components.html()
         components.html("""
         <style>
-            .clock-container {
-                background: #1a1a2e;
-                border-radius: 10px;
-                padding: 8px 15px;
-                display: inline-block;
-                border: 1px solid #333;
-                text-align: center;
-                margin-top: 4px;
-                width: 100%;
-                font-family: 'Segoe UI', sans-serif;
-            }
-            .clock-container .time {
-                color: #00ff88;
-                font-size: 20px;
-                font-weight: 700;
-                font-family: 'Courier New', monospace;
-                letter-spacing: 1px;
-            }
-            .clock-container .ampm {
-                color: #888;
-                font-size: 12px;
-                font-weight: 600;
-                margin-left: 4px;
-            }
-            .clock-container .date-text {
-                color: #aaa;
-                font-size: 11px;
-                margin-left: 10px;
-            }
-            .clock-container .separator {
-                color: #444;
-                margin: 0 6px;
-            }
+        .clock-container {
+            background: #1a1a2e;
+            border-radius: 10px;
+            padding: 10px 15px;
+            display: inline-block;
+            border: 1px solid #333;
+            text-align: center;
+            margin-top: 4px;
+            width: 100%;
+            font-family: 'Segoe UI', sans-serif;
+            box-sizing: border-box;
+        }
+        .clock-container .time {
+            color: #00ff88;
+            font-size: 20px;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 1px;
+        }
+        .clock-container .ampm {
+            color: #888;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 4px;
+        }
+        .clock-container .date-text {
+            color: #aaa;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .clock-container .separator {
+            color: #444;
+            margin: 0 6px;
+        }
         </style>
         <div class="clock-container">
-            <span class="time" id="clockTime">--:--:--</span>
-            <span class="ampm" id="clockAMPM">--</span>
-            <span class="separator">|</span>
-            <span class="date-text" id="clockDate">Loading...</span>
+        <span class="time" id="clockTime">--:--:--</span>
+        <span class="ampm" id="clockAMPM">--</span>
+        <span class="separator">|</span>
+        <span class="date-text" id="clockDate">Loading...</span>
         </div>
         <script>
-            function updateClock() {
-                const now = new Date();
-                let h = now.getHours();
-                const ampm = h >= 12 ? 'PM' : 'AM';
-                h = h % 12 || 12;
-                const m = String(now.getMinutes()).padStart(2, '0');
-                const s = String(now.getSeconds()).padStart(2, '0');
-                const opts = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
-                document.getElementById('clockTime').textContent = `${h}:${m}:${s}`;
-                document.getElementById('clockAMPM').textContent = ampm;
-                document.getElementById('clockDate').textContent = now.toLocaleDateString('en-SG', opts);
-            }
-            updateClock();
-            setInterval(updateClock, 1000);
+        function updateClock() {
+            const now = new Date();
+            let h = now.getHours();
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            h = h % 12 || 12;
+            const m = String(now.getMinutes()).padStart(2, '0');
+            const s = String(now.getSeconds()).padStart(2, '0');
+            const opts = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' };
+            document.getElementById('clockTime').textContent = `${h}:${m}:${s}`;
+            document.getElementById('clockAMPM').textContent = ampm;
+            document.getElementById('clockDate').textContent = now.toLocaleDateString('en-SG', opts);
+        }
+        updateClock();
+        setInterval(updateClock, 1000);
         </script>
-        """, height=70)
+        """, height=85)  # ✅ Increased from 70 to 85
         
         # Logout button
         if st.button("Logout", use_container_width=True):
