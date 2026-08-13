@@ -60,7 +60,7 @@ def show_residents():
          "RN Members Only", "Volunteer Members Only", "Residents Only"],
     )
 
-    # 🔥 MULTI-BLOCK: collect ALL occupied plots per resident (one list, many blocks possible)
+    # 🔥 MULTI-BLOCK: collect ALL occupied plots per resident
     plot_dict = {}
     for p in plots:
         if p.get("occupied"):
@@ -68,7 +68,7 @@ def show_residents():
             if uid:
                 plot_dict.setdefault(str(uid).strip(), []).append(p)
 
-    # Pre-calculate all attendance stats in ONE query (Fixes N+1 problem)
+    # Pre-calculate all attendance stats in ONE query
     activity_counts = defaultdict(lambda: defaultdict(int))
     total_counts = defaultdict(int)
     try:
@@ -109,7 +109,6 @@ def show_residents():
             count = activity_counts[pid][act["name"]]
             if count > 0:
                 attendance_info.append(f"{act['name']}: {count}x")
-        # 🔥 MULTI-PLOT display: "Plot 28 (B) @Block 622 + Plot 5 (A) @Block 624"
         plot_info = ""
         if has_plot:
             plot_info = " + ".join([
@@ -166,12 +165,11 @@ def show_residents():
     else:
         st.info("🔒 Full data export is restricted to Admins for PDPA compliance.")
 
-    # ── GARDEN PLOT ENTITLEMENTS (🔥 PER-BLOCK) ─────────────────────────
+    # ── GARDEN PLOT ENTITLEMENTS ─────────────────────────
     st.divider()
     st.subheader("Garden Plot Entitlements")
     all_plots = load_plots()
 
-    # 🔥 Block selector
     try:
         blocks_data = supabase.table('garden_layout').select('block_name').execute().data
         ent_blocks = sorted(set(b['block_name'] for b in blocks_data)) or ['Block 622']
@@ -327,7 +325,7 @@ def show_residents():
         c2.metric("Total Records", total_records)
         c3.metric("Participation Rate", f"{(unique_participants / active * 100):.1f}%" if active > 0 else "0%")
 
-    # ══════ QR CODE GENERATOR SECTION (unchanged) ══════
+    # ══════ QR CODE GENERATOR SECTION ══════
     st.divider()
     st.subheader("📱 Generate QR Code for Resident")
     st.caption("Generate a permanent QR code card for elderly residents to carry")
@@ -481,40 +479,3 @@ Scan QR code at check-in kiosk
         mime="text/plain",
         key=f"download_qr_{resident_id}_bulk",
     )
-
-# pages/residents.py — Add this inside the update/expand section
-
-# ─── FACE ENROLLMENT ───────────────────────────────────────────
-st.markdown("---")
-st.subheader("📸 Face Enrollment for Group Check-In")
-
-with st.expander("📷 Enroll Face Photo", expanded=False):
-    st.caption("Upload a clear photo of the resident's face for group photo check-in.")
-    st.caption("💡 **Tips:** Use a well-lit photo with face looking forward. Single face only.")
-    
-    face_photo = st.file_uploader(
-        "Upload Face Photo",
-        type=['jpg', 'jpeg', 'png'],
-        key=f"face_upload_{p['id']}"
-    )
-    
-    if face_photo:
-        st.image(face_photo, caption="📸 Face Photo Preview", width=150)
-        
-        if st.button("✅ Enroll Face", key=f"enroll_face_{p['id']}", type="primary"):
-            from services.face_service import get_face_service
-            face_service = get_face_service()
-            
-            result = face_service.enroll_face(p['id'], face_photo.getvalue())
-            
-            if result['success']:
-                st.success(result['message'])
-                st.rerun()
-            else:
-                st.error(result['error'])
-    
-    # Show enrollment status
-    if p.get('face_enrolled', False):
-        st.success("✅ Face enrolled for this resident")
-    else:
-        st.warning("⚠️ Face not yet enrolled")
