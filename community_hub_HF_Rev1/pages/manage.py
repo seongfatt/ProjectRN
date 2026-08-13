@@ -6,6 +6,7 @@ def show_manage(selected_date):
     from config import supabase, DB_CONNECTED, refresh_data, load_activities
     from utils import mask_phone, clean_phone_number, log_action, find_participant_by_id
     from services import RegistrationService
+    from pages.residents import show_face_enrollment
 
     # ─── HELPER: Get/Set System Settings ──────────────────────
     def get_setting(key, default=None):
@@ -46,6 +47,7 @@ def show_manage(selected_date):
                 no_phone = st.checkbox("👴 Elderly without phone", key="new_p_no_phone")
                 indemnity = st.checkbox("Indemnity Signed", key="new_p_indemnity")
                 st.markdown("---")
+                show_face_enrollment()
                 st.markdown("**👤 Member Type:**")
                 member_type = st.radio(
                     "Select member category:",
@@ -148,6 +150,7 @@ def show_manage(selected_date):
                         st.caption("No participants found matching that name.")
             
             with st.expander("✏️ Update Resident Contact Info"):
+
                 st.caption("Use this to add a phone number, block info, or change member type.")
                 update_search = st.text_input("Search resident by Name or ID", key="update_search_contact")
                 if update_search:
