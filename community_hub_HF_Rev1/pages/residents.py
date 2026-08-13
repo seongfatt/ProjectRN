@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 from config import supabase, DB_CONNECTED, load_activities, TYPE_MAP, PLOT_TYPES, APP_URL
-from utils import mask_phone, get_user_plot, load_plots
+from utils import mask_phone, get_user_plot, load_plots, clean_phone_number, load_participants, refresh_data
 from collections import defaultdict
 import urllib.parse
 import base64
@@ -479,3 +479,66 @@ Scan QR code at check-in kiosk
         mime="text/plain",
         key=f"download_qr_{resident_id}_bulk",
     )
+
+
+# ─── ✅ FACE ENROLLMENT SECTION ───
+# This is the standalone face enrollment section that appears in Management tab
+def show_face_enrollment():
+    """Standalone face enrollment section for the Management tab"""
+    
+    st.markdown("---")
+    st.subheader("📸 Face Enrollment for Group Check-In")
+    st.caption("Enroll residents' faces for group photo check-in.")
+    
+    # Search for resident to enroll
+    search_face = st.text_input("Search resident by Name or ID", key="face_enroll_search")
+    
+    if search_face:
+        s = search_face.lower()
+        participants = st.session_state.participants
+        matches = [p for p in participants if p.get('active', True) and (s in p['name'].lower() or s in str(p.get('id', '')).lower())]
+        
+        if matches:
+            for p in matches[:5]:
+                with st.container():
+                    st.markdown(f"**{p['name']}** — ID: {p['id'][:12]}...")
+                    
+                    # Show enrollment status
+                    if p.get('face_enrolled', False):
+                        st.success("✅ Face enrolled")
+                    else:
+                        st.warning("⚠️ Face not enrolled")
+                    
+                    with st.expander("📷 Upload Face Photo", expanded=False):
+                        st.caption("Upload a clear photo of the resident's face.")
+                        st.caption("💡 **Tips:** Well-lit, face looking forward, single face only.")
+                        
+                        face_photo = st.file_uploader(
+                            "Upload Face Photo",
+                            type=['jpg', 'jpeg', 'png'],
+                            key=f"face_enroll_{p['id']}"
+                        )
+                        
+                        if face_photo:
+                            st.image(face_photo, caption="📸 Preview", width=150)
+                            
+                            if st.button("✅ Enroll Face", key=f"enroll_btn_{p['id']}", type="primary"):
+                                from services.face_service import get_face_service
+                                face_service = get_face_service()
+                                
+                                result = face_service.enroll_face(p['id'], face_photo.getvalue())
+                                
+                                if result['success']:
+                                    st.success(result['message'])
+                                    st.rerun()
+                                else:
+                                    st.error(result['error'])
+                    st.divider()
+        else:
+            st.info("No residents found matching your search.")
+    else:
+        st.info("🔍 Type a name or ID above to search for a resident.")
+
+
+# Add to the Management tab via show_manage() or call separately
+# To use: call show_face_enrollment() from the Management tab
