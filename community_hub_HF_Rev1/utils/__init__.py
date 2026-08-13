@@ -26,3 +26,6 @@ from .utils import (
     sync_session_attendance_async,
     validate_checkin_time
 )
+
+# Also export refresh_data from config for convenience
+from config import refresh_data
