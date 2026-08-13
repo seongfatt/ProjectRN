@@ -481,3 +481,40 @@ Scan QR code at check-in kiosk
         mime="text/plain",
         key=f"download_qr_{resident_id}_bulk",
     )
+
+# pages/residents.py — Add this inside the update/expand section
+
+# ─── FACE ENROLLMENT ───────────────────────────────────────────
+st.markdown("---")
+st.subheader("📸 Face Enrollment for Group Check-In")
+
+with st.expander("📷 Enroll Face Photo", expanded=False):
+    st.caption("Upload a clear photo of the resident's face for group photo check-in.")
+    st.caption("💡 **Tips:** Use a well-lit photo with face looking forward. Single face only.")
+    
+    face_photo = st.file_uploader(
+        "Upload Face Photo",
+        type=['jpg', 'jpeg', 'png'],
+        key=f"face_upload_{p['id']}"
+    )
+    
+    if face_photo:
+        st.image(face_photo, caption="📸 Face Photo Preview", width=150)
+        
+        if st.button("✅ Enroll Face", key=f"enroll_face_{p['id']}", type="primary"):
+            from services.face_service import get_face_service
+            face_service = get_face_service()
+            
+            result = face_service.enroll_face(p['id'], face_photo.getvalue())
+            
+            if result['success']:
+                st.success(result['message'])
+                st.rerun()
+            else:
+                st.error(result['error'])
+    
+    # Show enrollment status
+    if p.get('face_enrolled', False):
+        st.success("✅ Face enrolled for this resident")
+    else:
+        st.warning("⚠️ Face not yet enrolled")

@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 import urllib.parse
 import streamlit.components.v1 as components
+from pages.face_checkin import show_face_checkin
 
 # ===== DISABLE STREAMLIT AUTO-SIDEBAR =====
 st.set_page_config(
@@ -1049,6 +1050,7 @@ if st.session_state.is_authenticated:
         nav_items = [
             {"id": "dashboard", "icon": "📊", "title": "Dashboard"},
             {"id": "checkin", "icon": "🎟️", "title": "Check-In"},
+            {"id": "face_checkin", "icon": "📸", "title": "Face Check-In"},  # ← NEW
             {"id": "sessions", "icon": "📅", "title": "Sessions"},
             {"id": "volunteer", "icon": "🤝", "title": "Volunteer"},
             {"id": "vol_access", "icon": "🪪", "title": "Vol Access"},
@@ -1124,6 +1126,8 @@ if st.session_state.is_authenticated:
         show_chairman()
     elif page == "settings":
         show_settings()
+    elif page == "face_checkin":
+        show_face_checkin()
 
 else:
     st.divider()
