@@ -1,7 +1,6 @@
 # services/__init__.py
-"""Services module — Business logic layer (Phase 3)"""
+"""Services module — Business logic layer"""
 
-# This will be populated in Phase 3 with:
-# from .attendance_service import AttendanceService
-# from .registration_service import RegistrationService
-# from .face_service import FaceRecognitionService
+from .attendance_service import AttendanceService
+from .registration_service import RegistrationService
+from .analytics_service import AnalyticsService
