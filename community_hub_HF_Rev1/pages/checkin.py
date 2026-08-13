@@ -1,5 +1,3 @@
-from email import message
-
 import streamlit as st
 from datetime import datetime, timezone
 from config import supabase, DB_CONNECTED, load_activities, refresh_data
@@ -184,9 +182,8 @@ def show_checkin(selected_date):
                     """, unsafe_allow_html=True)
                     if st.button(btn_label, type="primary", key=f"confirm_{resident['id']}", use_container_width=True):
                         success, message, _ = AttendanceService.process_checkin(resident['id'], selected_date, activity, s1, s2, s3, s4)
-                    if st.success:
-                        st.rerun()
-                        st.rerun()
+                        if success:
+                            st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
         else:
@@ -256,87 +253,5 @@ def show_checkin(selected_date):
                         btn_label = "➕ Add Session" if has_record else "Check In"
                         if st.button(btn_label, key=f"btn_{p['id']}", use_container_width=True, type="primary"):
                             success, message, _ = AttendanceService.process_checkin(p['id'], selected_date, activity, s1, s2, s3, s4)
-                        if st.success:
-                            st.rerun()
-                            st.rerun()
-
-def process_checkin_by_id(pid, date, activity, s1, s2, s3=False, s4=False):
-    """Core logic: Time Validation + SESSION UPDATE (supports 1-4 sessions). Returns True/False."""
-    try:
-        selected = [s1, s2, s3, s4]
-
-        if isinstance(date, str):
-            if len(date) == 8 and date.isdigit():
-                formatted_date = datetime.strptime(date, "%Y%m%d").strftime("%Y-%m-%d")
-            else:
-                formatted_date = date
-        else:
-            formatted_date = date.strftime("%Y-%m-%d")
-
-        res = supabase.table('participants').select("*").eq('id', pid).execute()
-        if not res.data:
-            st.error(f"❌ Resident ID not found: {pid}")
-            return False
-        resident = res.data[0]
-
-        existing = supabase.table('attendance').select("*") \
-            .eq('participant_id', pid).eq('date', formatted_date).eq('source', activity).execute()
-
-        if existing.data and len(existing.data) > 0:
-            record = existing.data[0]
-            missing = [i + 1 for i, f in enumerate(selected) if f and not record.get(f'session_{i + 1}', False)]
-
-            if not missing:
-                st.info(f"ℹ️ **{resident['name']}** is already fully checked in for {activity} today.")
-                return False
-
-            is_allowed, message = validate_checkin_time(activity, missing[0])
-            if not is_allowed:
-                st.error(message)
-                st.info("💡 If this is incorrect, please contact the admin to adjust the session times or disable time validation.")
-                return False
-
-            updates = {"timestamp": datetime.now(timezone.utc).isoformat()}
-            for n in missing:
-                updates[f'session_{n}'] = True
-            current_activities = record.get('activities') or []
-            if activity not in current_activities:
-                current_activities.append(activity)
-            updates['activities'] = current_activities
-
-            supabase.table('attendance').update(updates).eq('id', record['id']).execute()
-            refresh_data()
-
-            sync_session_attendance_async(pid, resident['name'], activity, formatted_date,
-                                          st.session_state.get('user_role', 'system'))
-
-            st.session_state['scan_banner'] = ('success', f"✅ Updated **{resident['name']}** with additional session(s)!")
-            return True
-
-        first_selected = next((i + 1 for i, f in enumerate(selected) if f), 1)
-        is_allowed, message = validate_checkin_time(activity, first_selected)
-        if not is_allowed:
-            st.error(message)
-            st.info("💡 If this is incorrect, please contact the admin to adjust the session times or disable time validation.")
-            return False
-
-        supabase.table('attendance').insert({
-            "participant_id": pid, "name": resident['name'], "date": formatted_date,
-            "session_1": s1, "session_2": s2, "session_3": s3, "session_4": s4,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "self_checkin": False, "source": activity,
-            "activities": [activity]
-        }).execute()
-        refresh_data()
-
-        sync_session_attendance_async(pid, resident['name'], activity, formatted_date,
-                                      st.session_state.get('user_role', 'system'))
-
-        st.session_state['scan_banner'] = ('success', f"✅ Successfully checked in **{resident['name']}**!")
-        return True
-    except Exception as e:
-        if 'duplicate key' in str(e):
-            st.info(f"ℹ️ Already checked in for **{activity}** today.")
-        else:
-            st.error(f"Error: {e}")
-        return False
+                            if success:
+                                st.rerun()
