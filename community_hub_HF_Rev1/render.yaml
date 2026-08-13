@@ -1,0 +1,20 @@
+# render.yaml
+services:
+  - type: web
+    name: woodlands-community-hub
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: CHECKER_PASSWORD
+        sync: false
+      - key: CHAIRMAN_PASSWORD
+        sync: false
+      - key: APP_URL
+        sync: false
