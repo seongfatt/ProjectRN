@@ -1,16 +1,21 @@
-# config.py — CLEAN VERSION (NO PROXY)
+# config.py — DIAGNOSTIC VERSION
 import streamlit as st
 from supabase import create_client
 import os
 from datetime import datetime, timezone, timedelta
 
 # ========== READ ENVIRONMENT VARIABLES ==========
+st.write("### 🔍 Diagnostic Mode")
+
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-# Debug: Print to logs
-print(f"SUPABASE_URL: {SUPABASE_URL}")
-print(f"SUPABASE_KEY: {'*' * 30 if SUPABASE_KEY else 'MISSING'}")
+# Display what we found (masked for security)
+st.write(f"**SUPABASE_URL:** {SUPABASE_URL}")
+if SUPABASE_KEY:
+    st.write(f"**SUPABASE_KEY:** {'*' * 20} (length: {len(SUPABASE_KEY)})")
+else:
+    st.write("**SUPABASE_KEY:** ❌ NOT FOUND")
 
 # ========== CHECK CREDENTIALS ==========
 if not SUPABASE_URL:
@@ -21,18 +26,25 @@ if not SUPABASE_KEY:
     st.error("❌ SUPABASE_KEY is not set!")
     st.stop()
 
-# ========== CREATE SUPABASE CLIENT (NO PROXY) ==========
+# ========== CREATE SUPABASE CLIENT ==========
 try:
-    # ✅ NO proxy parameter!
+    st.write("🔄 Attempting to connect to Supabase...")
+    
+    # 🔥 NO proxy parameter!
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    
     # Test connection
+    st.write("🔄 Testing connection with a simple query...")
     test = supabase.table('participants').select("id").limit(1).execute()
+    
     DB_CONNECTED = True
     st.success("✅ Database connected successfully!")
-    print("✅ Database connected successfully!")
+    st.success(f"✅ Found {len(test.data)} participant(s)")
+    
 except Exception as e:
     st.error(f"❌ Database connection failed: {e}")
-    print(f"❌ Database connection failed: {e}")
+    st.error(f"❌ Error type: {type(e).__name__}")
+    st.error(f"❌ Error details: {str(e)}")
     supabase = None
     DB_CONNECTED = False
 
