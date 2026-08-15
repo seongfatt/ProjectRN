@@ -3,7 +3,7 @@ import streamlit as st
 from supabase import create_client
 from datetime import timezone, timedelta, datetime
 
-# ========== READ FROM ENVIRONMENT VARIABLES ONLY ==========
+# ========== READ FROM ENVIRONMENT VARIABLES ==========
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
@@ -11,9 +11,14 @@ CHECKER_PASSWORD = os.environ.get("CHECKER_PASSWORD")
 CHAIRMAN_PASSWORD = os.environ.get("CHAIRMAN_PASSWORD")
 APP_URL = os.environ.get("APP_URL", "https://woodlands-community-hub.onrender.com")
 
+# ========== DEBUG ==========
+print(f"🔍 SUPABASE_URL: {'✅ FOUND' if SUPABASE_URL else '❌ NOT FOUND'}")
+print(f"🔍 SUPABASE_KEY: {'✅ FOUND' if SUPABASE_KEY else '❌ NOT FOUND'}")
+
 # ========== SUPABASE CLIENT ==========
 supabase = None
 DB_CONNECTED = False
+DB_ERROR_MSG = None
 
 if SUPABASE_URL and SUPABASE_KEY:
     try:
@@ -21,16 +26,13 @@ if SUPABASE_URL and SUPABASE_KEY:
         # Test connection
         supabase.table("participants").select("id").limit(1).execute()
         DB_CONNECTED = True
-        print("✅ Supabase connected!")
+        print("✅ Supabase connected successfully!")
     except Exception as e:
+        DB_ERROR_MSG = str(e)
         print(f"❌ Supabase connection failed: {e}")
 else:
-    print("❌ Missing SUPABASE_URL or SUPABASE_KEY")
-    print(f"SUPABASE_URL: {SUPABASE_URL}")
-    print(f"SUPABASE_KEY: {'SET' if SUPABASE_KEY else 'NOT SET'}")
-
-# ========== REST OF YOUR CONFIG ==========
-# ... (keep the rest of your config.py unchanged)
+    DB_ERROR_MSG = "Missing SUPABASE_URL or SUPABASE_KEY"
+    print(f"❌ {DB_ERROR_MSG}")
 
 # ========== TIMEZONE ==========
 SGT = timezone(timedelta(hours=8))
@@ -39,33 +41,11 @@ def now_sgt():
     """Return current datetime in Singapore Time (UTC+8)."""
     return datetime.now(SGT)
 
-
-# ========== SUPABASE CLIENT ==========
-def init_supabase():
-    """Initialize Supabase client."""
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        print("❌ Missing Supabase credentials")
-        return None, False, "Missing Supabase credentials"
-    
-    try:
-        client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        # Test connection
-        client.table("participants").select("id").limit(1).execute()
-        print("✅ Supabase connected successfully!")
-        return client, True, None
-    except Exception as e:
-        print(f"❌ Database connection failed: {e}")
-        return None, False, f"Database connection failed: {e}"
-
-# Initialize Supabase
-supabase, DB_CONNECTED, DB_ERROR_MSG = init_supabase()
-
 # ========== CACHE MANAGEMENT ==========
 def refresh_data():
     """Clear all cached data."""
     st.cache_data.clear()
     st.cache_resource.clear()
-
 
 # ========== ACTIVITIES ==========
 DEFAULT_ACTIVITIES = [
@@ -81,7 +61,6 @@ def load_activities():
         return r.data if r.data else DEFAULT_ACTIVITIES
     except Exception:
         return DEFAULT_ACTIVITIES
-
 
 # ============================================================
 # PLOT TYPES WITH BOX MATH
@@ -104,7 +83,6 @@ TYPE_MAP = {
     61: "A", 62: "B", 63: "A", 64: "D", 65: "D", 66: "B", 67: "B", 68: "D", 69: "C", 70: "A",
     71: "D", 72: "B", 73: "C", 74: "A", 75: "C", 76: "C"
 }
-
 
 # ========== MOBILE CSS ==========
 MOBILE_CSS = """<style>
@@ -162,24 +140,3 @@ MOBILE_CSS = """<style>
     font-size: 13px;
 }
 </style>"""
-
-# Export all variables
-__all__ = [
-    'supabase',
-    'DB_CONNECTED',
-    'DB_ERROR_MSG',
-    'SUPABASE_URL',
-    'SUPABASE_KEY',
-    'ADMIN_PASSWORD',
-    'CHECKER_PASSWORD',
-    'CHAIRMAN_PASSWORD',
-    'APP_URL',
-    'SGT',
-    'now_sgt',
-    'refresh_data',
-    'load_activities',
-    'PLOT_TYPES',
-    'TOTAL_PLOTS',
-    'TYPE_MAP',
-    'MOBILE_CSS'
-]
