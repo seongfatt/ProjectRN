@@ -12,8 +12,8 @@ load_dotenv()
 def get_secret(key, default=None):
     """
     Get secret from (in order):
-    1. os.environ (Render, local .env file, Docker) ← NOW FIRST
-    2. st.secrets (Hugging Face Spaces / Streamlit Cloud)
+    1. os.environ (Render, local .env file, Docker)
+    2. st.secrets (Streamlit Cloud / Hugging Face Spaces)
     3. default value if provided
     """
     # 🔥 FIRST: Try environment variables (for Render)
