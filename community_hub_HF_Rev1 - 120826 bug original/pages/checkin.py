@@ -10,6 +10,7 @@ except ImportError:
 import urllib.parse
 from services import AttendanceService
 
+
 def show_checkin(selected_date):
     st.markdown("""
     <style>
