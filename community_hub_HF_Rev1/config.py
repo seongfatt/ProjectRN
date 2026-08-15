@@ -8,23 +8,28 @@ from dotenv import load_dotenv
 # Load environment variables from .env (local development only)
 load_dotenv()
 
-# ========== HELPER: Get Secrets (HF / Streamlit Cloud / Render / Local) ==========
+# ========== HELPER: Get Secrets (Render / Streamlit Cloud / Local) ==========
 def get_secret(key, default=None):
     """
     Get secret from (in order):
-    1. st.secrets (Hugging Face Spaces / Streamlit Cloud)
-    2. os.environ (Render, local .env file, Docker)
+    1. os.environ (Render, local .env file, Docker) ← NOW FIRST
+    2. st.secrets (Hugging Face Spaces / Streamlit Cloud)
     3. default value if provided
     """
-    # Try st.secrets first (for Streamlit Cloud / HF Spaces)
+    # 🔥 FIRST: Try environment variables (for Render)
+    env_value = os.environ.get(key)
+    if env_value is not None:
+        return env_value
+    
+    # SECOND: Try st.secrets (for Streamlit Cloud / HF Spaces)
     try:
         if hasattr(st, "secrets") and key in st.secrets:
             return st.secrets[key]
     except Exception:
         pass
 
-    # Fallback to environment variables (Render, local, Docker)
-    return os.environ.get(key, default)
+    # Fallback to default
+    return default
 
 
 # ========== DATABASE CONFIG ==========
@@ -48,8 +53,6 @@ def now_sgt():
 
 
 # ========== SUPABASE CLIENT ==========
-# 🔥 CRITICAL FIX: Never call st.error() inside @st.cache_resource.
-# Display functions are forbidden inside cached functions.
 @st.cache_resource
 def get_db():
     """Initialize Supabase client. Returns (client, connected, error_msg)."""
@@ -63,7 +66,6 @@ def get_db():
         client.table("participants").select("id").limit(1).execute()
         return client, True, None
     except Exception as e:
-        # Return error message — DO NOT use st.error() here
         return None, False, f"Database connection failed: {e}"
 
 # Initialize on module load
