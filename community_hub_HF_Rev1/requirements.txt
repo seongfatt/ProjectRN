@@ -8,6 +8,4 @@ numpy==1.26.4
 Pillow==10.4.0
 requests==2.32.3
 opencv-python-headless==4.8.1.78
-# 🔥 FIX: Use older httpcore that works with Python 3.14
-httpcore==1.0.5
-httpx==0.27.2
+httpx==0.24.1
