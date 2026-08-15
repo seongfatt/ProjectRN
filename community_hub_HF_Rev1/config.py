@@ -1,4 +1,4 @@
-# config.py — Fixed for Render
+# config.py — Fixed database connection
 import streamlit as st
 from supabase import create_client
 import os
@@ -50,15 +50,12 @@ def now_sgt():
 
 # ========== SUPABASE CLIENT ==========
 @st.cache_resource
-# config.py — REMOVE proxy parameter
 def get_db():
     try:
-        # ❌ OLD (with proxy)
-        # client = create_client(SUPABASE_URL, SUPABASE_KEY, proxy=...)
-        
-        # ✅ NEW (no proxy)
         client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        # 🔥 FIXED: Test the connection BEFORE returning
         client.table('participants').select("id").limit(1).execute()
+        # ✅ Only return success if the test passes
         return client, True
     except Exception as e:
         st.error(f"Database connection failed: {e}")
