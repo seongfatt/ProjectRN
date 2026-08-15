@@ -12,10 +12,21 @@ import urllib.parse
 import base64
 import os
 from PIL import Image
-import cv2
 import numpy as np
 import io
 from services import AttendanceService, RegistrationService
+
+# 🔥 Optional: Try to import cv2 for QR scanning
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+    cv2 = None
+    print("⚠️ cv2 not available — QR scanning disabled")
+
+
+
 
 # ============================================
 # LOGO HELPER FUNCTION
@@ -45,7 +56,11 @@ def _get_logo_base64(logo_path="logo.png"):
 # ============================================
 
 def decode_qr_from_image(image):
-    """Decode QR code from PIL Image using OpenCV"""
+    """Decode QR code from PIL Image using OpenCV (if available)."""
+    if not CV2_AVAILABLE:
+        st.warning("⚠️ QR scanning is not available. Please use phone search or manual entry.")
+        return None
+    
     try:
         img_array = np.array(image)
         gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)

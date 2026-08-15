@@ -12,6 +12,7 @@ from config import supabase, DB_CONNECTED, load_activities, now_sgt
 from services.face_service import get_face_service
 from utils import sync_session_attendance_async
 
+# pages/face_checkin.py — Add at the top of show_face_checkin()
 def show_face_checkin():
     st.header("📸 Group Photo Check-In")
     st.caption("Take a group photo and automatically check in all recognized residents")
@@ -22,6 +23,23 @@ def show_face_checkin():
     
     # Initialize face service
     face_service = get_face_service()
+    
+    # 🔥 Check if face recognition is available
+    if not face_service.is_available():
+        st.error("⚠️ Face recognition is not available on this server.")
+        st.info("Please contact the administrator to install: opencv-python-headless, dlib-bin, and face-recognition.")
+        st.markdown("""
+        <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; color: #1a1a1a;">
+            <strong>💡 To enable face recognition:</strong><br>
+            Add these to requirements.txt:<br>
+            <code>opencv-python-headless==4.8.1.78</code><br>
+            <code>dlib-bin==19.24.2</code><br>
+            <code>face-recognition==1.3.0</code>
+        </div>
+        """, unsafe_allow_html=True)
+        return
+    
+    # ... rest of function (unchanged)
     enrolled_count = face_service.get_enrolled_count()
     
     # ── Status Banner ──

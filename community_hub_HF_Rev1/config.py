@@ -9,11 +9,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ========== HELPER: Get Secrets (HF Compatible) ==========
+# config.py — Add this function
 def get_secret(key, default=None):
     """
     Get secret from:
     1. st.secrets (Hugging Face Spaces)
-    2. os.environ (local .env file)
+    2. os.environ (Render, local .env file)
     3. default value if provided
     """
     # Try st.secrets first (for Hugging Face Spaces)
@@ -23,7 +24,7 @@ def get_secret(key, default=None):
     except:
         pass
     
-    # Fallback to environment variables (local development)
+    # Fallback to environment variables (Render, local)
     return os.environ.get(key, default)
 
 
