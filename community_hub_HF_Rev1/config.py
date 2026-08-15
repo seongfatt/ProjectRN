@@ -53,9 +53,8 @@ def now_sgt():
 def get_db():
     try:
         client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        # 🔥 FIXED: Test the connection BEFORE returning
+        # ✅ FIXED: Test the connection BEFORE returning
         client.table('participants').select("id").limit(1).execute()
-        # ✅ Only return success if the test passes
         return client, True
     except Exception as e:
         st.error(f"Database connection failed: {e}")
