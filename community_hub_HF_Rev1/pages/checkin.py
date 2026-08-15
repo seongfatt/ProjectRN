@@ -10,6 +10,25 @@ except ImportError:
 import urllib.parse
 from services import AttendanceService
 
+# pages/face_checkin.py — Add this at the top of the function
+def show_face_checkin():
+    st.header("📸 Group Photo Check-In")
+    
+    face_service = get_face_service()
+    
+    if not face_service.is_available():
+        st.error("⚠️ Face recognition is not installed on this server.")
+        st.info("Please contact the administrator to install face_recognition.")
+        st.markdown("""
+        <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; color: #1a1a1a;">
+            <strong>💡 To enable face recognition:</strong><br>
+            Add <code>dlib-bin==19.24.2</code> and <code>face-recognition==1.3.0</code> to requirements.txt
+        </div>
+        """, unsafe_allow_html=True)
+        return
+    
+    # ... rest of the function
+
 def show_checkin(selected_date):
     st.markdown("""
     <style>
