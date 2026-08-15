@@ -74,7 +74,8 @@ from utils import (
 )
 
 # ===== IMPORT TAB FUNCTIONS =====
-from pages.checkin import show_checkin, show_face_checkin
+from pages.checkin import show_checkin  # ✅ Only show_checkin
+from pages.face_checkin import show_face_checkin  # ✅ This is correct
 from pages.reports import show_reports
 from pages.manage import show_manage
 from pages.garden import show_garden

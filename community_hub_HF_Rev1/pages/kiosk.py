@@ -5,7 +5,6 @@ from utils import clean_phone_number, find_participant_by_phone, mask_phone
 from services import AttendanceService
 
 def show_kiosk():
-    # st.set_page_config(layout="wide") remove side panel
     st.markdown("""
     <style>
     .resident-card {
@@ -103,10 +102,9 @@ def show_kiosk():
                 checkin_text = "Update Check-In" if not already_checked_in else "✅ Checked In"
                 if st.button(checkin_text, key="kiosk_checkin_yes", use_container_width=True, type="primary"):
                     success, message, _ = AttendanceService.process_checkin(resident['id'], today, selected_activity, s1, s2, s3, s4)
-                if success:
-                    st.success(f"Welcome {resident['name']}! Checked in for {session_option}")
-                    # st.balloons()
-                    st.rerun()
+                    if success:
+                        st.success(f"Welcome {resident['name']}! Checked in for {session_option}")
+                        st.rerun()
             with col2:
                 if st.button("❌ Not Attending", key="kiosk_checkin_no", use_container_width=True):
                     st.info("Sorry you can't make it!")
@@ -158,45 +156,13 @@ def show_kiosk():
                     <div class="resident-id">{badge} | ID: {short_id}</div>
                 </div>
                 """, unsafe_allow_html=True)
-                success, message, _ = AttendanceService.process_checkin(p['id'], today, selected_activity, s1, s2, s3, s4)
-                if success:
-                    st.success(f"Welcome {p['name']}! Checked in for {session_option}")
-                    # st.balloons()
-                    st.rerun()
+                if st.button("✅ Check In", key=f"kiosk_name_{p['id']}", use_container_width=True, type="primary"):
+                    success, message, _ = AttendanceService.process_checkin(p['id'], today, selected_activity, s1, s2, s3, s4)
+                    if success:
+                        st.success(f"Welcome {p['name']}! Checked in for {session_option}")
+                        st.rerun()
+    else:
         st.info("No residents found matching your search. Please see a volunteer.")
 
     st.divider()
     st.caption("Need help? Please ask our volunteers at the counter.")
-
-def mark_kiosk_attendance(pid, name, date, activity, s1=True, s2=False, s3=False, s4=False):
-    """Mark attendance from kiosk mode with S1-S4 update logic."""
-    try:
-        selected = [s1, s2, s3, s4]
-        existing = supabase.table('attendance').select("*") \
-            .eq('participant_id', pid).eq('date', date).eq('source', activity).execute()
-        if existing.data:
-            record = existing.data[0]
-            missing = [i + 1 for i, f in enumerate(selected) if f and not record.get(f'session_{i + 1}', False)]
-            if not missing:
-                st.info(f"ℹ️ {name} is already checked in for the selected session(s)")
-                return
-            updates = {"timestamp": datetime.now().isoformat()}
-            for n in missing:
-                updates[f'session_{n}'] = True
-            current_activities = record.get('activities') or []
-            if activity not in current_activities:
-                current_activities.append(activity)
-            updates['activities'] = current_activities
-            supabase.table('attendance').update(updates).eq('id', record['id']).execute()
-            st.success(f"✅ Updated attendance for {name}!")
-        else:
-            supabase.table('attendance').insert({
-                "participant_id": pid, "name": name, "date": date,
-                "session_1": s1, "session_2": s2, "session_3": s3, "session_4": s4,
-                "timestamp": datetime.now().isoformat(),
-                "self_checkin": False, "source": activity,
-                "activities": [activity]
-            }).execute()
-            st.success(f"✅ Check-in successful for {name}!")
-    except Exception as e:
-        st.error(f"Error: {e}")
