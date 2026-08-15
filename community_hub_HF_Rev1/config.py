@@ -1,4 +1,4 @@
-# config.py — Fixed database connection
+# config.py — Working database connection for Render
 import streamlit as st
 from supabase import create_client
 import os
@@ -10,21 +10,31 @@ load_dotenv()
 
 # ========== HELPER: Get Secrets ==========
 def get_secret(key, default=None):
-    """Get secret from st.secrets (HF) or os.environ (Render/local)."""
+    """Get secret from environment variables."""
+    # Try environment variables (Render, local)
+    value = os.environ.get(key)
+    if value is not None:
+        return value
+    # Try st.secrets (Hugging Face)
     try:
         if hasattr(st, 'secrets') and key in st.secrets:
             return st.secrets[key]
     except:
         pass
-    return os.environ.get(key, default)
+    return default
 
 
 # ========== DATABASE CONFIG ==========
 SUPABASE_URL = get_secret("SUPABASE_URL")
 SUPABASE_KEY = get_secret("SUPABASE_KEY")
 
+# Debug: Print to logs (will show in Render logs)
+print(f"SUPABASE_URL: {SUPABASE_URL}")
+print(f"SUPABASE_KEY: {'*' * 20 if SUPABASE_KEY else 'MISSING'}")
+
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise ValueError("Missing Supabase credentials!")
+    st.error("Missing Supabase credentials!")
+    st.stop()
 
 
 # ========== APP URL ==========
@@ -37,7 +47,8 @@ CHECKER_PASSWORD = get_secret("CHECKER_PASSWORD")
 CHAIRMAN_PASSWORD = get_secret("CHAIRMAN_PASSWORD")
 
 if not all([ADMIN_PASSWORD, CHECKER_PASSWORD, CHAIRMAN_PASSWORD]):
-    raise ValueError("Missing passwords!")
+    st.error("Missing passwords!")
+    st.stop()
 
 
 # ========== TIMEZONE ==========
@@ -52,14 +63,21 @@ def now_sgt():
 @st.cache_resource
 def get_db():
     try:
+        # Create client
         client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        # ✅ Test the connection BEFORE returning
-        client.table('participants').select("id").limit(1).execute()
+        
+        # 🔥 TEST THE CONNECTION
+        result = client.table('participants').select("id").limit(1).execute()
+        print(f"✅ Database connected! Found {len(result.data)} participants.")
+        
         return client, True
     except Exception as e:
-        st.error(f"Database connection failed: {e}")
+        error_msg = str(e)
+        print(f"❌ Database connection error: {error_msg}")
+        st.error(f"Database connection failed: {error_msg}")
         return None, False
 
+# Initialize Supabase client
 supabase, DB_CONNECTED = get_db()
 
 
