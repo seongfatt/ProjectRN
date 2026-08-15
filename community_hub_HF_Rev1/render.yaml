@@ -2,9 +2,13 @@ services:
   - type: web
     name: woodlands-community-hub
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0
-    rootDir: community_hub_HF_Rev1
+    plan: free
+    buildCommand: |
+      cd community_hub_HF_Rev1
+      pip install -r requirements.txt
+    startCommand: |
+      cd community_hub_HF_Rev1
+      streamlit run app.py --server.port $PORT --server.address 0.0.0.0
     envVars:
       - key: SUPABASE_URL
         sync: false
