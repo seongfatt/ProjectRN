@@ -1,21 +1,13 @@
-# ============================================================
-# REQUIREMENTS.TXT — CLOUD DEPLOYMENT (Streamlit Cloud / Render)
-# ============================================================
-# ⚠️ DO NOT add dlib-bin or face-recognition here.
-# Streamlit Cloud runs Python 3.14 — these packages have no wheels.
-# Face recognition will gracefully disable itself in the UI.
-#
-# For local development with face recognition, use:
-#   pip install -r requirements-local.txt
-# ============================================================
-
-streamlit>=1.35.0
+streamlit==1.35.0
 supabase==2.3.0
 python-dotenv==1.0.0
-pandas>=2.2.0
+pandas==2.2.2
 openpyxl==3.1.5
 plotly==5.24.1
-numpy>=1.26.0
-Pillow>=10.0.0
+numpy==1.26.4
+Pillow==10.4.0
 requests==2.32.3
-opencv-python-headless>=4.8.0
+opencv-python-headless==4.8.1.78
+# 🔥 FIX: Use older httpcore that works with Python 3.14
+httpcore==1.0.5
+httpx==0.27.2
