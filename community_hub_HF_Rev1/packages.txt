@@ -1,0 +1,10 @@
+# System dependencies for Streamlit Cloud
+# These are installed via apt-get before pip installs requirements
+# Needed for opencv-python-headless to work properly
+
+libgl1
+libglib2.0-0
+libsm6
+libxext6
+libxrender-dev
+libgomp1

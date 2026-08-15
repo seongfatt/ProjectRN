@@ -1,4 +1,4 @@
-# config.py — Updated with environment variables, timezone, and HF secrets support
+# config.py — Cloud-compatible secrets & database config
 import streamlit as st
 from supabase import create_client
 import os
@@ -8,23 +8,22 @@ from dotenv import load_dotenv
 # Load environment variables from .env (local development only)
 load_dotenv()
 
-# ========== HELPER: Get Secrets (HF Compatible) ==========
-# config.py — Add this function
+# ========== HELPER: Get Secrets (HF / Streamlit Cloud / Render / Local) ==========
 def get_secret(key, default=None):
     """
-    Get secret from:
-    1. st.secrets (Hugging Face Spaces)
-    2. os.environ (Render, local .env file)
+    Get secret from (in order):
+    1. st.secrets (Hugging Face Spaces / Streamlit Cloud)
+    2. os.environ (Render, local .env file, Docker)
     3. default value if provided
     """
-    # Try st.secrets first (for Hugging Face Spaces)
+    # Try st.secrets first (for Streamlit Cloud / HF Spaces)
     try:
-        if hasattr(st, 'secrets') and key in st.secrets:
+        if hasattr(st, "secrets") and key in st.secrets:
             return st.secrets[key]
-    except:
+    except Exception:
         pass
-    
-    # Fallback to environment variables (Render, local)
+
+    # Fallback to environment variables (Render, local, Docker)
     return os.environ.get(key, default)
 
 
@@ -32,22 +31,13 @@ def get_secret(key, default=None):
 SUPABASE_URL = get_secret("SUPABASE_URL")
 SUPABASE_KEY = get_secret("SUPABASE_KEY")
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise ValueError("Missing Supabase credentials! Set SUPABASE_URL and SUPABASE_KEY in .env or HF secrets.")
-
-
 # ========== APP URL ==========
 APP_URL = get_secret("APP_URL", "https://wrnz6-community-hub.hf.space")
-
 
 # ========== PASSWORDS ==========
 ADMIN_PASSWORD = get_secret("ADMIN_PASSWORD")
 CHECKER_PASSWORD = get_secret("CHECKER_PASSWORD")
 CHAIRMAN_PASSWORD = get_secret("CHAIRMAN_PASSWORD")
-
-if not all([ADMIN_PASSWORD, CHECKER_PASSWORD, CHAIRMAN_PASSWORD]):
-    raise ValueError("Missing passwords! Set ADMIN_PASSWORD, CHECKER_PASSWORD, CHAIRMAN_PASSWORD in .env or HF secrets.")
-
 
 # ========== TIMEZONE ==========
 SGT = timezone(timedelta(hours=8))
@@ -58,18 +48,29 @@ def now_sgt():
 
 
 # ========== SUPABASE CLIENT ==========
+# 🔥 CRITICAL FIX: Never call st.error() inside @st.cache_resource.
+# Display functions are forbidden inside cached functions.
 @st.cache_resource
 def get_db():
+    """Initialize Supabase client. Returns (client, connected, error_msg)."""
+    # Check credentials
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return None, False, "Missing Supabase credentials. Please set SUPABASE_URL and SUPABASE_KEY in your platform's secrets/environment variables."
+
     try:
         client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        client.table('participants').select("id").limit(1).execute()
-        return client, True
+        # Test connection with lightweight query
+        client.table("participants").select("id").limit(1).execute()
+        return client, True, None
     except Exception as e:
-        st.error(f"Database connection failed: {e}")
-        return None, False
+        # Return error message — DO NOT use st.error() here
+        return None, False, f"Database connection failed: {e}"
 
-supabase, DB_CONNECTED = get_db()
-
+# Initialize on module load
+_supabase_result = get_db()
+supabase = _supabase_result[0]
+DB_CONNECTED = _supabase_result[1]
+DB_ERROR_MSG = _supabase_result[2]
 
 # ========== CACHE MANAGEMENT ==========
 def refresh_data():
@@ -88,51 +89,20 @@ def load_activities():
     if not DB_CONNECTED:
         return DEFAULT_ACTIVITIES
     try:
-        r = supabase.table('activities').select("*").eq('active', True).order('id').execute()
+        r = supabase.table("activities").select("*").eq("active", True).order("id").execute()
         return r.data if r.data else DEFAULT_ACTIVITIES
-    except:
+    except Exception:
         return DEFAULT_ACTIVITIES
 
 
 # ============================================================
-# 🔥 PLOT TYPES WITH BOX MATH
-# ============================================================
-# Calculation: Standard Box Size is 50cm x 50cm (0.5m x 0.5m).
-# Area per box = 0.5m * 0.5m = 0.25 m².
-# Type A (3.0 m²): 3.0 / 0.25 = 12 boxes
-# Type B (2.5 m²): 2.5 / 0.25 = 10 boxes
-# Type C (2.25 m²): 2.25 / 0.25 = 9 boxes
-# Type D (2.0 m²): 2.0 / 0.25 = 8 boxes
+# PLOT TYPES WITH BOX MATH
 # ============================================================
 PLOT_TYPES = {
-    "A": {
-        "area": 3.0,
-        "colour": "#2ca02c",
-        "total": 16,
-        "boxes": 12,
-        "box_size_cm": 50
-    },
-    "B": {
-        "area": 2.5,
-        "colour": "#ff7f0e",
-        "total": 24,
-        "boxes": 10,
-        "box_size_cm": 50
-    },
-    "C": {
-        "area": 2.25,
-        "colour": "#1f77b4",
-        "total": 8,
-        "boxes": 9,
-        "box_size_cm": 50
-    },
-    "D": {
-        "area": 2.0,
-        "colour": "#d62728",
-        "total": 28,
-        "boxes": 8,
-        "box_size_cm": 50
-    },
+    "A": {"area": 3.0, "colour": "#2ca02c", "total": 16, "boxes": 12, "box_size_cm": 50},
+    "B": {"area": 2.5, "colour": "#ff7f0e", "total": 24, "boxes": 10, "box_size_cm": 50},
+    "C": {"area": 2.25, "colour": "#1f77b4", "total": 8, "boxes": 9, "box_size_cm": 50},
+    "D": {"area": 2.0, "colour": "#d62728", "total": 28, "boxes": 8, "box_size_cm": 50},
 }
 TOTAL_PLOTS = 76
 

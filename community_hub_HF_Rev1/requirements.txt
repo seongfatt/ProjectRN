@@ -1,3 +1,4 @@
+# Core dependencies
 streamlit==1.35.0
 supabase==2.3.0
 python-dotenv==1.0.0
@@ -7,6 +8,12 @@ plotly==5.24.1
 numpy==1.26.4
 Pillow==10.4.0
 requests==2.32.3
+
+# OpenCV for image processing (headless = no GUI, works on servers)
 opencv-python-headless==4.8.1.78
+
+# Face recognition (optional — app works without these if build fails)
+# If dlib-bin fails to install on your cloud platform, the app will
+# gracefully disable face recognition features automatically.
 dlib-bin==19.24.2
 face-recognition==1.3.0
