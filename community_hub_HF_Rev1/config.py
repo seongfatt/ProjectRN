@@ -50,11 +50,14 @@ def now_sgt():
 
 # ========== SUPABASE CLIENT ==========
 @st.cache_resource
+# config.py — REMOVE proxy parameter
 def get_db():
     try:
-        # 🔥 FIXED: Removed 'proxy' parameter that was causing the error
+        # ❌ OLD (with proxy)
+        # client = create_client(SUPABASE_URL, SUPABASE_KEY, proxy=...)
+        
+        # ✅ NEW (no proxy)
         client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        # Test connection
         client.table('participants').select("id").limit(1).execute()
         return client, True
     except Exception as e:

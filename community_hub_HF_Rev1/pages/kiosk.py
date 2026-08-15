@@ -5,7 +5,7 @@ from utils import clean_phone_number, find_participant_by_phone, mask_phone
 from services import AttendanceService
 
 def show_kiosk():
-    st.set_page_config(layout="wide")
+    # st.set_page_config(layout="wide") remove side panel
     st.markdown("""
     <style>
     .resident-card {

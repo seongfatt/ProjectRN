@@ -3,7 +3,6 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 import urllib.parse
 import streamlit.components.v1 as components
-from pages.face_checkin import show_face_checkin
 
 # ===== DISABLE STREAMLIT AUTO-SIDEBAR =====
 st.set_page_config(
@@ -13,9 +12,10 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Force hide sidebar with CSS
+# ===== FORCE HIDE SIDEBAR WITH CSS =====
 st.markdown("""
 <style>
+    /* Hide sidebar completely */
     [data-testid="stSidebar"] {
         display: none !important;
     }
@@ -25,16 +25,15 @@ st.markdown("""
     [data-testid="collapsedControl"] {
         display: none !important;
     }
-    .st-emotion-cache-1y4p8pa {
+    section[data-testid="stSidebar"] {
         display: none !important;
     }
-    .st-emotion-cache-1l268km {
+    button[kind="header"] {
         display: none !important;
     }
-    .st-emotion-cache-1v0mbdj {
-        max-width: 100% !important;
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
+    .main > div {
+        padding-left: 0rem !important;
+        padding-right: 0rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
