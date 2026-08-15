@@ -9,21 +9,26 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ========== HELPER: Get Secrets (Render / Streamlit Cloud / Local) ==========
-import os
-
 def get_secret(key, default=None):
+    """
+    Get secret from (in order):
+    1. os.environ (Render, local .env file, Docker)
+    2. st.secrets (Streamlit Cloud / Hugging Face Spaces)
+    3. default value if provided
+    """
     # FIRST: Try environment variables (for Render)
     env_value = os.environ.get(key)
     if env_value is not None:
         return env_value
     
-    # SECOND: Try st.secrets (for Streamlit Cloud)
+    # SECOND: Try st.secrets (for Streamlit Cloud / HF Spaces)
     try:
         if hasattr(st, "secrets") and key in st.secrets:
             return st.secrets[key]
     except Exception:
         pass
-    
+
+    # Fallback to default
     return default
 
 
@@ -48,26 +53,24 @@ def now_sgt():
 
 
 # ========== SUPABASE CLIENT ==========
-@st.cache_resource
-def get_db():
-    """Initialize Supabase client. Returns (client, connected, error_msg)."""
-    # Check credentials
+def init_supabase():
+    """Initialize Supabase client."""
     if not SUPABASE_URL or not SUPABASE_KEY:
-        return None, False, "Missing Supabase credentials. Please set SUPABASE_URL and SUPABASE_KEY in your platform's secrets/environment variables."
-
+        print("❌ Missing Supabase credentials")
+        return None, False, "Missing Supabase credentials"
+    
     try:
         client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        # Test connection with lightweight query
+        # Test connection
         client.table("participants").select("id").limit(1).execute()
+        print("✅ Supabase connected successfully!")
         return client, True, None
     except Exception as e:
+        print(f"❌ Database connection failed: {e}")
         return None, False, f"Database connection failed: {e}"
 
-# Initialize on module load
-_supabase_result = get_db()
-supabase = _supabase_result[0]
-DB_CONNECTED = _supabase_result[1]
-DB_ERROR_MSG = _supabase_result[2]
+# Initialize Supabase
+supabase, DB_CONNECTED, DB_ERROR_MSG = init_supabase()
 
 # ========== CACHE MANAGEMENT ==========
 def refresh_data():
@@ -83,7 +86,7 @@ DEFAULT_ACTIVITIES = [
 
 @st.cache_data(ttl=300)
 def load_activities():
-    if not DB_CONNECTED:
+    if not DB_CONNECTED or supabase is None:
         return DEFAULT_ACTIVITIES
     try:
         r = supabase.table("activities").select("*").eq("active", True).order("id").execute()
@@ -171,3 +174,24 @@ MOBILE_CSS = """<style>
     font-size: 13px;
 }
 </style>"""
+
+# Export all variables
+__all__ = [
+    'supabase',
+    'DB_CONNECTED',
+    'DB_ERROR_MSG',
+    'SUPABASE_URL',
+    'SUPABASE_KEY',
+    'ADMIN_PASSWORD',
+    'CHECKER_PASSWORD',
+    'CHAIRMAN_PASSWORD',
+    'APP_URL',
+    'SGT',
+    'now_sgt',
+    'refresh_data',
+    'load_activities',
+    'PLOT_TYPES',
+    'TOTAL_PLOTS',
+    'TYPE_MAP',
+    'MOBILE_CSS'
+]
