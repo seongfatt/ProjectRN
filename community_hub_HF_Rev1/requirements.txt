@@ -9,3 +9,4 @@ Pillow==10.4.0
 requests==2.32.3
 opencv-python-headless==4.8.1.78
 httpx==0.24.1
+toml==0.10.2
