@@ -1,99 +1,58 @@
-# config.py — Working database connection for Render
+# config.py — NO PROXY PARAMETER
 import streamlit as st
 from supabase import create_client
 import os
-from datetime import timezone, timedelta, datetime
-from dotenv import load_dotenv
+from datetime import datetime, timezone, timedelta
 
-# Load environment variables from .env (local development only)
-load_dotenv()
+# ========== READ ENVIRONMENT VARIABLES ==========
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-# ========== HELPER: Get Secrets ==========
-def get_secret(key, default=None):
-    """Get secret from environment variables."""
-    # Try environment variables (Render, local)
-    value = os.environ.get(key)
-    if value is not None:
-        return value
-    # Try st.secrets (Hugging Face)
-    try:
-        if hasattr(st, 'secrets') and key in st.secrets:
-            return st.secrets[key]
-    except:
-        pass
-    return default
-
-
-# ========== DATABASE CONFIG ==========
-SUPABASE_URL = get_secret("SUPABASE_URL")
-SUPABASE_KEY = get_secret("SUPABASE_KEY")
-
-# Debug: Print to logs (will show in Render logs)
+# Debug: Print to logs
 print(f"SUPABASE_URL: {SUPABASE_URL}")
-print(f"SUPABASE_KEY: {'*' * 20 if SUPABASE_KEY else 'MISSING'}")
+print(f"SUPABASE_KEY: {'*' * 30 if SUPABASE_KEY else 'MISSING'}")
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    st.error("Missing Supabase credentials!")
+# ========== CHECK CREDENTIALS ==========
+if not SUPABASE_URL:
+    st.error("❌ SUPABASE_URL is not set!")
     st.stop()
 
+if not SUPABASE_KEY:
+    st.error("❌ SUPABASE_KEY is not set!")
+    st.stop()
 
-# ========== APP URL ==========
-APP_URL = get_secret("APP_URL", "https://woodlands-community-hub.onrender.com")
-
+# ========== CREATE SUPABASE CLIENT (NO PROXY!) ==========
+try:
+    # 🔥 FIXED: No proxy parameter
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    # Test connection
+    supabase.table('participants').select("id").limit(1).execute()
+    DB_CONNECTED = True
+    st.success("✅ Database connected successfully!")
+    print("✅ Database connected successfully!")
+except Exception as e:
+    st.error(f"❌ Database connection failed: {e}")
+    print(f"❌ Database connection failed: {e}")
+    supabase = None
+    DB_CONNECTED = False
 
 # ========== PASSWORDS ==========
-ADMIN_PASSWORD = get_secret("ADMIN_PASSWORD")
-CHECKER_PASSWORD = get_secret("CHECKER_PASSWORD")
-CHAIRMAN_PASSWORD = get_secret("CHAIRMAN_PASSWORD")
-
-if not all([ADMIN_PASSWORD, CHECKER_PASSWORD, CHAIRMAN_PASSWORD]):
-    st.error("Missing passwords!")
-    st.stop()
-
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
+CHECKER_PASSWORD = os.environ.get("CHECKER_PASSWORD", "checker123")
+CHAIRMAN_PASSWORD = os.environ.get("CHAIRMAN_PASSWORD", "chairman123")
+APP_URL = os.environ.get("APP_URL", "https://woodlands-community-hub.onrender.com")
 
 # ========== TIMEZONE ==========
 SGT = timezone(timedelta(hours=8))
 
 def now_sgt():
-    """Return current datetime in Singapore Time (UTC+8)."""
     return datetime.now(SGT)
-
-
-# ========== SUPABASE CLIENT ==========
-@st.cache_resource
-def get_db():
-    try:
-        # Create client
-        client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        
-        # 🔥 TEST THE CONNECTION
-        result = client.table('participants').select("id").limit(1).execute()
-        print(f"✅ Database connected! Found {len(result.data)} participants.")
-        
-        return client, True
-    except Exception as e:
-        error_msg = str(e)
-        print(f"❌ Database connection error: {error_msg}")
-        st.error(f"Database connection failed: {error_msg}")
-        return None, False
-
-# Initialize Supabase client
-supabase, DB_CONNECTED = get_db()
-
-
-# ========== CACHE MANAGEMENT ==========
-def refresh_data():
-    """Clear all cached data."""
-    st.cache_data.clear()
-    st.cache_resource.clear()
-
 
 # ========== ACTIVITIES ==========
 DEFAULT_ACTIVITIES = [
     {"id": 1, "name": "Cardio Drumming", "session_1_label": "Session 1 (7PM-8PM)", "session_2_label": "Session 2 (8PM-9PM)", "active": True},
 ]
 
-@st.cache_data(ttl=300)
 def load_activities():
     if not DB_CONNECTED:
         return DEFAULT_ACTIVITIES
@@ -103,15 +62,16 @@ def load_activities():
     except:
         return DEFAULT_ACTIVITIES
 
+def refresh_data():
+    st.cache_data.clear()
+    st.cache_resource.clear()
 
-# ============================================================
-# PLOT TYPES
-# ============================================================
+# ========== PLOT TYPES ==========
 PLOT_TYPES = {
-    "A": {"area": 3.0, "colour": "#2ca02c", "total": 16, "boxes": 12, "box_size_cm": 50},
-    "B": {"area": 2.5, "colour": "#ff7f0e", "total": 24, "boxes": 10, "box_size_cm": 50},
-    "C": {"area": 2.25, "colour": "#1f77b4", "total": 8, "boxes": 9, "box_size_cm": 50},
-    "D": {"area": 2.0, "colour": "#d62728", "total": 28, "boxes": 8, "box_size_cm": 50},
+    "A": {"area": 3.0, "colour": "#2ca02c", "total": 16, "boxes": 12},
+    "B": {"area": 2.5, "colour": "#ff7f0e", "total": 24, "boxes": 10},
+    "C": {"area": 2.25, "colour": "#1f77b4", "total": 8, "boxes": 9},
+    "D": {"area": 2.0, "colour": "#d62728", "total": 28, "boxes": 8},
 }
 TOTAL_PLOTS = 76
 
@@ -125,7 +85,6 @@ TYPE_MAP = {
     61: "A", 62: "B", 63: "A", 64: "D", 65: "D", 66: "B", 67: "B", 68: "D", 69: "C", 70: "A",
     71: "D", 72: "B", 73: "C", 74: "A", 75: "C", 76: "C"
 }
-
 
 # ========== MOBILE CSS ==========
 MOBILE_CSS = """<style>
