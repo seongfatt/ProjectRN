@@ -153,12 +153,13 @@ def show_face_checkin():
 
                     if match:
                         color = (0, 255, 0)  # Green
-                        label = f"{match["name"]} ({match["confidence"]:.0%})"
+                        # ✅ FIXED: Use single quotes inside f-string
+                        label = f"{match['name']} ({match['confidence']:.0%})"
                         recognized_count += 1
                         results.append({
                             "status": "✅ Recognized",
                             "name": match["name"],
-                            "confidence": f"{match["confidence"]:.0%}"
+                            "confidence": f"{match['confidence']:.0%}"
                         })
                     else:
                         color = (0, 0, 255)  # Red
@@ -185,10 +186,11 @@ def show_face_checkin():
                 for match in matches:
                     if match:
                         recognized_count += 1
+                        # ✅ FIXED: Use single quotes inside f-string
                         results.append({
                             "status": "✅ Recognized",
                             "name": match["name"],
-                            "confidence": f"{match["confidence"]:.0%}"
+                            "confidence": f"{match['confidence']:.0%}"
                         })
                     else:
                         results.append({
@@ -262,7 +264,8 @@ def show_face_checkin():
                                     checked_in_count += 1
 
                                 except Exception as e:
-                                    errors.append(f"{match["name"]}: {e}")
+                                    # ✅ FIXED: Use single quotes inside f-string
+                                    errors.append(f"{match['name']}: {e}")
 
                         if checked_in_count > 0:
                             st.success(f"✅ Successfully checked in {checked_in_count} residents!")
