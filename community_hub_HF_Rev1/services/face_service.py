@@ -1,14 +1,20 @@
-# services/face_service.py
-"""Face recognition service — gracefully handles missing dependencies"""
+# services/face_service.py — TOP OF FILE
 
 import streamlit as st
-import cv2
 import numpy as np
 from PIL import Image
 import io
 from config import supabase, DB_CONNECTED, now_sgt
 
-# 🔥 Try to import face_recognition, but don't crash if missing
+# 🔥 Try to import cv2 (optional)
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
+    cv2 = None
+
+# 🔥 Try to import face_recognition (optional)
 try:
     import face_recognition
     FACE_RECOGNITION_AVAILABLE = True
