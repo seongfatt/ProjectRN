@@ -1,4 +1,4 @@
-# config.py — Updated with environment variables, timezone, and HF secrets support
+# config.py — Fixed for Render
 import streamlit as st
 from supabase import create_client
 import os
@@ -8,22 +8,14 @@ from dotenv import load_dotenv
 # Load environment variables from .env (local development only)
 load_dotenv()
 
-# ========== HELPER: Get Secrets (HF Compatible) ==========
+# ========== HELPER: Get Secrets ==========
 def get_secret(key, default=None):
-    """
-    Get secret from:
-    1. st.secrets (Hugging Face Spaces)
-    2. os.environ (local .env file)
-    3. default value if provided
-    """
-    # Try st.secrets first (for Hugging Face Spaces)
+    """Get secret from st.secrets (HF) or os.environ (Render/local)."""
     try:
         if hasattr(st, 'secrets') and key in st.secrets:
             return st.secrets[key]
     except:
         pass
-    
-    # Fallback to environment variables (local development)
     return os.environ.get(key, default)
 
 
@@ -32,11 +24,11 @@ SUPABASE_URL = get_secret("SUPABASE_URL")
 SUPABASE_KEY = get_secret("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise ValueError("Missing Supabase credentials! Set SUPABASE_URL and SUPABASE_KEY in .env or HF secrets.")
+    raise ValueError("Missing Supabase credentials!")
 
 
 # ========== APP URL ==========
-APP_URL = get_secret("APP_URL", "https://wrnz6-community-hub.hf.space")
+APP_URL = get_secret("APP_URL", "https://woodlands-community-hub.onrender.com")
 
 
 # ========== PASSWORDS ==========
@@ -45,7 +37,7 @@ CHECKER_PASSWORD = get_secret("CHECKER_PASSWORD")
 CHAIRMAN_PASSWORD = get_secret("CHAIRMAN_PASSWORD")
 
 if not all([ADMIN_PASSWORD, CHECKER_PASSWORD, CHAIRMAN_PASSWORD]):
-    raise ValueError("Missing passwords! Set ADMIN_PASSWORD, CHECKER_PASSWORD, CHAIRMAN_PASSWORD in .env or HF secrets.")
+    raise ValueError("Missing passwords!")
 
 
 # ========== TIMEZONE ==========
@@ -60,7 +52,9 @@ def now_sgt():
 @st.cache_resource
 def get_db():
     try:
+        # 🔥 FIXED: Removed 'proxy' parameter that was causing the error
         client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        # Test connection
         client.table('participants').select("id").limit(1).execute()
         return client, True
     except Exception as e:
@@ -94,44 +88,13 @@ def load_activities():
 
 
 # ============================================================
-# 🔥 PLOT TYPES WITH BOX MATH
-# ============================================================
-# Calculation: Standard Box Size is 50cm x 50cm (0.5m x 0.5m).
-# Area per box = 0.5m * 0.5m = 0.25 m².
-# Type A (3.0 m²): 3.0 / 0.25 = 12 boxes
-# Type B (2.5 m²): 2.5 / 0.25 = 10 boxes
-# Type C (2.25 m²): 2.25 / 0.25 = 9 boxes
-# Type D (2.0 m²): 2.0 / 0.25 = 8 boxes
+# PLOT TYPES
 # ============================================================
 PLOT_TYPES = {
-    "A": {
-        "area": 3.0,
-        "colour": "#2ca02c",
-        "total": 16,
-        "boxes": 12,
-        "box_size_cm": 50
-    },
-    "B": {
-        "area": 2.5,
-        "colour": "#ff7f0e",
-        "total": 24,
-        "boxes": 10,
-        "box_size_cm": 50
-    },
-    "C": {
-        "area": 2.25,
-        "colour": "#1f77b4",
-        "total": 8,
-        "boxes": 9,
-        "box_size_cm": 50
-    },
-    "D": {
-        "area": 2.0,
-        "colour": "#d62728",
-        "total": 28,
-        "boxes": 8,
-        "box_size_cm": 50
-    },
+    "A": {"area": 3.0, "colour": "#2ca02c", "total": 16, "boxes": 12, "box_size_cm": 50},
+    "B": {"area": 2.5, "colour": "#ff7f0e", "total": 24, "boxes": 10, "box_size_cm": 50},
+    "C": {"area": 2.25, "colour": "#1f77b4", "total": 8, "boxes": 9, "box_size_cm": 50},
+    "D": {"area": 2.0, "colour": "#d62728", "total": 28, "boxes": 8, "box_size_cm": 50},
 }
 TOTAL_PLOTS = 76
 
@@ -149,7 +112,6 @@ TYPE_MAP = {
 
 # ========== MOBILE CSS ==========
 MOBILE_CSS = """<style>
-/* Force viewport on mobile */
 @media(max-width:768px){
     body{min-width:100vw!important; max-width:100vw!important; overflow-x:hidden!important;}
     .main .block-container{padding:0.3rem!important; max-width:100vw!important; width:100vw!important;}
