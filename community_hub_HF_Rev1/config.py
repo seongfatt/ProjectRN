@@ -9,26 +9,21 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ========== HELPER: Get Secrets (Render / Streamlit Cloud / Local) ==========
+import os
+
 def get_secret(key, default=None):
-    """
-    Get secret from (in order):
-    1. os.environ (Render, local .env file, Docker)
-    2. st.secrets (Streamlit Cloud / Hugging Face Spaces)
-    3. default value if provided
-    """
-    # 🔥 FIRST: Try environment variables (for Render)
+    # FIRST: Try environment variables (for Render)
     env_value = os.environ.get(key)
     if env_value is not None:
         return env_value
     
-    # SECOND: Try st.secrets (for Streamlit Cloud / HF Spaces)
+    # SECOND: Try st.secrets (for Streamlit Cloud)
     try:
         if hasattr(st, "secrets") and key in st.secrets:
             return st.secrets[key]
     except Exception:
         pass
-
-    # Fallback to default
+    
     return default
 
 
