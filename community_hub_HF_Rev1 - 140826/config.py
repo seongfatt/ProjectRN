@@ -1,82 +1,88 @@
-# config.py — FIXED: Read environment variables
+# config.py — Updated with environment variables, timezone, and HF secrets support
 import streamlit as st
-import os
-
-# ========== READ ENVIRONMENT VARIABLES ==========
-st.write("### 🔍 Diagnostic Mode")
-
-# Try multiple methods to get environment variables
-SUPABASE_URL = os.environ.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY") or os.getenv("SUPABASE_KEY")
-
-# Debug: Print to console (visible in Render logs)
-print(f"SUPABASE_URL: {SUPABASE_URL}")
-print(f"SUPABASE_KEY: {'*' * 20 if SUPABASE_KEY else 'MISSING'}")
-
-# Also try getting from st.secrets (if using Streamlit secrets)
-try:
-    if not SUPABASE_URL and hasattr(st, 'secrets') and 'SUPABASE_URL' in st.secrets:
-        SUPABASE_URL = st.secrets['SUPABASE_URL']
-    if not SUPABASE_KEY and hasattr(st, 'secrets') and 'SUPABASE_KEY' in st.secrets:
-        SUPABASE_KEY = st.secrets['SUPABASE_KEY']
-except:
-    pass
-
-# Display what we found
-st.write(f"**SUPABASE_URL:** {SUPABASE_URL}")
-if SUPABASE_KEY:
-    st.write(f"**SUPABASE_KEY:** {'*' * 20} (length: {len(SUPABASE_KEY)})")
-else:
-    st.write("**SUPABASE_KEY:** ❌ NOT FOUND")
-
-# ========== CHECK CREDENTIALS ==========
-if not SUPABASE_URL:
-    st.error("❌ SUPABASE_URL is not set!")
-    st.info("💡 Please set SUPABASE_URL in Render's Environment Variables.")
-    st.stop()
-
-if not SUPABASE_KEY:
-    st.error("❌ SUPABASE_KEY is not set!")
-    st.info("💡 Please set SUPABASE_KEY in Render's Environment Variables.")
-    st.stop()
-
-# ========== CREATE SUPABASE CLIENT ==========
 from supabase import create_client
-from datetime import datetime, timezone, timedelta
+import os
+from datetime import timezone, timedelta, datetime
+from dotenv import load_dotenv
 
-try:
-    st.write("🔄 Attempting to connect to Supabase...")
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Load environment variables from .env (local development only)
+load_dotenv()
+
+# ========== HELPER: Get Secrets (HF Compatible) ==========
+def get_secret(key, default=None):
+    """
+    Get secret from:
+    1. st.secrets (Hugging Face Spaces)
+    2. os.environ (local .env file)
+    3. default value if provided
+    """
+    # Try st.secrets first (for Hugging Face Spaces)
+    try:
+        if hasattr(st, 'secrets') and key in st.secrets:
+            return st.secrets[key]
+    except:
+        pass
     
-    # Test connection
-    test = supabase.table('participants').select("id").limit(1).execute()
-    
-    DB_CONNECTED = True
-    st.success("✅ Database connected successfully!")
-    st.success(f"✅ Found {len(test.data)} participant(s)")
-    
-except Exception as e:
-    st.error(f"❌ Database connection failed: {e}")
-    supabase = None
-    DB_CONNECTED = False
+    # Fallback to environment variables (local development)
+    return os.environ.get(key, default)
+
+
+# ========== DATABASE CONFIG ==========
+SUPABASE_URL = get_secret("SUPABASE_URL")
+SUPABASE_KEY = get_secret("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("Missing Supabase credentials! Set SUPABASE_URL and SUPABASE_KEY in .env or HF secrets.")
+
+
+# ========== APP URL ==========
+APP_URL = get_secret("APP_URL", "https://wrnz6-community-hub.hf.space")
+
 
 # ========== PASSWORDS ==========
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
-CHECKER_PASSWORD = os.environ.get("CHECKER_PASSWORD", "checker123")
-CHAIRMAN_PASSWORD = os.environ.get("CHAIRMAN_PASSWORD", "chairman123")
-APP_URL = os.environ.get("APP_URL", "https://woodlands-community-hub.onrender.com")
+ADMIN_PASSWORD = get_secret("ADMIN_PASSWORD")
+CHECKER_PASSWORD = get_secret("CHECKER_PASSWORD")
+CHAIRMAN_PASSWORD = get_secret("CHAIRMAN_PASSWORD")
+
+if not all([ADMIN_PASSWORD, CHECKER_PASSWORD, CHAIRMAN_PASSWORD]):
+    raise ValueError("Missing passwords! Set ADMIN_PASSWORD, CHECKER_PASSWORD, CHAIRMAN_PASSWORD in .env or HF secrets.")
+
 
 # ========== TIMEZONE ==========
 SGT = timezone(timedelta(hours=8))
 
 def now_sgt():
+    """Return current datetime in Singapore Time (UTC+8)."""
     return datetime.now(SGT)
+
+
+# ========== SUPABASE CLIENT ==========
+@st.cache_resource
+def get_db():
+    try:
+        client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        client.table('participants').select("id").limit(1).execute()
+        return client, True
+    except Exception as e:
+        st.error(f"Database connection failed: {e}")
+        return None, False
+
+supabase, DB_CONNECTED = get_db()
+
+
+# ========== CACHE MANAGEMENT ==========
+def refresh_data():
+    """Clear all cached data."""
+    st.cache_data.clear()
+    st.cache_resource.clear()
+
 
 # ========== ACTIVITIES ==========
 DEFAULT_ACTIVITIES = [
     {"id": 1, "name": "Cardio Drumming", "session_1_label": "Session 1 (7PM-8PM)", "session_2_label": "Session 2 (8PM-9PM)", "active": True},
 ]
 
+@st.cache_data(ttl=300)
 def load_activities():
     if not DB_CONNECTED:
         return DEFAULT_ACTIVITIES
@@ -86,16 +92,46 @@ def load_activities():
     except:
         return DEFAULT_ACTIVITIES
 
-def refresh_data():
-    st.cache_data.clear()
-    st.cache_resource.clear()
 
-# ========== PLOT TYPES ==========
+# ============================================================
+# 🔥 PLOT TYPES WITH BOX MATH
+# ============================================================
+# Calculation: Standard Box Size is 50cm x 50cm (0.5m x 0.5m).
+# Area per box = 0.5m * 0.5m = 0.25 m².
+# Type A (3.0 m²): 3.0 / 0.25 = 12 boxes
+# Type B (2.5 m²): 2.5 / 0.25 = 10 boxes
+# Type C (2.25 m²): 2.25 / 0.25 = 9 boxes
+# Type D (2.0 m²): 2.0 / 0.25 = 8 boxes
+# ============================================================
 PLOT_TYPES = {
-    "A": {"area": 3.0, "colour": "#2ca02c", "total": 16, "boxes": 12},
-    "B": {"area": 2.5, "colour": "#ff7f0e", "total": 24, "boxes": 10},
-    "C": {"area": 2.25, "colour": "#1f77b4", "total": 8, "boxes": 9},
-    "D": {"area": 2.0, "colour": "#d62728", "total": 28, "boxes": 8},
+    "A": {
+        "area": 3.0,
+        "colour": "#2ca02c",
+        "total": 16,
+        "boxes": 12,
+        "box_size_cm": 50
+    },
+    "B": {
+        "area": 2.5,
+        "colour": "#ff7f0e",
+        "total": 24,
+        "boxes": 10,
+        "box_size_cm": 50
+    },
+    "C": {
+        "area": 2.25,
+        "colour": "#1f77b4",
+        "total": 8,
+        "boxes": 9,
+        "box_size_cm": 50
+    },
+    "D": {
+        "area": 2.0,
+        "colour": "#d62728",
+        "total": 28,
+        "boxes": 8,
+        "box_size_cm": 50
+    },
 }
 TOTAL_PLOTS = 76
 
@@ -110,8 +146,10 @@ TYPE_MAP = {
     71: "D", 72: "B", 73: "C", 74: "A", 75: "C", 76: "C"
 }
 
+
 # ========== MOBILE CSS ==========
 MOBILE_CSS = """<style>
+/* Force viewport on mobile */
 @media(max-width:768px){
     body{min-width:100vw!important; max-width:100vw!important; overflow-x:hidden!important;}
     .main .block-container{padding:0.3rem!important; max-width:100vw!important; width:100vw!important;}
