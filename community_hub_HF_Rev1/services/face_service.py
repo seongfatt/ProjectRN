@@ -15,7 +15,6 @@ try:
 except ImportError:
     FACE_RECOGNITION_AVAILABLE = False
     face_recognition = None
-    st.warning("⚠️ Face recognition is not installed. Face Check-In features are disabled.")
 
 class FaceRecognitionService:
     """Handles face detection, enrollment, and recognition."""
@@ -135,16 +134,6 @@ class FaceRecognitionService:
     def get_enrolled_count(self):
         """Get number of enrolled faces."""
         return len(self.known_face_encodings)
-
-
-# Singleton instance
-_face_service = None
-
-def get_face_service():
-    global _face_service
-    if _face_service is None:
-        _face_service = FaceRecognitionService()
-    return _face_service        return len(self.known_face_encodings)
 
 
 # Singleton instance
