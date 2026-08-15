@@ -1,10 +1,10 @@
-# render.yaml
 services:
   - type: web
     name: woodlands-community-hub
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0
+    rootDir: community_hub_HF_Rev1
     envVars:
       - key: SUPABASE_URL
         sync: false
