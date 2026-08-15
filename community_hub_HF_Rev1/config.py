@@ -1,4 +1,4 @@
-# config.py — NO PROXY PARAMETER
+# config.py — CLEAN VERSION (NO PROXY)
 import streamlit as st
 from supabase import create_client
 import os
@@ -21,12 +21,12 @@ if not SUPABASE_KEY:
     st.error("❌ SUPABASE_KEY is not set!")
     st.stop()
 
-# ========== CREATE SUPABASE CLIENT (NO PROXY!) ==========
+# ========== CREATE SUPABASE CLIENT (NO PROXY) ==========
 try:
-    # 🔥 FIXED: No proxy parameter
+    # ✅ NO proxy parameter!
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
     # Test connection
-    supabase.table('participants').select("id").limit(1).execute()
+    test = supabase.table('participants').select("id").limit(1).execute()
     DB_CONNECTED = True
     st.success("✅ Database connected successfully!")
     print("✅ Database connected successfully!")
