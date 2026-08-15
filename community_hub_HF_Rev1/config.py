@@ -53,7 +53,7 @@ def now_sgt():
 def get_db():
     try:
         client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        # ✅ FIXED: Test the connection BEFORE returning
+        # ✅ Test the connection BEFORE returning
         client.table('participants').select("id").limit(1).execute()
         return client, True
     except Exception as e:
