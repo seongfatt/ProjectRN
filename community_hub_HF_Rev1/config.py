@@ -1,48 +1,36 @@
-# config.py — Cloud-compatible secrets & database config
+import os
 import streamlit as st
 from supabase import create_client
-import os
 from datetime import timezone, timedelta, datetime
-from dotenv import load_dotenv
 
-# Load environment variables from .env (local development only)
-load_dotenv()
+# ========== READ FROM ENVIRONMENT VARIABLES ONLY ==========
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
+CHECKER_PASSWORD = os.environ.get("CHECKER_PASSWORD")
+CHAIRMAN_PASSWORD = os.environ.get("CHAIRMAN_PASSWORD")
+APP_URL = os.environ.get("APP_URL", "https://woodlands-community-hub.onrender.com")
 
-# ========== HELPER: Get Secrets (Render / Streamlit Cloud / Local) ==========
-def get_secret(key, default=None):
-    """
-    Get secret from (in order):
-    1. os.environ (Render, local .env file, Docker)
-    2. st.secrets (Streamlit Cloud / Hugging Face Spaces)
-    3. default value if provided
-    """
-    # FIRST: Try environment variables (for Render)
-    env_value = os.environ.get(key)
-    if env_value is not None:
-        return env_value
-    
-    # SECOND: Try st.secrets (for Streamlit Cloud / HF Spaces)
+# ========== SUPABASE CLIENT ==========
+supabase = None
+DB_CONNECTED = False
+
+if SUPABASE_URL and SUPABASE_KEY:
     try:
-        if hasattr(st, "secrets") and key in st.secrets:
-            return st.secrets[key]
-    except Exception:
-        pass
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        # Test connection
+        supabase.table("participants").select("id").limit(1).execute()
+        DB_CONNECTED = True
+        print("✅ Supabase connected!")
+    except Exception as e:
+        print(f"❌ Supabase connection failed: {e}")
+else:
+    print("❌ Missing SUPABASE_URL or SUPABASE_KEY")
+    print(f"SUPABASE_URL: {SUPABASE_URL}")
+    print(f"SUPABASE_KEY: {'SET' if SUPABASE_KEY else 'NOT SET'}")
 
-    # Fallback to default
-    return default
-
-
-# ========== DATABASE CONFIG ==========
-SUPABASE_URL = get_secret("SUPABASE_URL")
-SUPABASE_KEY = get_secret("SUPABASE_KEY")
-
-# ========== APP URL ==========
-APP_URL = get_secret("APP_URL", "https://wrnz6-community-hub.hf.space")
-
-# ========== PASSWORDS ==========
-ADMIN_PASSWORD = get_secret("ADMIN_PASSWORD")
-CHECKER_PASSWORD = get_secret("CHECKER_PASSWORD")
-CHAIRMAN_PASSWORD = get_secret("CHAIRMAN_PASSWORD")
+# ========== REST OF YOUR CONFIG ==========
+# ... (keep the rest of your config.py unchanged)
 
 # ========== TIMEZONE ==========
 SGT = timezone(timedelta(hours=8))
