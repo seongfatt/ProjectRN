@@ -99,34 +99,29 @@ def show_manage(selected_date):
                         refresh_data()
                         st.rerun()
             
-            # pages/manage.py — Fix nested expander
-
             with st.expander("🗑️ Remove Participant"):
                 st.warning("Removing a participant will deactivate them.")
-                
-                # Show all active residents (NO nested expander)
-                active_list_all = [p for p in st.session_state.participants if p.get('active', True)]
-                if active_list_all:
-                    st.caption(f"Total Active Residents: {len(active_list_all)}")
-                    for p in active_list_all:
-                        c1, c2, c3 = st.columns([3, 2, 1])
-                        c1.write(f"**{p['name']}**")
-                        c2.write(f"{mask_phone(p.get('contact', 'N/A'))} | {p.get('member_type', 'Resident')}")
-                        if c3.button("Remove", key=f"list_remove_{p['id']}", type="secondary"):
-                            try:
-                                supabase.table('participants').update({'active': False}).eq('id', p['id']).execute()
-                                st.session_state.participants = load_participants()
-                                refresh_data()
-                                st.success(f"✅ {p['name']} removed successfully.")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Error removing: {e}")
-                else:
-                    st.info("No active residents found.")
-                
+                with st.expander("📋 Show All Active Residents (Click to View)"):
+                    active_list_all = [p for p in st.session_state.participants if p.get('active', True)]
+                    if active_list_all:
+                        st.caption(f"Total Active Residents: {len(active_list_all)}")
+                        for p in active_list_all:
+                            c1, c2, c3 = st.columns([3, 2, 1])
+                            c1.write(f"**{p['name']}**")
+                            c2.write(f"{mask_phone(p.get('contact', 'N/A'))} | {p.get('member_type', 'Resident')}")
+                            if c3.button("Remove", key=f"list_remove_{p['id']}", type="secondary"):
+                                try:
+                                    supabase.table('participants').update({'active': False}).eq('id', p['id']).execute()
+                                    st.session_state.participants = load_participants()
+                                    refresh_data()
+                                    st.success(f"✅ {p['name']} removed successfully.")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error removing: {e}")
+                    else:
+                        st.info("No active residents found.")
                 st.divider()
                 remove_search = st.text_input("Search to remove by Name or ID", placeholder="Type name or last 4 digits...", key="remove_search")
-                # ... rest of the code
                 st.session_state.participants = load_participants()
                 active_list = [p for p in st.session_state.participants if p.get('active', True)]
                 if remove_search:
