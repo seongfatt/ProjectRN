@@ -9,6 +9,6 @@ plotly==5.24.1
 numpy==1.26.4
 Pillow==10.4.0
 requests==2.32.3
-opencv-python-headless==4.8.1.78
+opencv-python-headless==4.9.0.80
 httpx==0.24.1
 toml==0.10.2
