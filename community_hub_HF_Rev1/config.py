@@ -3,13 +3,36 @@ import streamlit as st
 from supabase import create_client
 from datetime import timezone, timedelta, datetime
 
-# ========== READ FROM ENVIRONMENT VARIABLES ==========
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
-CHECKER_PASSWORD = os.environ.get("CHECKER_PASSWORD")
-CHAIRMAN_PASSWORD = os.environ.get("CHAIRMAN_PASSWORD")
-APP_URL = os.environ.get("APP_URL", "https://woodlands-community-hub.onrender.com")
+# ========== READ SECRETS FROM MULTIPLE SOURCES ==========
+def get_secret(key, default=None):
+    """Get secret from st.secrets (Streamlit Cloud) or environment variables (Render)."""
+    
+    # FIRST: Try st.secrets (Streamlit Cloud / Hugging Face Spaces)
+    try:
+        if hasattr(st, "secrets") and key in st.secrets:
+            value = st.secrets[key]
+            print(f"✅ Loaded {key} from st.secrets")
+            return value
+    except Exception as e:
+        print(f"⚠️ st.secrets not available: {e}")
+    
+    # SECOND: Try environment variables (Render / Local)
+    env_value = os.environ.get(key)
+    if env_value is not None:
+        print(f"✅ Loaded {key} from environment variables")
+        return env_value
+    
+    # Fallback to default
+    print(f"⚠️ {key} not found in st.secrets or environment variables")
+    return default
+
+# ========== LOAD ALL SECRETS ==========
+SUPABASE_URL = get_secret("SUPABASE_URL")
+SUPABASE_KEY = get_secret("SUPABASE_KEY")
+ADMIN_PASSWORD = get_secret("ADMIN_PASSWORD")
+CHECKER_PASSWORD = get_secret("CHECKER_PASSWORD")
+CHAIRMAN_PASSWORD = get_secret("CHAIRMAN_PASSWORD")
+APP_URL = get_secret("APP_URL", "https://woodlands-community-hub.onrender.com")
 
 # ========== DEBUG ==========
 print(f"🔍 SUPABASE_URL: {'✅ FOUND' if SUPABASE_URL else '❌ NOT FOUND'}")
