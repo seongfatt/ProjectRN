@@ -3,30 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 import urllib.parse
 import streamlit.components.v1 as components
-
-# ===== CHECK IF FACE RECOGNITION IS AVAILABLE =====
-FACE_AVAILABLE = False
-try:
-    import face_recognition
-    import cv2
-    if hasattr(face_recognition, 'face_encodings'):
-        FACE_AVAILABLE = True
-        print("✅ Face recognition is available")
-except (ImportError, AttributeError) as e:
-    print(f"⚠️ Face recognition not available: {e}")
-    FACE_AVAILABLE = False
-
-# ===== CONDITIONALLY IMPORT FACE CHECKIN =====
-show_face_checkin = None
-if FACE_AVAILABLE:
-    try:
-        from pages.face_checkin import show_face_checkin
-        print("✅ Face check-in module loaded")
-    except ImportError as e:
-        print(f"⚠️ Face check-in module not available: {e}")
-        FACE_AVAILABLE = False
-else:
-    print("⚠️ Face check-in disabled (face_recognition not available)")
+from pages.face_checkin import show_face_checkin
 
 # ===== DISABLE STREAMLIT AUTO-SIDEBAR =====
 st.set_page_config(
@@ -998,7 +975,7 @@ if st.session_state.is_authenticated:
         updateClock();
         setInterval(updateClock, 1000);
         </script>
-        """, height=85)
+        """, height=85)  # ✅ Increased from 70 to 85
         
         # Logout button
         if st.button("Logout", use_container_width=True):
@@ -1025,6 +1002,7 @@ if st.session_state.is_authenticated:
                 st.session_state.chairman_tc_accepted = True
                 st.rerun()
         st.stop()
+
 
     st.markdown("""
     <style>
@@ -1068,26 +1046,21 @@ if st.session_state.is_authenticated:
 
     st.divider()
 
-    # ===== NAVIGATION WITH CONDITIONAL FACE CHECK-IN =====
     if st.session_state.user_role == "admin":
         nav_items = [
             {"id": "dashboard", "icon": "📊", "title": "Dashboard"},
             {"id": "checkin", "icon": "🎟️", "title": "Check-In"},
-        ]
-        # Only add Face Check-In if available
-        if FACE_AVAILABLE and show_face_checkin is not None:
-            nav_items.append({"id": "face_checkin", "icon": "📸", "title": "Face Check-In"})
-        nav_items.extend([
+            {"id": "face_checkin", "icon": "📸", "title": "Face Check-In"},  # ← NEW
             {"id": "sessions", "icon": "📅", "title": "Sessions"},
             {"id": "volunteer", "icon": "🤝", "title": "Volunteer"},
             {"id": "vol_access", "icon": "🪪", "title": "Vol Access"},
             {"id": "settings", "icon": "⚙️", "title": "Settings"},
             {"id": "reports", "icon": "📑", "title": "Reports"},
-            {"id": "manage", "icon": "⚙️", "title": "Manage"},
+            {"id": "manage", "icon": "️", "title": "Manage"},
             {"id": "garden", "icon": "🌱", "title": "Garden"},
             {"id": "residents", "icon": "🏡", "title": "Residents"},
             {"id": "meeting", "icon": "📋", "title": "Meeting"},
-        ])
+        ]
     elif st.session_state.user_role == "chairman":
         nav_items = [
             {"id": "overview", "icon": "🧭", "title": "Overview"},
@@ -1128,7 +1101,6 @@ if st.session_state.is_authenticated:
 
     st.divider()
 
-    # ===== PAGE ROUTING WITH CONDITIONAL FACE CHECK-IN =====
     page = st.session_state.active_page
     if page == "dashboard":
         show_dashboard()
@@ -1154,12 +1126,8 @@ if st.session_state.is_authenticated:
         show_chairman()
     elif page == "settings":
         show_settings()
-    elif page == "face_checkin" and FACE_AVAILABLE and show_face_checkin is not None:
+    elif page == "face_checkin":
         show_face_checkin()
-    else:
-        # If face_checkin is not available, redirect to dashboard
-        st.session_state.active_page = "dashboard"
-        st.rerun()
 
 else:
     st.divider()
