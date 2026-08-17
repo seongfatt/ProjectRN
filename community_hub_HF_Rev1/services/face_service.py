@@ -1,5 +1,5 @@
 # services/face_service.py
-"""Face recognition service using DeepFace (Rock-Solid File-Based Method)"""
+"""Face recognition service using DeepFace (ROCK SOLID)"""
 
 import streamlit as st
 import numpy as np
@@ -30,21 +30,17 @@ except ImportError:
 
 
 class FaceRecognitionService:
-    """Handles face detection and recognition using DeepFace."""
-    
     def __init__(self):
-        self.known_faces = {}  # {participant_id: {'name': name, 'encoding': encoding_array}}
+        self.known_faces = {}
+        self._model_loaded = False
         self._load_known_faces()
     
     def is_available(self):
-        """Check if DeepFace is available."""
         return DEEPFACE_AVAILABLE and CV2_AVAILABLE
     
     def _load_known_faces(self):
-        """Load enrolled faces from database."""
         if not self.is_available() or not DB_CONNECTED:
             return
-        
         try:
             result = supabase.table('participants') \
                 .select('id, name, face_encoding') \
@@ -55,10 +51,8 @@ class FaceRecognitionService:
             for p in result.data:
                 if p.get('face_encoding'):
                     try:
-                        # Parse the stored encoding (DeepFace saves as 512 vector)
                         encoding = eval(p['face_encoding'])
                         if isinstance(encoding, list):
-                            # Convert to numpy array for faster math
                             self.known_faces[p['id']] = {
                                 'name': p['name'],
                                 'encoding': np.array(encoding)
@@ -66,56 +60,60 @@ class FaceRecognitionService:
                     except Exception as e:
                         print(f"Error loading face for {p.get('name')}: {e}")
             
-            print(f"✅ Loaded {len(self.known_faces)} enrolled faces (DeepFace 512-dim)")
+            print(f"✅ Loaded {len(self.known_faces)} enrolled faces")
         except Exception as e:
             print(f"Error loading faces: {e}")
     
+    def _ensure_model_loaded(self):
+        """Load the Facenet model if it hasn't been loaded yet."""
+        if not self._model_loaded:
+            print("⏳ Loading DeepFace Facenet model (first time only)...")
+            try:
+                # Use the official represent method on a dummy image to force load.
+                DeepFace.represent(img_path=np.zeros((160, 160, 3), dtype=np.uint8), 
+                                   model_name="Facenet", 
+                                   enforce_detection=False,
+                                   detector_backend="skip")
+                self._model_loaded = True
+                print("✅ DeepFace Facenet model loaded successfully!")
+            except Exception as e:
+                print(f"❌ Failed to load DeepFace model: {e}")
+
     def detect_faces(self, image_bytes):
-        """
-        Detect all faces using file-based method (100% reliable).
-        Returns: face_locations, face_encodings, rgb_image
-        """
         if not self.is_available():
             return [], [], None
         
+        # 🔥 FORCE THE MODEL TO LOAD NOW IF IT HASN'T
+        self._ensure_model_loaded()
+        
         try:
-            # --- STEP 1: Decode image for face detection ---
-            # Convert bytes to OpenCV format to find the boxes
             nparr = np.frombuffer(image_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             
             if img is None:
-                # Fallback to PIL if OpenCV fails decoding
                 pil_img = Image.open(io.BytesIO(image_bytes))
                 img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
 
             rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-            # --- STEP 2: Find face locations ---
             import face_recognition
             face_locations = face_recognition.face_locations(rgb_img, model='hog')
 
             if not face_locations:
                 return [], [], rgb_img
 
-            # --- STEP 3: Get DeepFace encoding using Temp File (Rock Solid) ---
             face_encodings = []
             
             for (top, right, bottom, left) in face_locations:
                 try:
-                    # Crop the face
                     face_crop = rgb_img[top:bottom, left:right]
-                    
-                    # Convert crop to BGR for saving (OpenCV saves in BGR)
                     face_crop_bgr = cv2.cvtColor(face_crop, cv2.COLOR_RGB2BGR)
                     
-                    # Save to temporary file (bypasses ALL format bugs)
                     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
                         cv2.imwrite(tmp_file.name, face_crop_bgr)
                         temp_path = tmp_file.name
                     
                     try:
-                        # Pass the FILE PATH to DeepFace, enforcing skip detector
                         embedding_obj = DeepFace.represent(
                             img_path=temp_path, 
                             model_name="Facenet", 
@@ -128,9 +126,7 @@ class FaceRecognitionService:
                             face_encodings.append(np.array(vec))
                         else:
                             face_encodings.append(np.zeros(512))
-                            
                     finally:
-                        # Clean up temp file
                         try:
                             os.unlink(temp_path)
                         except:
@@ -147,12 +143,10 @@ class FaceRecognitionService:
             return [], [], None
     
     def identify_faces(self, face_encodings, tolerance=0.65):
-        """
-        Match detected faces against known faces using Euclidean distance on 512-vectors.
-        """
         matches = []
         
         if not self.is_available() or len(self.known_faces) == 0:
+            print(f"⚠️ WARNING: Known faces empty. Count: {len(self.known_faces)}")
             return [None] * len(face_encodings)
         
         for encoding in face_encodings:
@@ -162,7 +156,6 @@ class FaceRecognitionService:
             for pid, data in self.known_faces.items():
                 try:
                     distance = np.linalg.norm(data['encoding'] - encoding)
-                    
                     if distance < tolerance and distance < best_distance:
                         best_distance = distance
                         confidence = max(0.0, 1.0 - (distance / 1.4))
@@ -180,15 +173,11 @@ class FaceRecognitionService:
         return matches
 
     def get_enrolled_count(self):
-        """Get number of enrolled faces."""
         return len(self.known_faces)
 
-
-# Singleton instance
 _face_service = None
 
 def get_face_service():
-    """Get or create singleton FaceRecognitionService instance."""
     global _face_service
     if _face_service is None:
         _face_service = FaceRecognitionService()
