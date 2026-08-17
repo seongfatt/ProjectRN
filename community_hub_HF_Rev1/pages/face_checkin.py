@@ -107,7 +107,7 @@ def show_face_checkin():
         image_display = Image.open(io.BytesIO(image_bytes))
 
     if image_display:
-        st.image(image_display, caption="📷 Uploaded Photo", use_container_width=True)
+        st.image(image_display, caption="📷 Uploaded Photo", width='stretch')
 
     st.divider()
 
@@ -162,8 +162,7 @@ def show_face_checkin():
                     cv2.putText(img_with_boxes, label, (left + 6, bottom - 6),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-                st.image(img_with_boxes, caption="📸 Annotated Photo (Green = Recognized, Red = Unknown)", 
-                        use_container_width=True)
+                st.image(img_with_boxes, caption="📸 Annotated Photo (Green = Recognized, Red = Unknown)", width='stretch')
             else:
                 # Fallback
                 results = []

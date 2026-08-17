@@ -1,5 +1,5 @@
 # services/face_service.py
-"""Face recognition service using DeepFace (lightweight, no dlib)"""
+"""Face recognition service using DeepFace (robust hybrid method)"""
 
 import streamlit as st
 import numpy as np
@@ -68,77 +68,66 @@ class FaceRecognitionService:
         except Exception as e:
             print(f"Error loading faces: {e}")
     
-        def detect_faces(self, image_bytes):
-            """
-            Detect all faces in an image using DeepFace's backend.
-            Returns: face_locations, face_encodings, rgb_image
-            """
-            if not self.is_available():
-                return [], [], None
+    def detect_faces(self, image_bytes):
+        """
+        Detect all faces in an image using hybrid face_recognition + DeepFace.
+        Returns: face_locations, face_encodings, rgb_image
+        """
+        if not self.is_available():
+            return [], [], None
+        
+        try:
+            # 1. Decode image using OpenCV
+            nparr = np.frombuffer(image_bytes, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             
-            try:
-                # --- REWRITTEN TO USE RAW BYTES FOR DEEPFACE ---
-                
-                # 1. Save the raw bytes to a temporary file. 
-                # DeepFace reliably loads files by path, avoiding OpenCV/PIL format bugs.
-                import tempfile
-                import os
-                
-                # Create a temporary .jpg file
-                with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
-                    tmp_file.write(image_bytes)
-                    temp_path = tmp_file.name
+            # Fallback to PIL if OpenCV fails
+            if img is None:
+                pil_img = Image.open(io.BytesIO(image_bytes))
+                img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
 
+            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+            # 2. Use face_recognition to FIND the face locations (HOG works great for group photos)
+            import face_recognition
+            face_locations = face_recognition.face_locations(rgb_img, model='hog')
+
+            if not face_locations:
+                return [], [], rgb_img
+
+            # 3. Extract 512-vector embeddings using DeepFace on each cropped face
+            face_encodings = []
+            
+            for (top, right, bottom, left) in face_locations:
                 try:
-                    # 2. Load the image via DeepFace from the temporary path
-                    # We use enforce_detection=False to avoid crashing if slightly blurry
-                    objs = DeepFace.represent(
-                        img_path=temp_path, 
+                    # Crop the face out of the image
+                    face_crop = rgb_img[top:bottom, left:right]
+                    
+                    # Pass the cropped face to DeepFace, skipping its detector completely
+                    embedding_obj = DeepFace.represent(
+                        img_path=face_crop, 
                         model_name="Facenet", 
-                        enforce_detection=False, 
-                        detector_backend="retinaface"
+                        enforce_detection=False,
+                        detector_backend="skip" # <-- Essential to skip OpenCV checks
                     )
                     
-                    # 3. Load the image for the UI display (PIL handles this safely)
-                    pil_img = Image.open(io.BytesIO(image_bytes))
-                    rgb_img = np.array(pil_img.convert('RGB'))
-
-                finally:
-                    # 4. Delete the temporary file regardless of success or failure
-                    try:
-                        os.unlink(temp_path)
-                    except:
-                        pass
-                
-                # If no faces found at all
-                if not objs:
-                    return [], [], rgb_img
-
-                # 5. Prepare face locations and encodings
-                face_locations = []
-                face_encodings = []
-                
-                for obj in objs:
-                    # Extract the 512-dim encoding
-                    face_encodings.append(np.array(obj['embedding']))
-                    # Get facial area coordinates if available
-                    if 'facial_area' in obj:
-                        area = obj['facial_area']
-                        # Format: (top, right, bottom, left) for OpenCV bounding box
-                        face_locations.append((area['y'], area['x'] + area['w'], area['y'] + area['h'], area['x']))
+                    if embedding_obj:
+                        face_encodings.append(np.array(embedding_obj[0]['embedding']))
                     else:
-                        # Fallback dummy coords
-                        face_locations.append((0, 0, 100, 100))
-                
-                return face_locations, face_encodings, rgb_img
+                        # If deepface fails on this one crop, use a dummy zero vector to keep list aligned
+                        face_encodings.append(np.zeros(512))
+                            
+                except Exception as e:
+                    print(f"DeepFace extraction error on crop: {e}")
+                    face_encodings.append(np.zeros(512)) # Dummy
 
-            except Exception as e:
-                print(f"Error in detect_faces (DeepFace): {e}")
-                import traceback
-                traceback.print_exc()
-                return [], [], None
+            return face_locations, face_encodings, rgb_img
+
+        except Exception as e:
+            print(f"Error in detect_faces: {e}")
+            return [], [], None
     
-    def identify_faces(self, face_encodings, tolerance=0.6):
+    def identify_faces(self, face_encodings, tolerance=0.4):
         """
         Match detected faces against known faces using Euclidean distance on 512-vectors.
         Returns: list of matches (id, name, confidence) or None
