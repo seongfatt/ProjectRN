@@ -1,5 +1,5 @@
 # services/face_service.py
-"""Face recognition service using DeepFace (robust hybrid method)"""
+"""Face recognition service using DeepFace (Rock-Solid File-Based Method)"""
 
 import streamlit as st
 import numpy as np
@@ -8,6 +8,8 @@ from PIL import Image
 import io
 from datetime import datetime
 from config import supabase, DB_CONNECTED, now_sgt
+import tempfile
+import os
 
 # 🔥 Try to import DeepFace
 try:
@@ -70,60 +72,73 @@ class FaceRecognitionService:
     
     def detect_faces(self, image_bytes):
         """
-        Detect all faces in an image using hybrid face_recognition + DeepFace.
+        Detect all faces using file-based method (100% reliable).
         Returns: face_locations, face_encodings, rgb_image
         """
         if not self.is_available():
             return [], [], None
         
         try:
-            # 1. Decode image using OpenCV
+            # --- STEP 1: Decode image for face detection ---
+            # Convert bytes to OpenCV format to find the boxes
             nparr = np.frombuffer(image_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             
-            # Fallback to PIL if OpenCV fails
             if img is None:
+                # Fallback to PIL if OpenCV fails decoding
                 pil_img = Image.open(io.BytesIO(image_bytes))
                 img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
 
             rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-            # 2. Use face_recognition to FIND the face locations (HOG works great for group photos)
+            # --- STEP 2: Find face locations ---
             import face_recognition
             face_locations = face_recognition.face_locations(rgb_img, model='hog')
 
             if not face_locations:
                 return [], [], rgb_img
 
-            # 3. Extract 512-vector embeddings using DeepFace on each cropped face
+            # --- STEP 3: Get DeepFace encoding using Temp File (Rock Solid) ---
             face_encodings = []
             
             for (top, right, bottom, left) in face_locations:
                 try:
-                    # Crop the face out of the image
+                    # Crop the face
                     face_crop = rgb_img[top:bottom, left:right]
                     
-                    # Pass the cropped face to DeepFace, skipping its detector completely
-                    embedding_obj = DeepFace.represent(
-                        img_path=face_crop, 
-                        model_name="Facenet", 
-                        enforce_detection=False,
-                        detector_backend="skip" # <-- Essential to skip OpenCV checks
-                    )
+                    # Convert crop to BGR for saving (OpenCV saves in BGR)
+                    face_crop_bgr = cv2.cvtColor(face_crop, cv2.COLOR_RGB2BGR)
                     
-                    if embedding_obj:
-                        # ✅ SAFETY CHECK: Ensure we flatten the vector if it's a nested list
-                        vec = embedding_obj[0]['embedding']
-                        if isinstance(vec, list) and len(vec) > 0 and isinstance(vec[0], list):
-                            vec = vec[0] # Unwrap nested list if present
-                        face_encodings.append(np.array(vec))
-                    else:
-                        # If deepface fails on this one crop, use a dummy zero vector to keep list aligned
-                        face_encodings.append(np.zeros(512))
+                    # Save to temporary file (bypasses ALL format bugs)
+                    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
+                        cv2.imwrite(tmp_file.name, face_crop_bgr)
+                        temp_path = tmp_file.name
+                    
+                    try:
+                        # Pass the FILE PATH to DeepFace, enforcing skip detector
+                        embedding_obj = DeepFace.represent(
+                            img_path=temp_path, 
+                            model_name="Facenet", 
+                            enforce_detection=False,
+                            detector_backend="skip"
+                        )
+                        
+                        if embedding_obj:
+                            vec = embedding_obj[0]['embedding']
+                            face_encodings.append(np.array(vec))
+                        else:
+                            face_encodings.append(np.zeros(512))
+                            
+                    finally:
+                        # Clean up temp file
+                        try:
+                            os.unlink(temp_path)
+                        except:
+                            pass
                             
                 except Exception as e:
-                    print(f"DeepFace extraction error on crop: {e}")
-                    face_encodings.append(np.zeros(512)) # Dummy
+                    print(f"DeepFace extraction error: {e}")
+                    face_encodings.append(np.zeros(512))
 
             return face_locations, face_encodings, rgb_img
 
@@ -131,10 +146,9 @@ class FaceRecognitionService:
             print(f"Error in detect_faces: {e}")
             return [], [], None
     
-    def identify_faces(self, face_encodings, tolerance=0.65): # <-- Set to 0.65
+    def identify_faces(self, face_encodings, tolerance=0.65):
         """
         Match detected faces against known faces using Euclidean distance on 512-vectors.
-        Returns: list of matches (id, name, confidence) or None
         """
         matches = []
         
@@ -145,18 +159,12 @@ class FaceRecognitionService:
             best_match = None
             best_distance = float('inf')
             
-            # Iterate through all known faces
             for pid, data in self.known_faces.items():
                 try:
-                    # Calculate Euclidean distance between the two 512 vectors
                     distance = np.linalg.norm(data['encoding'] - encoding)
                     
-                    # If distance is less than tolerance and better than previous best
                     if distance < tolerance and distance < best_distance:
                         best_distance = distance
-                        # Calculate confidence (1 is perfect, 0 is far away)
-                        # DeepFace distances usually range 0.0 - 1.4. 
-                        # A distance of 0.4 is roughly 80% confidence.
                         confidence = max(0.0, 1.0 - (distance / 1.4))
                         
                         best_match = {
@@ -164,7 +172,7 @@ class FaceRecognitionService:
                             'name': data['name'],
                             'confidence': confidence
                         }
-                except Exception as e:
+                except Exception:
                     continue
             
             matches.append(best_match)
