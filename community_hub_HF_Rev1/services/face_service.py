@@ -68,41 +68,53 @@ class FaceRecognitionService:
         except Exception as e:
             print(f"Error loading faces: {e}")
     
-    def detect_faces(self, image_bytes):
-        """
-        Detect all faces in an image using DeepFace's backend.
-        Returns: face_locations, face_encodings, rgb_image
-        """
-        if not self.is_available():
-            return [], [], None
-        
-        try:
-            # Decode image
-            nparr = np.frombuffer(image_bytes, np.uint8)
-            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        def detect_faces(self, image_bytes):
+            """
+            Detect all faces in an image using DeepFace's backend.
+            Returns: face_locations, face_encodings, rgb_image
+            """
+            if not self.is_available():
+                return [], [], None
             
-            if img is None:
-                # Fallback to PIL
-                pil_img = Image.open(io.BytesIO(image_bytes))
-                img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
-            
-            rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            
-            # 🔥 Use DeepFace to extract embeddings
-            # We switch to "retinaface" (most robust) and disable enforce_detection to avoid strict crashes
             try:
-                objs = DeepFace.represent(
-                    img_path=rgb_img, 
-                    model_name="Facenet", 
-                    enforce_detection=False,  # <-- CRUCIAL FIX: Allows processing even if detection is faint
-                    detector_backend="retinaface" # <-- CRUCIAL FIX: Best detector for glares/angles
-                )
+                # --- REWRITTEN TO USE RAW BYTES FOR DEEPFACE ---
                 
+                # 1. Save the raw bytes to a temporary file. 
+                # DeepFace reliably loads files by path, avoiding OpenCV/PIL format bugs.
+                import tempfile
+                import os
+                
+                # Create a temporary .jpg file
+                with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
+                    tmp_file.write(image_bytes)
+                    temp_path = tmp_file.name
+
+                try:
+                    # 2. Load the image via DeepFace from the temporary path
+                    # We use enforce_detection=False to avoid crashing if slightly blurry
+                    objs = DeepFace.represent(
+                        img_path=temp_path, 
+                        model_name="Facenet", 
+                        enforce_detection=False, 
+                        detector_backend="retinaface"
+                    )
+                    
+                    # 3. Load the image for the UI display (PIL handles this safely)
+                    pil_img = Image.open(io.BytesIO(image_bytes))
+                    rgb_img = np.array(pil_img.convert('RGB'))
+
+                finally:
+                    # 4. Delete the temporary file regardless of success or failure
+                    try:
+                        os.unlink(temp_path)
+                    except:
+                        pass
+                
+                # If no faces found at all
                 if not objs:
-                    # Even with enforce_detection=False, if nothing is found, return empty
                     return [], [], rgb_img
 
-                # Prepare face_locations 
+                # 5. Prepare face locations and encodings
                 face_locations = []
                 face_encodings = []
                 
@@ -112,23 +124,19 @@ class FaceRecognitionService:
                     # Get facial area coordinates if available
                     if 'facial_area' in obj:
                         area = obj['facial_area']
+                        # Format: (top, right, bottom, left) for OpenCV bounding box
                         face_locations.append((area['y'], area['x'] + area['w'], area['y'] + area['h'], area['x']))
                     else:
-                        # If coords missing, use dummy coords to prevent UI crash
+                        # Fallback dummy coords
                         face_locations.append((0, 0, 100, 100))
                 
                 return face_locations, face_encodings, rgb_img
 
-            except ValueError:
-                # No faces detected
-                return [], [], rgb_img
             except Exception as e:
-                print(f"DeepFace detection error: {e}")
-                return [], [], rgb_img
-            
-        except Exception as e:
-            print(f"Error in detect_faces: {e}")
-            return [], [], None
+                print(f"Error in detect_faces (DeepFace): {e}")
+                import traceback
+                traceback.print_exc()
+                return [], [], None
     
     def identify_faces(self, face_encodings, tolerance=0.6):
         """
