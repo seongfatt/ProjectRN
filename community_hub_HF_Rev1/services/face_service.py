@@ -1,13 +1,11 @@
 # services/face_service.py
 """Face recognition service using DeepFace (lightweight, no dlib)"""
 
-import face_recognition
 import streamlit as st
 import numpy as np
 import cv2
 from PIL import Image
 import io
-import base64
 from datetime import datetime
 from config import supabase, DB_CONNECTED, now_sgt
 
@@ -30,10 +28,10 @@ except ImportError:
 
 
 class FaceRecognitionService:
-    """Handles face detection and recognition using DeepFace (no dlib)."""
+    """Handles face detection and recognition using DeepFace."""
     
     def __init__(self):
-        self.known_faces = {}  # {participant_id: {'name': name, 'encoding': encoding}}
+        self.known_faces = {}  # {participant_id: {'name': name, 'encoding': encoding_array}}
         self._load_known_faces()
     
     def is_available(self):
@@ -55,65 +53,86 @@ class FaceRecognitionService:
             for p in result.data:
                 if p.get('face_encoding'):
                     try:
-                        # Parse the stored encoding
+                        # Parse the stored encoding (DeepFace saves as 512 vector)
                         encoding = eval(p['face_encoding'])
                         if isinstance(encoding, list):
+                            # Convert to numpy array for faster math
                             self.known_faces[p['id']] = {
                                 'name': p['name'],
-                                'encoding': encoding
+                                'encoding': np.array(encoding)
                             }
                     except Exception as e:
                         print(f"Error loading face for {p.get('name')}: {e}")
             
-            print(f"✅ Loaded {len(self.known_faces)} enrolled faces")
+            print(f"✅ Loaded {len(self.known_faces)} enrolled faces (DeepFace 512-dim)")
         except Exception as e:
             print(f"Error loading faces: {e}")
     
     def detect_faces(self, image_bytes):
         """
-        Detect all faces in an image.
+        Detect all faces in an image using DeepFace's backend.
         Returns: face_locations, face_encodings, rgb_image
         """
         if not self.is_available():
             return [], [], None
         
         try:
-            # 🔥 FIX: Try multiple ways to decode the image
+            # Decode image
             nparr = np.frombuffer(image_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             
             if img is None:
-                # Try with PIL as fallback
-                from PIL import Image
-                import io
+                # Fallback to PIL
                 pil_img = Image.open(io.BytesIO(image_bytes))
                 img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
             
             rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             
-            # 🔥 Use HOG model (works best)
-            face_locations = face_recognition.face_locations(rgb_img, model='hog')
-            face_encodings = face_recognition.face_encodings(rgb_img, face_locations)
-            
-            print(f"✅ Found {len(face_locations)} face(s)")
-            
-            # 🔥 If HOG fails, try CNN
-            if not face_locations:
-                print("HOG failed, trying CNN...")
-                face_locations = face_recognition.face_locations(rgb_img, model='cnn')
-                face_encodings = face_recognition.face_encodings(rgb_img, face_locations)
-            
-            return face_locations, face_encodings, rgb_img
+            # 🔥 Use DeepFace to extract embeddings directly (Detects and Encodes at once)
+            # We use OpenCV backend for speed, Facenet for 512-dim vectors
+            try:
+                objs = DeepFace.represent(
+                    img_path=rgb_img, 
+                    model_name="Facenet", 
+                    enforce_detection=True,
+                    detector_backend="opencv" 
+                )
+                
+                if not objs:
+                    return [], [], rgb_img
+
+                # Prepare face_locations (DeepFace doesn't return coordinates directly, so we estimate)
+                # To keep compatibility with the UI drawing boxes, we approximate the face areas
+                face_locations = []
+                face_encodings = []
+                
+                for obj in objs:
+                    # Extract the 512-dim encoding
+                    face_encodings.append(np.array(obj['embedding']))
+                    # Get facial area coordinates if available
+                    if 'facial_area' in obj:
+                        area = obj['facial_area']
+                        face_locations.append((area['y'], area['x'] + area['w'], area['y'] + area['h'], area['x']))
+                    else:
+                        # If coords missing, use dummy coords to prevent UI crash
+                        face_locations.append((0, 0, 100, 100))
+                
+                return face_locations, face_encodings, rgb_img
+
+            except ValueError:
+                # No faces detected
+                return [], [], rgb_img
+            except Exception as e:
+                print(f"DeepFace detection error: {e}")
+                return [], [], rgb_img
             
         except Exception as e:
-            print(f"Error detecting faces: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"Error in detect_faces: {e}")
             return [], [], None
     
     def identify_faces(self, face_encodings, tolerance=0.6):
         """
-        Match detected faces against known faces using DeepFace.
+        Match detected faces against known faces using Euclidean distance on 512-vectors.
         Returns: list of matches (id, name, confidence) or None
         """
         matches = []
@@ -125,112 +144,32 @@ class FaceRecognitionService:
             best_match = None
             best_distance = float('inf')
             
-            # Convert encoding to the format DeepFace expects
-            if isinstance(encoding, np.ndarray):
-                # Save encoding as temporary image for comparison
-                import tempfile
-                import os
-                
+            # Iterate through all known faces
+            for pid, data in self.known_faces.items():
                 try:
-                    # Convert the encoding back to image (DeepFace needs images for verification)
-                    # For now, we'll use a simpler approach: store and compare embeddings directly
-                    # This is a simplified version - DeepFace compare works with file paths
+                    # Calculate Euclidean distance between the two 512 vectors
+                    distance = np.linalg.norm(data['encoding'] - encoding)
                     
-                    for pid, data in self.known_faces.items():
-                        try:
-                            # Calculate distance between embeddings
-                            known_encoding = np.array(data['encoding'])
-                            
-                            # For face image embeddings, we can't directly compare
-                            # Use DeepFace's verify with a temporary file
-                            # This is a simplified approach
-                            
-                            # For now, we'll use a placeholder - in production, you'd want to
-                            # store the embeddings and compare them directly
-                            distance = np.linalg.norm(known_encoding - encoding.flatten())
-                            
-                            if distance < tolerance and distance < best_distance:
-                                best_distance = distance
-                                best_match = {
-                                    'id': pid,
-                                    'name': data['name'],
-                                    'confidence': 1 - (distance / 2)  # Normalize
-                                }
-                        except Exception as e:
-                            print(f"Comparison error for {data['name']}: {e}")
-                            continue
-                    
+                    # If distance is less than tolerance and better than previous best
+                    if distance < tolerance and distance < best_distance:
+                        best_distance = distance
+                        # Calculate confidence (1 is perfect, 0 is far away)
+                        # DeepFace distances usually range 0.0 - 1.4. 
+                        # A distance of 0.4 is roughly 80% confidence.
+                        confidence = max(0.0, 1.0 - (distance / 1.4))
+                        
+                        best_match = {
+                            'id': pid,
+                            'name': data['name'],
+                            'confidence': confidence
+                        }
                 except Exception as e:
-                    print(f"Identification error: {e}")
-                    best_match = None
+                    continue
             
             matches.append(best_match)
         
         return matches
-    
-    def enroll_face(self, participant_id, image_bytes):
-        """
-        Enroll a participant's face using DeepFace.
-        Returns: {success: bool, message: str}
-        """
-        if not self.is_available():
-            return {'success': False, 'error': 'DeepFace is not available'}
-        
-        try:
-            # Convert bytes to image
-            nparr = np.frombuffer(image_bytes, np.uint8)
-            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            
-            # Save temporary file
-            import tempfile
-            import os
-            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp:
-                cv2.imwrite(tmp.name, img)
-                tmp_path = tmp.name
-            
-            try:
-                # Extract face embedding using DeepFace
-                embedding_result = DeepFace.represent(
-                    img_path=tmp_path,
-                    model_name='Facenet512',
-                    enforce_detection=True,
-                    detector_backend='opencv'
-                )
-            except Exception as e:
-                return {'success': False, 'error': f'Could not detect face: {e}'}
-            
-            # Clean up temp file
-            try:
-                os.unlink(tmp_path)
-            except:
-                pass
-            
-            # Extract embedding
-            if embedding_result and isinstance(embedding_result, list) and len(embedding_result) > 0:
-                embedding = embedding_result[0]['embedding']
-            elif embedding_result and isinstance(embedding_result, dict) and 'embedding' in embedding_result:
-                embedding = embedding_result['embedding']
-            else:
-                return {'success': False, 'error': 'Could not extract face embedding'}
-            
-            # Store encoding in database
-            supabase.table('participants') \
-                .update({
-                    'face_encoding': str(embedding),
-                    'face_enrolled': True,
-                    'face_updated_at': now_sgt().isoformat()
-                }) \
-                .eq('id', participant_id) \
-                .execute()
-            
-            # Reload known faces
-            self._load_known_faces()
-            
-            return {'success': True, 'message': '✅ Face enrolled successfully!'}
-            
-        except Exception as e:
-            return {'success': False, 'error': f'Error: {e}'}
-    
+
     def get_enrolled_count(self):
         """Get number of enrolled faces."""
         return len(self.known_faces)

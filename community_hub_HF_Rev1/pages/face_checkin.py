@@ -11,7 +11,7 @@ from config import supabase, DB_CONNECTED, load_activities, now_sgt
 from services.face_service import get_face_service
 from utils import sync_session_attendance_async
 
-# 🔥 SAFE IMPORT: cv2 is optional — app works without it
+# 🔥 SAFE IMPORT: cv2 is optional
 try:
     import cv2
     CV2_AVAILABLE = True
@@ -34,24 +34,13 @@ def show_face_checkin():
     # Check if face recognition is available
     if not face_service.is_available():
         st.error("⚠️ Face recognition is not available on this server.")
-        st.info("Please contact the administrator to install: opencv-python-headless, dlib-bin, and face-recognition.")
-        st.markdown("""
-        <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; color: #1a1a1a;">
-            <strong>💡 To enable face recognition:</strong><br>
-            Add these to requirements.txt:<br>
-            <code>opencv-python-headless==4.8.1.78</code><br>
-            <code>dlib-bin==19.24.2</code><br>
-            <code>face-recognition==1.3.0</code>
-        </div>
-        """, unsafe_allow_html=True)
+        st.info("Please contact the administrator to install: deepface, opencv-python-headless, and tensorflow.")
         return
 
     enrolled_count = face_service.get_enrolled_count()
 
-    # ── Status Banner ──
     if enrolled_count == 0:
-        st.warning("⚠️ No faces enrolled yet. Please enroll residents first in the Residents tab.")
-        st.info("Go to **Residents → Edit Resident → Enroll Face Photo**")
+        st.warning("⚠️ No faces enrolled yet. Please enroll residents first.")
         return
 
     col1, col2 = st.columns(2)
@@ -83,14 +72,12 @@ def show_face_checkin():
     if len(session_labels) == 1:
         st.info(f"ℹ️ This activity has only one session: {session_labels[0]}")
         s1, s2, s3, s4 = True, False, False, False
-        session_display = session_labels[0]
     else:
         session_options = ["All Sessions"] + session_labels
         session_choice = st.radio("Which session(s)?", session_options, horizontal=True, key="face_session")
         flags = [(session_choice == "All Sessions") or (session_choice == lbl) for lbl in session_labels]
         flags = (flags + [False, False, False, False])[:4]
         s1, s2, s3, s4 = flags
-        session_display = session_choice
 
     selected_date = st.date_input("Date", value=datetime.now().date(), key="face_date")
     formatted_date = selected_date.strftime("%Y-%m-%d")
@@ -112,19 +99,11 @@ def show_face_checkin():
     image_bytes = None
     image_display = None
 
-    # pages/face_checkin.py — Near the photo upload section
-
     if camera_photo:
-        # 🔥 Get raw bytes
         image_bytes = camera_photo.getvalue()
-        # 🔥 Load with PIL to verify
-        from PIL import Image
-        import io
         image_display = Image.open(io.BytesIO(image_bytes))
     elif uploaded_file:
         image_bytes = uploaded_file.getvalue()
-        from PIL import Image
-        import io
         image_display = Image.open(io.BytesIO(image_bytes))
 
     if image_display:
@@ -134,7 +113,7 @@ def show_face_checkin():
 
     # ── Process Photo ──
     if image_bytes and st.button("🔍 Detect & Check In Residents", type="primary", use_container_width=True):
-        with st.spinner("🔍 Analyzing photo and matching faces..."):
+        with st.spinner("🔍 Analyzing photo and matching faces... (This may take 10-15 seconds)"):
             # Detect faces
             face_locations, face_encodings, rgb_img = face_service.detect_faces(image_bytes)
 
@@ -183,11 +162,10 @@ def show_face_checkin():
                     cv2.putText(img_with_boxes, label, (left + 6, bottom - 6),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
 
-                # Display annotated image
                 st.image(img_with_boxes, caption="📸 Annotated Photo (Green = Recognized, Red = Unknown)", 
                         use_container_width=True)
             else:
-                # Fallback: show results without bounding boxes
+                # Fallback
                 results = []
                 recognized_count = 0
                 for match in matches:
@@ -282,39 +260,3 @@ def show_face_checkin():
                         st.rerun()
             else:
                 st.warning("⚠️ No faces were recognized. Please ensure residents are enrolled.")
-
-    st.divider()
-
-    # ── Today's Statistics ──
-    st.subheader("📊 Today's Face Recognition Statistics")
-
-    try:
-        today_str = selected_date.strftime("%Y-%m-%d")
-
-        # Count face check-ins today
-        face_checkins = supabase.table("attendance") \
-            .select("*", count="exact") \
-            .eq("date", today_str) \
-            .eq("checkin_method", "face_recognition") \
-            .execute()
-
-        total_face_checkins = face_checkins.count if face_checkins else 0
-
-        # Count total check-ins today for this activity
-        total_checkins = supabase.table("attendance") \
-            .select("*", count="exact") \
-            .eq("date", today_str) \
-            .eq("source", activity) \
-            .execute()
-
-        total_checkins_count = total_checkins.count if total_checkins else 0
-
-        col1, col2, col3 = st.columns(3)
-        col1.metric("👤 Face Check-Ins Today", total_face_checkins)
-        col2.metric("📋 Total Check-Ins Today", total_checkins_count)
-        col3.metric("📸 Enrolled Faces", enrolled_count)
-
-    except Exception as e:
-        st.info("No statistics available yet.")
-
-    st.caption("💡 **Tip:** For best results, use well-lit photos with faces looking forward.")
