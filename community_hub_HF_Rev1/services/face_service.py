@@ -88,21 +88,21 @@ class FaceRecognitionService:
             
             rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             
-            # 🔥 Use DeepFace to extract embeddings directly (Detects and Encodes at once)
-            # We use OpenCV backend for speed, Facenet for 512-dim vectors
+            # 🔥 Use DeepFace to extract embeddings
+            # We switch to "retinaface" (most robust) and disable enforce_detection to avoid strict crashes
             try:
                 objs = DeepFace.represent(
-                img_path=rgb_img, 
-                model_name="Facenet", 
-                enforce_detection=True,
-                detector_backend="mtcnn"  # <-- CHANGE THIS
-            )
+                    img_path=rgb_img, 
+                    model_name="Facenet", 
+                    enforce_detection=False,  # <-- CRUCIAL FIX: Allows processing even if detection is faint
+                    detector_backend="retinaface" # <-- CRUCIAL FIX: Best detector for glares/angles
+                )
                 
                 if not objs:
+                    # Even with enforce_detection=False, if nothing is found, return empty
                     return [], [], rgb_img
 
-                # Prepare face_locations (DeepFace doesn't return coordinates directly, so we estimate)
-                # To keep compatibility with the UI drawing boxes, we approximate the face areas
+                # Prepare face_locations 
                 face_locations = []
                 face_encodings = []
                 
