@@ -112,7 +112,11 @@ class FaceRecognitionService:
                     )
                     
                     if embedding_obj:
-                        face_encodings.append(np.array(embedding_obj[0]['embedding']))
+                        # ✅ SAFETY CHECK: Ensure we flatten the vector if it's a nested list
+                        vec = embedding_obj[0]['embedding']
+                        if isinstance(vec, list) and len(vec) > 0 and isinstance(vec[0], list):
+                            vec = vec[0] # Unwrap nested list if present
+                        face_encodings.append(np.array(vec))
                     else:
                         # If deepface fails on this one crop, use a dummy zero vector to keep list aligned
                         face_encodings.append(np.zeros(512))
@@ -127,7 +131,7 @@ class FaceRecognitionService:
             print(f"Error in detect_faces: {e}")
             return [], [], None
     
-    def identify_faces(self, face_encodings, tolerance=0.4):
+    def identify_faces(self, face_encodings, tolerance=0.65): # <-- Set to 0.65
         """
         Match detected faces against known faces using Euclidean distance on 512-vectors.
         Returns: list of matches (id, name, confidence) or None
