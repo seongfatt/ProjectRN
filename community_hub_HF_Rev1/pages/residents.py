@@ -531,48 +531,74 @@ def show_face_enrollment():
                                     import numpy as np
                                     from PIL import Image
                                     from datetime import datetime
-
-                                    # 1. Generate Face Encoding using DeepFace
                                     from deepface import DeepFace
-                                    import numpy as np
+                                    import tempfile
+                                    import os
 
-                                    # Preprocess the image
+                                    # 1. Load image and convert to numpy array
                                     image = Image.open(io.BytesIO(face_photo.getvalue()))
                                     image_np = np.array(image)
-
-                                    # Try to find the face and extract the embedding
+                                    
+                                    # 2. Use face_recognition to FIND the face (HOG model only - avoids TensorFlow crashes)
+                                    # This works perfectly on faces with glasses and poor lighting.
                                     try:
-                                        # model_name="Facenet" is standard, or use "VGG-Face" for older but highly accurate model
-                                        embedding_obj = DeepFace.represent(img_path=image_np, model_name="Facenet", enforce_detection=True)
-                                        
-                                        if not embedding_obj:
-                                            st.error("❌ No face detected in the uploaded photo. Please try a clearer photo.")
-                                            st.stop()
-                                            
-                                        # The result is a list, take the first one, and get the 'embedding' key
-                                        encoding_list = embedding_obj[0]['embedding']
-                                        encoding_str = str(encoding_list)
+                                        face_locations = face_recognition.face_locations(image_np, model='hog')
+                                    except Exception:
+                                        face_locations = []
 
-                                    except ValueError:
+                                    if len(face_locations) == 0:
                                         st.error("❌ No face detected. Please ensure the face is clearly visible and forward-facing.")
                                         st.stop()
-                                    except Exception as e:
-                                        st.error(f"❌ DeepFace encountered an error: {str(e)}")
-                                        st.stop()
+                                    
+                                    # Grab the first face found
+                                    top, right, bottom, left = face_locations[0]
+                                    
+                                    # 3. Crop the face out of the image
+                                    face_crop = image_np[top:bottom, left:right]
+                                    
+                                    # 4. Save the cropped face to a temp file for DeepFace
+                                    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
+                                        # Convert back to BGR for cv2 saving
+                                        import cv2
+                                        cv2.imwrite(tmp_file.name, cv2.cvtColor(face_crop, cv2.COLOR_RGB2BGR))
+                                        temp_path = tmp_file.name
+                                    
+                                    try:
+                                        # 5. Get 512-vector embedding from DeepFace (using JUST the crop)
+                                        # enforce_detection=False is critical here so DeepFace doesn't crash on the crop
+                                        embedding_obj = DeepFace.represent(
+                                            img_path=temp_path, 
+                                            model_name="Facenet", 
+                                            enforce_detection=False 
+                                        )
+                                        
+                                        if not embedding_obj:
+                                            st.error("❌ Could not generate face encoding from the crop.")
+                                            st.stop()
+                                            
+                                        encoding_list = embedding_obj[0]['embedding']
+                                        encoding_str = str(encoding_list)
+                                        
+                                    finally:
+                                        # Clean up the temporary file
+                                        try:
+                                            os.unlink(temp_path)
+                                        except:
+                                            pass
 
-                                    # 2. Upload to Supabase Storage
+                                    # 6. Upload to Supabase Storage
                                     file_ext = face_photo.name.split('.')[-1]
                                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                                     unique_storage_path = f"resident_faces/{p['id']}_{timestamp}.{file_ext}"
                                     
-                                    # Perform the upload. (If this line doesn't crash, it worked!)
+                                    # Actually perform the upload
                                     supabase.storage.from_('face_photos').upload(
                                         path=unique_storage_path,
                                         file=face_photo.getvalue(),
                                         file_options={"content-type": face_photo.type}
                                     )
                                     
-                                    # 3. Generate URL and update database (We skip checking the object!)
+                                    # 7. Generate URL and update database
                                     public_url = supabase.storage.from_('face_photos').get_public_url(unique_storage_path)
                                     
                                     supabase.table('participants').update({
@@ -585,7 +611,6 @@ def show_face_enrollment():
                                     st.success(f"✅ Face enrolled and photo saved successfully for {p['name']}!")
                                     
                                 except Exception as e:
-                                    # Only show this if the program actually crashes
                                     st.error(f"❌ Error during enrollment: {str(e)}")
                     st.divider()
         else:
