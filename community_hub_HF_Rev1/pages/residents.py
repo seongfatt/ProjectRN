@@ -532,41 +532,28 @@ def show_face_enrollment():
                                     from PIL import Image
                                     from datetime import datetime
                                     from deepface import DeepFace
-                                    import cv2  # <-- Ensure opencv is imported
 
-                                    # 1. Load image and convert to numpy array
+                                    # 1. Load image
                                     image = Image.open(io.BytesIO(face_photo.getvalue()))
                                     image_np = np.array(image)
                                     
-                                    # 2. Use face_recognition to FIND the face (HOG model only)
-                                    try:
-                                        face_locations = face_recognition.face_locations(image_np, model='hog')
-                                    except Exception:
-                                        face_locations = []
-
+                                    # 2. Use face_recognition to FIND the face
+                                    face_locations = face_recognition.face_locations(image_np, model='hog')
                                     if len(face_locations) == 0:
                                         st.error("❌ No face detected. Please ensure the face is clearly visible and forward-facing.")
                                         st.stop()
                                     
                                     # Grab the first face found
                                     top, right, bottom, left = face_locations[0]
-                                    
-                                    # 3. Crop the face out of the image
                                     face_crop = image_np[top:bottom, left:right]
                                     
-                                    # 4. Convert cropped image to RGB (DeepFace expects RGB for numpy arrays)
-                                    # If it's already RGB, this doesn't hurt, but it ensures safety.
-                                    if len(face_crop.shape) == 3 and face_crop.shape[2] == 3:
-                                        # Ensure it's RGB
-                                        pass
-                                    
-                                    # 5. Pass the raw numpy array to DeepFace
-                                    # By passing the crop array, DeepFace skips trying to open a file path
-                                    # enforce_detection=False is CRITICAL here so it doesn't try to re-detect
+                                    # 3. Pass the cropped face to DeepFace, skipping its internal detector entirely
+                                    # This bypasses the OpenCV XML error completely!
                                     embedding_obj = DeepFace.represent(
                                         img_path=face_crop, 
                                         model_name="Facenet", 
-                                        enforce_detection=False 
+                                        enforce_detection=False,
+                                        detector_backend="skip" # <-- THE MAGIC FIX
                                     )
                                     
                                     if not embedding_obj:
@@ -576,7 +563,7 @@ def show_face_enrollment():
                                     encoding_list = embedding_obj[0]['embedding']
                                     encoding_str = str(encoding_list)
 
-                                    # 6. Upload to Supabase Storage
+                                    # 4. Upload to Supabase Storage
                                     file_ext = face_photo.name.split('.')[-1]
                                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                                     unique_storage_path = f"resident_faces/{p['id']}_{timestamp}.{file_ext}"
@@ -587,7 +574,7 @@ def show_face_enrollment():
                                         file_options={"content-type": face_photo.type}
                                     )
                                     
-                                    # 7. Generate URL and update database
+                                    # 5. Generate URL and update database
                                     public_url = supabase.storage.from_('face_photos').get_public_url(unique_storage_path)
                                     
                                     supabase.table('participants').update({
