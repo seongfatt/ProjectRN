@@ -1,5 +1,5 @@
 # services/face_service.py
-"""Face recognition service using DeepFace (ROCK SOLID)"""
+"""Face recognition service using DeepFace (DEBUG MODE)"""
 
 import streamlit as st
 import numpy as np
@@ -8,8 +8,6 @@ from PIL import Image
 import io
 from datetime import datetime
 from config import supabase, DB_CONNECTED, now_sgt
-import tempfile
-import os
 
 # 🔥 Try to import DeepFace
 try:
@@ -30,9 +28,10 @@ except ImportError:
 
 
 class FaceRecognitionService:
+    """Handles face detection and recognition using DeepFace."""
+    
     def __init__(self):
-        self.known_faces = {}
-        self._model_loaded = False
+        self.known_faces = {}  
         self._load_known_faces()
     
     def is_available(self):
@@ -41,12 +40,15 @@ class FaceRecognitionService:
     def _load_known_faces(self):
         if not self.is_available() or not DB_CONNECTED:
             return
+        
         try:
             result = supabase.table('participants') \
                 .select('id, name, face_encoding') \
                 .eq('active', True) \
                 .eq('face_enrolled', True) \
                 .execute()
+            
+            print(f"🔍 DEBUG: Raw database query returned {len(result.data)} enrolled residents.")
             
             for p in result.data:
                 if p.get('face_encoding'):
@@ -57,36 +59,24 @@ class FaceRecognitionService:
                                 'name': p['name'],
                                 'encoding': np.array(encoding)
                             }
+                            print(f"✅ DEBUG: Loaded vector for {p['name']} (Length: {len(encoding)})")
+                        else:
+                            print(f"❌ DEBUG: {p['name']} has face_encoding, but it's not a list! Type: {type(encoding)}")
                     except Exception as e:
-                        print(f"Error loading face for {p.get('name')}: {e}")
+                        print(f"❌ DEBUG: Failed to parse face_encoding for {p.get('name')}: {e}")
+                else:
+                    print(f"⚠️ DEBUG: {p.get('name')} has face_enrolled=True, but face_encoding is EMPTY/NULL!")
             
-            print(f"✅ Loaded {len(self.known_faces)} enrolled faces")
+            print(f"✅ Loaded {len(self.known_faces)} enrolled faces into memory.")
         except Exception as e:
             print(f"Error loading faces: {e}")
     
-    def _ensure_model_loaded(self):
-        """Load the Facenet model if it hasn't been loaded yet."""
-        if not self._model_loaded:
-            print("⏳ Loading DeepFace Facenet model (first time only)...")
-            try:
-                # Use the official represent method on a dummy image to force load.
-                DeepFace.represent(img_path=np.zeros((160, 160, 3), dtype=np.uint8), 
-                                   model_name="Facenet", 
-                                   enforce_detection=False,
-                                   detector_backend="skip")
-                self._model_loaded = True
-                print("✅ DeepFace Facenet model loaded successfully!")
-            except Exception as e:
-                print(f"❌ Failed to load DeepFace model: {e}")
-
     def detect_faces(self, image_bytes):
         if not self.is_available():
             return [], [], None
         
-        # 🔥 FORCE THE MODEL TO LOAD NOW IF IT HASN'T
-        self._ensure_model_loaded()
-        
         try:
+            # 1. Decode image using OpenCV
             nparr = np.frombuffer(image_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             
@@ -96,44 +86,36 @@ class FaceRecognitionService:
 
             rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
+            # 2. Use face_recognition to FIND the face locations
             import face_recognition
             face_locations = face_recognition.face_locations(rgb_img, model='hog')
 
             if not face_locations:
                 return [], [], rgb_img
 
+            # 3. Extract 512-vector embeddings 
             face_encodings = []
             
             for (top, right, bottom, left) in face_locations:
                 try:
+                    # Crop the face out of the image
                     face_crop = rgb_img[top:bottom, left:right]
-                    face_crop_bgr = cv2.cvtColor(face_crop, cv2.COLOR_RGB2BGR)
                     
-                    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
-                        cv2.imwrite(tmp_file.name, face_crop_bgr)
-                        temp_path = tmp_file.name
+                    embedding_obj = DeepFace.represent(
+                        img_path=face_crop, 
+                        model_name="Facenet", 
+                        enforce_detection=False,
+                        detector_backend="skip" 
+                    )
                     
-                    try:
-                        embedding_obj = DeepFace.represent(
-                            img_path=temp_path, 
-                            model_name="Facenet", 
-                            enforce_detection=False,
-                            detector_backend="skip"
-                        )
-                        
-                        if embedding_obj:
-                            vec = embedding_obj[0]['embedding']
-                            face_encodings.append(np.array(vec))
-                        else:
-                            face_encodings.append(np.zeros(512))
-                    finally:
-                        try:
-                            os.unlink(temp_path)
-                        except:
-                            pass
+                    if embedding_obj:
+                        vec = embedding_obj[0]['embedding']
+                        face_encodings.append(np.array(vec))
+                    else:
+                        face_encodings.append(np.zeros(512))
                             
                 except Exception as e:
-                    print(f"DeepFace extraction error: {e}")
+                    print(f"DeepFace extraction error on crop: {e}")
                     face_encodings.append(np.zeros(512))
 
             return face_locations, face_encodings, rgb_img
@@ -142,11 +124,11 @@ class FaceRecognitionService:
             print(f"Error in detect_faces: {e}")
             return [], [], None
     
-    def identify_faces(self, face_encodings, tolerance=0.65):
+    def identify_faces(self, face_encodings, tolerance=0.99):
         matches = []
         
-        if not self.is_available() or len(self.known_faces) == 0:
-            print(f"⚠️ WARNING: Known faces empty. Count: {len(self.known_faces)}")
+        if len(self.known_faces) == 0:
+            print("🚨 CRITICAL ERROR: known_faces is EMPTY. Check the DB logs above.")
             return [None] * len(face_encodings)
         
         for encoding in face_encodings:
@@ -156,6 +138,7 @@ class FaceRecognitionService:
             for pid, data in self.known_faces.items():
                 try:
                     distance = np.linalg.norm(data['encoding'] - encoding)
+                    
                     if distance < tolerance and distance < best_distance:
                         best_distance = distance
                         confidence = max(0.0, 1.0 - (distance / 1.4))
@@ -165,7 +148,7 @@ class FaceRecognitionService:
                             'name': data['name'],
                             'confidence': confidence
                         }
-                except Exception:
+                except Exception as e:
                     continue
             
             matches.append(best_match)
@@ -175,6 +158,8 @@ class FaceRecognitionService:
     def get_enrolled_count(self):
         return len(self.known_faces)
 
+
+# Singleton instance
 _face_service = None
 
 def get_face_service():
