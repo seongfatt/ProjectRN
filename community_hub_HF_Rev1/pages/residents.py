@@ -532,15 +532,13 @@ def show_face_enrollment():
                                     from PIL import Image
                                     from datetime import datetime
                                     from deepface import DeepFace
-                                    import tempfile
-                                    import os
+                                    import cv2  # <-- Ensure opencv is imported
 
                                     # 1. Load image and convert to numpy array
                                     image = Image.open(io.BytesIO(face_photo.getvalue()))
                                     image_np = np.array(image)
                                     
-                                    # 2. Use face_recognition to FIND the face (HOG model only - avoids TensorFlow crashes)
-                                    # This works perfectly on faces with glasses and poor lighting.
+                                    # 2. Use face_recognition to FIND the face (HOG model only)
                                     try:
                                         face_locations = face_recognition.face_locations(image_np, model='hog')
                                     except Exception:
@@ -556,42 +554,33 @@ def show_face_enrollment():
                                     # 3. Crop the face out of the image
                                     face_crop = image_np[top:bottom, left:right]
                                     
-                                    # 4. Save the cropped face to a temp file for DeepFace
-                                    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_file:
-                                        # Convert back to BGR for cv2 saving
-                                        import cv2
-                                        cv2.imwrite(tmp_file.name, cv2.cvtColor(face_crop, cv2.COLOR_RGB2BGR))
-                                        temp_path = tmp_file.name
+                                    # 4. Convert cropped image to RGB (DeepFace expects RGB for numpy arrays)
+                                    # If it's already RGB, this doesn't hurt, but it ensures safety.
+                                    if len(face_crop.shape) == 3 and face_crop.shape[2] == 3:
+                                        # Ensure it's RGB
+                                        pass
                                     
-                                    try:
-                                        # 5. Get 512-vector embedding from DeepFace (using JUST the crop)
-                                        # enforce_detection=False is critical here so DeepFace doesn't crash on the crop
-                                        embedding_obj = DeepFace.represent(
-                                            img_path=temp_path, 
-                                            model_name="Facenet", 
-                                            enforce_detection=False 
-                                        )
+                                    # 5. Pass the raw numpy array to DeepFace
+                                    # By passing the crop array, DeepFace skips trying to open a file path
+                                    # enforce_detection=False is CRITICAL here so it doesn't try to re-detect
+                                    embedding_obj = DeepFace.represent(
+                                        img_path=face_crop, 
+                                        model_name="Facenet", 
+                                        enforce_detection=False 
+                                    )
+                                    
+                                    if not embedding_obj:
+                                        st.error("❌ Could not generate face encoding from the crop.")
+                                        st.stop()
                                         
-                                        if not embedding_obj:
-                                            st.error("❌ Could not generate face encoding from the crop.")
-                                            st.stop()
-                                            
-                                        encoding_list = embedding_obj[0]['embedding']
-                                        encoding_str = str(encoding_list)
-                                        
-                                    finally:
-                                        # Clean up the temporary file
-                                        try:
-                                            os.unlink(temp_path)
-                                        except:
-                                            pass
+                                    encoding_list = embedding_obj[0]['embedding']
+                                    encoding_str = str(encoding_list)
 
                                     # 6. Upload to Supabase Storage
                                     file_ext = face_photo.name.split('.')[-1]
                                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                                     unique_storage_path = f"resident_faces/{p['id']}_{timestamp}.{file_ext}"
                                     
-                                    # Actually perform the upload
                                     supabase.storage.from_('face_photos').upload(
                                         path=unique_storage_path,
                                         file=face_photo.getvalue(),
