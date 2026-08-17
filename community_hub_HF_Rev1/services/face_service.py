@@ -1,5 +1,5 @@
 # services/face_service.py
-"""Face recognition service using DeepFace (DEBUG MODE)"""
+"""Face recognition service using DeepFace (MTCNN Detector)"""
 
 import streamlit as st
 import numpy as np
@@ -48,8 +48,6 @@ class FaceRecognitionService:
                 .eq('face_enrolled', True) \
                 .execute()
             
-            print(f"🔍 DEBUG: Raw database query returned {len(result.data)} enrolled residents.")
-            
             for p in result.data:
                 if p.get('face_encoding'):
                     try:
@@ -59,24 +57,23 @@ class FaceRecognitionService:
                                 'name': p['name'],
                                 'encoding': np.array(encoding)
                             }
-                            print(f"✅ DEBUG: Loaded vector for {p['name']} (Length: {len(encoding)})")
-                        else:
-                            print(f"❌ DEBUG: {p['name']} has face_encoding, but it's not a list! Type: {type(encoding)}")
                     except Exception as e:
-                        print(f"❌ DEBUG: Failed to parse face_encoding for {p.get('name')}: {e}")
-                else:
-                    print(f"⚠️ DEBUG: {p.get('name')} has face_enrolled=True, but face_encoding is EMPTY/NULL!")
+                        print(f"Error loading face for {p.get('name')}: {e}")
             
-            print(f"✅ Loaded {len(self.known_faces)} enrolled faces into memory.")
+            print(f"✅ Loaded {len(self.known_faces)} enrolled faces (DeepFace 512-dim)")
         except Exception as e:
             print(f"Error loading faces: {e}")
     
     def detect_faces(self, image_bytes):
+        """
+        Detect faces using DeepFace's MTCNN detector (handles glasses).
+        Returns: face_locations, face_encodings, rgb_image
+        """
         if not self.is_available():
             return [], [], None
         
         try:
-            # 1. Decode image using OpenCV
+            # 1. Decode image for DeepFace
             nparr = np.frombuffer(image_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             
@@ -86,14 +83,36 @@ class FaceRecognitionService:
 
             rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-            # 2. Use face_recognition to FIND the face locations
-            import face_recognition
-            face_locations = face_recognition.face_locations(rgb_img, model='hog')
-
-            if not face_locations:
+            # 2. DETECT FACES USING DEEPFACE'S MTCNN (Highly reliable for glasses)
+            # We run a small represent call with MTCNN just to find bounding boxes, 
+            # but we don't keep the vectors yet.
+            try:
+                # We use MTCNN to locate faces, but don't force DeepFace to compute vectors here.
+                # We just want the coordinates.
+                detection_objs = DeepFace.represent(
+                    img_path=rgb_img, 
+                    model_name="Facenet", 
+                    enforce_detection=True, 
+                    detector_backend="mtcnn"
+                )
+            except ValueError:
+                # No faces detected
+                return [], [], rgb_img
+            
+            if not detection_objs:
                 return [], [], rgb_img
 
-            # 3. Extract 512-vector embeddings 
+            # Convert MTCNN coordinates to (top, right, bottom, left)
+            face_locations = []
+            for obj in detection_objs:
+                if 'facial_area' in obj:
+                    area = obj['facial_area']
+                    face_locations.append((area['y'], area['x'] + area['w'], area['y'] + area['h'], area['x']))
+                else:
+                    # Fallback if coordinates are missing
+                    face_locations.append((0, 0, 100, 100))
+
+            # 3. EXTRACT 512-VECTOR EMBEDDINGS (Using "skip" to avoid re-detection)
             face_encodings = []
             
             for (top, right, bottom, left) in face_locations:
@@ -101,6 +120,7 @@ class FaceRecognitionService:
                     # Crop the face out of the image
                     face_crop = rgb_img[top:bottom, left:right]
                     
+                    # Use "skip" backend because the face is already cropped/detected
                     embedding_obj = DeepFace.represent(
                         img_path=face_crop, 
                         model_name="Facenet", 
@@ -125,10 +145,12 @@ class FaceRecognitionService:
             return [], [], None
     
     def identify_faces(self, face_encodings, tolerance=0.99):
+        """
+        Match detected faces against known faces using Euclidean distance.
+        """
         matches = []
         
         if len(self.known_faces) == 0:
-            print("🚨 CRITICAL ERROR: known_faces is EMPTY. Check the DB logs above.")
             return [None] * len(face_encodings)
         
         for encoding in face_encodings:
