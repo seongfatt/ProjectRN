@@ -532,33 +532,17 @@ def show_face_enrollment():
                                     from PIL import Image
                                     from datetime import datetime
 
-                                    # 1. Generate Face Encoding using DeepFace
-                                    from deepface import DeepFace
-                                    import numpy as np
-
-                                    # Preprocess the image
+                                    # 1. Generate Face Encoding
                                     image = Image.open(io.BytesIO(face_photo.getvalue()))
                                     image_np = np.array(image)
-
-                                    # Try to find the face and extract the embedding
-                                    try:
-                                        # model_name="Facenet" is standard, or use "VGG-Face" for older but highly accurate model
-                                        embedding_obj = DeepFace.represent(img_path=image_np, model_name="Facenet", enforce_detection=True)
-                                        
-                                        if not embedding_obj:
-                                            st.error("❌ No face detected in the uploaded photo. Please try a clearer photo.")
-                                            st.stop()
-                                            
-                                        # The result is a list, take the first one, and get the 'embedding' key
-                                        encoding_list = embedding_obj[0]['embedding']
-                                        encoding_str = str(encoding_list)
-
-                                    except ValueError:
-                                        st.error("❌ No face detected. Please ensure the face is clearly visible and forward-facing.")
+                                    face_encodings = face_recognition.face_encodings(image_np)
+                                    
+                                    if len(face_encodings) == 0:
+                                        st.error("❌ No face detected. Please try a clearer photo.")
                                         st.stop()
-                                    except Exception as e:
-                                        st.error(f"❌ DeepFace encountered an error: {str(e)}")
-                                        st.stop()
+                                    
+                                    encoding_list = face_encodings[0].tolist()
+                                    encoding_str = str(encoding_list)
 
                                     # 2. Upload to Supabase Storage
                                     file_ext = face_photo.name.split('.')[-1]
