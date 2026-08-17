@@ -92,11 +92,11 @@ class FaceRecognitionService:
             # We use OpenCV backend for speed, Facenet for 512-dim vectors
             try:
                 objs = DeepFace.represent(
-                    img_path=rgb_img, 
-                    model_name="Facenet", 
-                    enforce_detection=True,
-                    detector_backend="opencv" 
-                )
+                img_path=rgb_img, 
+                model_name="Facenet", 
+                enforce_detection=True,
+                detector_backend="mtcnn"  # <-- CHANGE THIS
+            )
                 
                 if not objs:
                     return [], [], rgb_img
