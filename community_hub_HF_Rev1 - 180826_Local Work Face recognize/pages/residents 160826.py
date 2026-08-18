@@ -527,57 +527,36 @@ def show_face_enrollment():
                             if st.button("✅ Enroll Face", key=f"enroll_btn_{p['id']}", type="primary"):
                                 try:
                                     import io
-                                    import json
                                     import face_recognition
                                     import numpy as np
                                     from PIL import Image
                                     from datetime import datetime
 
-                                    # ✅ FIX: Use face_recognition (dlib) for BOTH detection AND encoding.
-                                    # The recognition side (services/face_service.py) compares with
-                                    # face_recognition.face_distance() — encodings MUST come from the
-                                    # same library. DeepFace/Facenet embeddings are a different vector
-                                    # space and will always score as "Unknown" at check-in.
-                                    # (DeepFace is no longer used anywhere -> no OpenCV XML issue either.)
-
-                                    # 1. Load image and normalise to 3-channel RGB
-                                    #    (PNG uploads can be RGBA, grayscale can be 1-channel —
-                                    #     both break face_recognition)
-                                    image = Image.open(io.BytesIO(face_photo.getvalue())).convert("RGB")
+                                    # 1. Generate Face Encoding
+                                    image = Image.open(io.BytesIO(face_photo.getvalue()))
                                     image_np = np.array(image)
-
-                                    # 2. Detect the face
-                                    face_locations = face_recognition.face_locations(image_np, model='hog')
-                                    if len(face_locations) == 0:
-                                        # Retry once with upsampling — helps with smaller/lower-res faces
-                                        face_locations = face_recognition.face_locations(image_np, number_of_times_to_upsample=2, model='hog')
-                                    if len(face_locations) == 0:
-                                        st.error("❌ No face detected. Please ensure the face is clearly visible and forward-facing.")
+                                    face_encodings = face_recognition.face_encodings(image_np)
+                                    
+                                    if len(face_encodings) == 0:
+                                        st.error("❌ No face detected. Please try a clearer photo.")
                                         st.stop()
-                                    if len(face_locations) > 1:
-                                        st.error("❌ Multiple faces detected. Please upload a photo with only this resident.")
-                                        st.stop()
+                                    
+                                    encoding_list = face_encodings[0].tolist()
+                                    encoding_str = str(encoding_list)
 
-                                    # 3. Generate the 128-d dlib encoding (SAME model used at check-in)
-                                    encodings = face_recognition.face_encodings(image_np, face_locations)
-                                    if not encodings:
-                                        st.error("❌ Could not generate a face encoding. Try a clearer, better-lit photo.")
-                                        st.stop()
-
-                                    encoding_str = json.dumps(encodings[0].tolist())
-
-                                    # 4. Upload to Supabase Storage
+                                    # 2. Upload to Supabase Storage
                                     file_ext = face_photo.name.split('.')[-1]
                                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                                     unique_storage_path = f"resident_faces/{p['id']}_{timestamp}.{file_ext}"
                                     
+                                    # Perform the upload. (If this line doesn't crash, it worked!)
                                     supabase.storage.from_('face_photos').upload(
                                         path=unique_storage_path,
                                         file=face_photo.getvalue(),
                                         file_options={"content-type": face_photo.type}
                                     )
                                     
-                                    # 5. Generate URL and update database
+                                    # 3. Generate URL and update database (We skip checking the object!)
                                     public_url = supabase.storage.from_('face_photos').get_public_url(unique_storage_path)
                                     
                                     supabase.table('participants').update({
@@ -587,18 +566,10 @@ def show_face_enrollment():
                                         'face_updated_at': datetime.now().isoformat()
                                     }).eq('id', p['id']).execute()
                                     
-                                    # ✅ FIX: Refresh the in-memory face cache immediately,
-                                    # otherwise check-in won't see this face until app restart
-                                    try:
-                                        from services.face_service import get_face_service
-                                        get_face_service().reload()
-                                    except Exception:
-                                        pass  # cache will rebuild on next app start
-
                                     st.success(f"✅ Face enrolled and photo saved successfully for {p['name']}!")
-                                    st.info("💡 The new face is active immediately — no restart needed.")
                                     
                                 except Exception as e:
+                                    # Only show this if the program actually crashes
                                     st.error(f"❌ Error during enrollment: {str(e)}")
                     st.divider()
         else:
