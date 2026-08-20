@@ -90,8 +90,10 @@ def show_meeting(selected_date):
     type_rows = []
     for tk, ti in PLOT_TYPES.items():
         to = len([p for p in plots if p.get('plot_type') == tk and p.get('occupied')])
+        # 🔥 Update label to include box count
+        label = f"Type {tk} ({ti['area']} m², {ti['boxes']} boxes)"
         type_rows.append({
-            "Plot Type": f"Type {tk} ({ti['area']} m²)",
+            "Plot Type": label,
             "Occupied": to,
             "Available": ti["total"] - to,
             "Rate": round(to / ti["total"] * 100, 1) if ti["total"] else 0

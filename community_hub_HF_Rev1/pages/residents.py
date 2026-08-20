@@ -206,7 +206,8 @@ def show_residents():
     layout_type_totals = {}
     for i in ent_layout:
         layout_type_totals[i.get('plot_type', 'B')] = layout_type_totals.get(i.get('plot_type', 'B'), 0) + 1
-    tc = st.columns(4)
+        # 🔥 Update column count to 3 since Type D is removed
+    tc = st.columns(3) 
     for i, (tk, ti) in enumerate(PLOT_TYPES.items()):
         with tc[i]:
             to = len([p for p in block_plots if p.get('plot_type', _ptype_for(p['plot_number'], p)) == tk and p.get('occupied')])
@@ -216,7 +217,7 @@ def show_residents():
                 f'<div style="background:{ti["colour"]};color:white;padding:10px;border-radius:8px;text-align:center;">'
                 f'<div style="font-size:14px;font-weight:bold;">Type {tk}</div>'
                 f'<div style="font-size:20px;margin:3px 0;">{to}/{block_total}</div>'
-                f'<div>{ti["area"]} m\u00B2</div>'
+                f'<div>{ti["area"]} m\u00B2 ({ti["boxes"]} boxes)</div>'  # <-- Added boxes here
                 f'<div>({pc:.1f}%)</div></div>',
                 unsafe_allow_html=True,
             )

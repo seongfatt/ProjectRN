@@ -652,13 +652,12 @@ def show_garden():
     # ── 5. STATISTICS ──────────────────────────────────────────
     st.markdown("---")
     st.markdown("## Statistics")
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3 = st.columns(3)
     c1.metric("Total Plots", total_plots_in_block if 'total_plots_in_block' in locals() else 0)
     c2.metric("💲 Paid", paid_count if 'paid_count' in locals() else 0)
     c3.metric("🤝 Unpaid (Pending)", unpaid_count if 'unpaid_count' in locals() else 0)
-    c4.metric("🌱 Community Stewarded", community_count if 'community_count' in locals() else 0)
     st.markdown(f"### By Type ({selected_block})")
-    tc = st.columns(4)
+    tc = st.columns(3)  # 🔥 Changed from 4 to 3 (Removed Type D)
     for i, (tk, ti) in enumerate(PLOT_TYPES.items()):
         with tc[i]:
             to = len([p for p in block_plots if p.get('plot_type') == tk and p.get('occupied')])
@@ -668,6 +667,6 @@ def show_garden():
                 f'<div style="background:{ti["colour"]};color:white;padding:10px;border-radius:8px;text-align:center;">'
                 f'<div style="font-size:14px;font-weight:bold;">Type {tk}</div>'
                 f'<div style="font-size:20px;margin:3px 0;">{to}/{block_total}</div>'
-                f'<div>{ti["area"]} m²</div>'
+                f'<div>{ti["area"]} m² ({ti["boxes"]} boxes)</div>'  # 🔥 Added boxes
                 f'<div>({pc:.1f}%)</div></div>',
                 unsafe_allow_html=True)
