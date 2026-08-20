@@ -266,7 +266,10 @@ def show_residents():
     for pn in ent_plot_nums:
         plot = plots_dict.get(pn)
         ptype = _ptype_for(pn, plot)
-        area = PLOT_TYPES.get(ptype, PLOT_TYPES['B'])['area']
+        if ptype == 'C':
+            area = 2.0  # Force Type C to export as 2.0
+        else:
+            area = PLOT_TYPES.get(ptype, PLOT_TYPES['B'])['area']
         if plot and plot.get('occupied'):
             resident = next(
                 (p for p in participants
