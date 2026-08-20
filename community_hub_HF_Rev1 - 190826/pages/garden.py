@@ -343,9 +343,8 @@ def show_garden():
                 c1, c2 = st.columns(2)
                 with c1:
                     st.markdown("**📐 Manage Plot Size**")
-                    # 🔥 Updated: Removed "D"
-                    new_plot_type = st.selectbox("Select New Size", ["A", "B", "C"],
-                        index=["A", "B", "C"].index(current_plot_type) if current_plot_type in ["A", "B", "C"] else 1,
+                    new_plot_type = st.selectbox("Select New Size", ["A", "B", "C", "D"],
+                        index=["A", "B", "C", "D"].index(current_plot_type) if current_plot_type in ["A", "B", "C", "D"] else 1,
                         key=f"size_change_{plot_edit_num}")
                     if st.button(f"💾 Update Plot Size", key=f"save_size_{plot_edit_num}", use_container_width=True):
                         if new_plot_type != current_plot_type:
@@ -434,8 +433,7 @@ def show_garden():
                 r['name'] = c[0].text_input("Section Name", r['name'], key=f"sb_name_{selected_block}_{i}", label_visibility="collapsed")
                 r['rows'] = int(c[1].number_input("Rows", 1, 20, r['rows'], 1, key=f"sb_r_{selected_block}_{i}", label_visibility="collapsed"))
                 r['cols'] = int(c[2].number_input("Cols", 1, 20, r['cols'], 1, key=f"sb_c_{selected_block}_{i}", label_visibility="collapsed"))
-                # 🔥 Updated: Removed "D" from the Type selector
-                r['ptype'] = c[3].selectbox("Type", ["A", "B", "C"], index=["A", "B", "C"].index(r['ptype']), key=f"sb_t_{selected_block}_{i}", label_visibility="collapsed")
+                r['ptype'] = c[3].selectbox("Type", ["A", "B", "C", "D"], index=["A", "B", "C", "D"].index(r['ptype']), key=f"sb_t_{selected_block}_{i}", label_visibility="collapsed")
                 c[4].markdown(f"**{r['rows'] * r['cols']}** 🌱")
                 if c[5].button("🗑️", key=f"sb_del_{selected_block}_{i}", help="Remove this section"):
                     sb_rows.pop(i)
@@ -561,11 +559,10 @@ def show_garden():
                 default_type = existing_layout_item['plot_type'] if existing_layout_item else 'B'
                 st.markdown("**📏 Plot Size (For NEW plots only)**")
                 st.caption("ℹ️ **Smart Swap:** Moving an existing plot automatically keeps its original size. This selector only applies when adding a brand-new plot. To change an existing plot's size, use the **📋 Manage Existing** tab.")
-                # 🔥 Updated: Removed "D"
                 selected_size = st.radio(
                     "Select Size",
-                    ["A", "B", "C"],
-                    index=["A", "B", "C"].index(default_type) if default_type in ["A", "B", "C"] else 1,
+                    ["A", "B", "C", "D"],
+                    index=["A", "B", "C", "D"].index(default_type) if default_type in ["A", "B", "C", "D"] else 1,
                     horizontal=True,
                     key="global_size_selector"
                 )
