@@ -1012,6 +1012,8 @@ if st.session_state.is_authenticated:
             {"id": "dashboard", "icon": "📊", "title": "Dashboard"},
             {"id": "checkin", "icon": "🎟️", "title": "Check-In"},
             {"id": "floorplan", "icon": "🗺️", "title": "Floor Plan"},
+            {"id": "floorplan_designer", "icon": "🎨", "title": "Map Designer"},
+
         ]
         # Only add Face Check-In if available
         if FACE_AVAILABLE and show_face_checkin is not None:
@@ -1098,6 +1100,9 @@ if st.session_state.is_authenticated:
     elif page == "floorplan":
         from pages.floorplan_view import show_floorplan
         show_floorplan()
+    elif page == "floorplan_designer":
+        from pages.floorplan_designer import show_floorplan_designer
+        show_floorplan_designer()
     else:
         # If face_checkin is not available, redirect to dashboard
         st.session_state.active_page = "dashboard"
