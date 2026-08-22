@@ -16,9 +16,9 @@ def show_floorplan_designer():
     with c1:
         sec_name = st.text_input("Section Name", value="Section 1")
     with c2:
-        rows = int(st.number_input("Rows", min_value=1, max_value=50, value=22))
+        rows = int(st.number_input("Rows", min_value=1, max_value=250, value=17))
     with c3:
-        cols = int(st.number_input("Cols", min_value=1, max_value=50, value=17))
+        cols = int(st.number_input("Cols", min_value=1, max_value=250, value=22))
     with c4:
         if st.button("🔄 Reset Canvas", width='stretch'):
             st.session_state.grid_df = pd.DataFrame(0, index=range(rows), columns=[f"Col {i}" for i in range(cols)])
