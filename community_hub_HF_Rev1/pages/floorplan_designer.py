@@ -180,12 +180,12 @@ def show_floorplan_designer():
     st.divider()
     st.subheader(f"🗺️ Step 3: Visual Map Preview ({sec_name})")
 
-    # 🔥 NEW: Build the HTML with Axis Labels
+    # 🔥 FIXED: Build the HTML with Axis Labels (No extra margin!)
     html = '<div style="overflow-x: auto; border: 2px solid #333; padding: 5px; border-radius: 8px; background: #1e1e1e; display: inline-block;">'
 
     # Header Row (Column Numbers)
-    html += '<div style="display: flex; margin-left: 30px;">'
-    html += '<div style="width: 30px;"></div>'  # Empty space for Row numbers
+    html += '<div style="display: flex;">'  # 🔥 Removed margin-left: 30px
+    html += '<div style="width: 30px;"></div>'  # Spacer for row label
     for c in range(cols):
         html += f'<div style="width: 25px; font-size: 10px; color: #aaa; text-align: center;">{c}</div>'
     html += '</div>'
