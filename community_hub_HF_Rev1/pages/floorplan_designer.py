@@ -1,173 +1,209 @@
 import streamlit as st
+import pandas as pd
 from config import supabase, DB_CONNECTED
 from utils import find_participant_by_phone, clean_phone_number
 
 def show_floorplan_designer():
-    st.header("🎨 Box-Map Designer")
-    st.caption("Draw plots on a 50x50cm grid, assign residents, and save to Supabase.")
+    st.header("🎨 Box-Map Designer (Block Painter)")
+    st.caption("Use the **Quick Paint** to paint 1 box or a whole block instantly!")
 
     if not DB_CONNECTED:
         st.error("Database not connected")
         return
 
-    # --- Initialize Session State ---
-    if 'canvas' not in st.session_state:
-        st.session_state.canvas = {}
-    if 'canvas_loaded' not in st.session_state:
-        st.session_state.canvas_loaded = False
-    if 'canvas_meta' not in st.session_state:
-        st.session_state.canvas_meta = {"name": "Section 1", "rows": 22, "cols": 17}
-    if 'next_plot_id' not in st.session_state:
-        st.session_state.next_plot_id = 1
-
-    # --- Load Saved Data from Supabase (Only once) ---
-    if not st.session_state.canvas_loaded:
-        try:
-            data = supabase.table('box_map_plots').select('*').execute().data
-            for row in data:
-                if row['section_name'] == st.session_state.canvas_meta["name"]:
-                    pid = row['plot_id']
-                    for r in range(row['start_row'], row['start_row'] + row['height']):
-                        for c in range(row['start_col'], row['start_col'] + row['width']):
-                            st.session_state.canvas[f"{r}_{c}"] = pid
-                    if pid >= st.session_state.next_plot_id:
-                        st.session_state.next_plot_id = pid + 1
-            st.session_state.canvas_loaded = True
-        except Exception as e:
-            st.warning(f"Could not load saved plots: {e}")
-            st.session_state.canvas_loaded = True
-
-    # --- Sidebar: Controls ---
-    with st.sidebar:
-        st.subheader("🛠️ Canvas Settings")
-        sec_name = st.text_input("Section Name", value=st.session_state.canvas_meta["name"])
-        rows = int(st.number_input("Rows (Height Units)", min_value=1, max_value=50, value=st.session_state.canvas_meta["rows"]))
-        cols = int(st.number_input("Cols (Width Units)", min_value=1, max_value=50, value=st.session_state.canvas_meta["cols"]))
-
-        # 🔥 FIX: Only reset if user clicks this button, NOT automatically!
-        if st.button("🗑️ Start New Section (Clear Canvas)", use_container_width=True):
-            st.session_state.canvas_meta = {"name": sec_name, "rows": rows, "cols": cols}
-            st.session_state.canvas = {}
-            st.session_state.next_plot_id = 1
-            st.session_state.canvas_loaded = False
+    # --- Controls ---
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        sec_name = st.text_input("Section Name", value="Section 1")
+    with c2:
+        rows = int(st.number_input("Rows", min_value=1, max_value=50, value=22))
+    with c3:
+        cols = int(st.number_input("Cols", min_value=1, max_value=50, value=17))
+    with c4:
+        if st.button("🔄 Reset Canvas", width='stretch'):
+            st.session_state.grid_df = pd.DataFrame(0, index=range(rows), columns=[f"Col {i}" for i in range(cols)])
             st.rerun()
 
-        st.divider()
-        st.subheader("🖌️ Painting Tools")
-        brush_size = st.selectbox("Select Brush", ["12 boxes (3x4)", "10 boxes (2x5)", "8 boxes (2x4)", "Custom", "Eraser"], index=0)
-        
-        brush_w, brush_h = 0, 0
-        if brush_size == "12 boxes (3x4)": brush_w, brush_h = 4, 3
-        elif brush_size == "10 boxes (2x5)": brush_w, brush_h = 5, 2
-        elif brush_size == "8 boxes (2x4)": brush_w, brush_h = 4, 2
-        elif brush_size == "Custom":
-            brush_w = int(st.number_input("Custom Width", min_value=1, max_value=20, value=4))
-            brush_h = int(st.number_input("Custom Height", min_value=1, max_value=20, value=3))
-        else:
-            brush_w, brush_h = 1, 1
+    # Initialize DataFrame
+    if 'grid_df' not in st.session_state or st.session_state.grid_df.shape != (rows, cols):
+        st.session_state.grid_df = pd.DataFrame(0, index=range(rows), columns=[f"Col {i}" for i in range(cols)])
 
-        start_r = int(st.number_input("Start Row", min_value=0, max_value=rows-1, value=0))
-        start_c = int(st.number_input("Start Col", min_value=0, max_value=cols-1, value=0))
-        
-        # 🔥 FIX: Removed st.rerun() inside the button to prevent state wipe!
-        if st.button("🖌️ Paint Plot", type="primary", use_container_width=True):
-            painted = False
-            for r in range(brush_h):
-                for c in range(brush_w):
-                    rr, cc = start_r + r, start_c + c
-                    if 0 <= rr < rows and 0 <= cc < cols:
-                        if brush_size == "Eraser":
-                            st.session_state.canvas[f"{rr}_{cc}"] = None
-                        else:
-                            st.session_state.canvas[f"{rr}_{cc}"] = st.session_state.next_plot_id
-                        painted = True
-            
-            if painted:
-                if brush_size != "Eraser":
-                    # Show which plot ID was just painted
-                    st.success(f"✅ Plot {st.session_state.next_plot_id} painted successfully!")
-                    st.session_state.next_plot_id += 1
-                else:
-                    st.success("✅ Eraser used successfully!")
-            else:
-                st.warning("⚠️ Coordinates are out of bounds. Please check your Start Row/Col.")
+    # Load Existing Data from DB
+    if 'loaded_sec' not in st.session_state or st.session_state.get('loaded_sec') != sec_name:
+        try:
+            st.session_state.grid_df = pd.DataFrame(0, index=range(rows), columns=[f"Col {i}" for i in range(cols)])
+            data = supabase.table('box_map_plots').select('*').eq('section_name', sec_name).execute().data
+            for row in data:
+                for r in range(row['start_row'], row['start_row'] + row['height']):
+                    for c in range(row['start_col'], row['start_col'] + row['width']):
+                        if r < rows and c < cols:
+                            st.session_state.grid_df.iloc[r, c] = row['plot_id']
+            st.session_state.loaded_sec = sec_name
+        except:
+            pass
 
-        st.divider()
-        
-        # ... (Rest of the assignment and saving logic remains exactly as before) ...
-        st.subheader("📋 Plot Assignment & Saving")
-        current_ids = sorted(list(set(v for v in st.session_state.canvas.values() if v)))
-        
-        if not current_ids:
-            st.caption("Paint a plot first to assign it.")
-        else:
-            selected_id = st.selectbox("Select Plot ID", current_ids, key="assign_plot_id")
-            coords = [(int(k.split('_')[0]), int(k.split('_')[1])) for k, v in st.session_state.canvas.items() if v == selected_id]
-            
-            if coords:
-                min_r = min(c[0] for c in coords)
-                min_c = min(c[1] for c in coords)
-                max_r = max(c[0] for c in coords)
-                max_c = max(c[1] for c in coords)
-                width = max_c - min_c + 1
-                height = max_r - min_r + 1
-                box_count = len(coords)
-                
-                st.caption(f"**Plot {selected_id}:** {width} x {height} units ({box_count} boxes)")
-                
-                phone_input = st.text_input("Owner Phone Number", placeholder="e.g., 91234567", key=f"owner_phone_{selected_id}")
-                owner_name = ""
-                if phone_input and len(clean_phone_number(phone_input)) >= 8:
-                    res = find_participant_by_phone(clean_phone_number(phone_input))
-                    if res:
-                        owner_name = res['name']
-                        st.success(f"Found: **{owner_name}**")
-                
-                owner_name = st.text_input("Or Type Owner Name", value=owner_name, key=f"owner_name_{selected_id}")
-                status = st.radio("Status", ["Paid", "Unpaid", "Empty"], horizontal=True, key=f"status_{selected_id}")
-                
-                if st.button("💾 Save Plot to Database", use_container_width=True, key=f"save_plot_{selected_id}"):
-                    try:
-                        supabase.table('box_map_plots').delete().eq('section_name', sec_name).eq('plot_id', selected_id).execute()
-                        supabase.table('box_map_plots').insert({
-                            "section_name": sec_name,
-                            "plot_id": selected_id,
-                            "start_row": min_r,
-                            "start_col": min_c,
-                            "width": width,
-                            "height": height,
-                            "box_count": box_count,
-                            "owner_id": "PENDING" if not phone_input else clean_phone_number(phone_input),
-                            "owner_name": owner_name,
-                            "status": status
-                        }).execute()
-                        st.success(f"✅ Plot {selected_id} saved successfully!")
-                        st.session_state.canvas_loaded = False
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error saving: {e}")
+    st.divider()
 
-    # --- Render Grid ---
-    st.markdown(f"### {sec_name} ({rows} rows x {cols} cols)")
-    st.caption("Dotted lines = empty boxes. Colored blocks = Plots. Use sidebar to assign residents.")
-
-    html = '<div style="overflow-x: auto; border: 2px solid #333; padding: 5px; border-radius: 8px; background: #1e1e1e; display: inline-block;">'
+    # --- 🔥 QUICK PAINT (1-Click or Block) ---
+    st.subheader("⚡ Quick Paint (1-Click or Block)")
     
+    qp1, qp2, qp3, qp4, qp5, qp6 = st.columns(6)
+    with qp1:
+        # 🔥 NEW: Start Row
+        start_row = st.number_input("Start Row", min_value=0, max_value=rows-1, value=0)
+    with qp2:
+        # 🔥 NEW: Start Col
+        start_col = st.number_input("Start Col", min_value=0, max_value=cols-1, value=0)
+    with qp3:
+        # 🔥 NEW: End Row
+        end_row = st.number_input("End Row", min_value=0, max_value=rows-1, value=0)
+    with qp4:
+        # 🔥 NEW: End Col
+        end_col = st.number_input("End Col", min_value=0, max_value=cols-1, value=0)
+    with qp5:
+        quick_id = st.number_input("Plot ID (1-20)", min_value=1, max_value=20, value=1)
+    with qp6:
+        st.write("")
+        if st.button("🖌️ Paint Block", width='stretch', type='primary'):
+            # Normalize (in case user inputs start > end)
+            r1, r2 = sorted([int(start_row), int(end_row)])
+            c1, c2 = sorted([int(start_col), int(end_col)])
+            
+            # 🔥 Paint the block
+            for r in range(r1, r2 + 1):
+                for c in range(c1, c2 + 1):
+                    st.session_state.grid_df.iloc[r, c] = int(quick_id)
+            
+            st.rerun()
+
+    st.divider()
+
+    # --- GRID (Dropdowns + Fixed Axis) ---
+    st.subheader("🗺️ Step 1: Fine-Tune Grid (Dropdowns)")
+    options_list = list(range(0, 20))
+
+    edited_df = st.data_editor(
+        st.session_state.grid_df,
+        use_container_width=True,
+        key="map_editor",
+        height=500,
+        hide_index=False, 
+        column_config={
+            col: st.column_config.SelectboxColumn(
+                label=col,
+                help="Pick a Plot ID or 0 for Empty",
+                width="small",
+                options=options_list,
+                required=True
+            )
+            for col in st.session_state.grid_df.columns
+        }
+    )
+
+    edited_df = edited_df.fillna(0)
+    st.session_state.grid_df = edited_df
+
+    st.divider()
+
+    # --- Assign & Save ---
+    st.subheader("📋 Step 2: Assign Owner & Save")
+    unique_ids = sorted([int(v) for v in edited_df.values.flatten() if v > 0])
+
+    if not unique_ids:
+        st.info("Paint a plot first.")
+    else:
+        a1, a2, a3, a4 = st.columns(4)
+        with a1:
+            selected_id = st.selectbox("Select Plot ID to Save", unique_ids)
+            rows_list, cols_list = [], []
+            for r in range(rows):
+                for c in range(cols):
+                    if int(edited_df.iloc[r, c]) == selected_id:
+                        rows_list.append(r)
+                        cols_list.append(c)
+
+            if rows_list:
+                start_r = min(rows_list)
+                start_c = min(cols_list)
+                end_r = max(rows_list)
+                end_c = max(cols_list)
+                width = end_c - start_c + 1
+                height = end_r - start_r + 1
+                box_count = len(rows_list)
+                st.caption(f"**Plot {selected_id}:** {width} x {height} units ({box_count} boxes)")
+
+        with a2:
+            phone_input = st.text_input("Owner Phone Number", placeholder="e.g., 91234567")
+            owner_name = ""
+            if phone_input and len(clean_phone_number(phone_input)) >= 8:
+                res = find_participant_by_phone(clean_phone_number(phone_input))
+                if res:
+                    owner_name = res['name']
+                    st.success(f"Found: **{owner_name}**")
+            owner_name = st.text_input("Or Type Owner Name", value=owner_name)
+            status = st.radio("Status", ["Paid", "Unpaid", "Empty"], horizontal=True)
+
+        with a3:
+            st.write("")
+            if st.button("💾 Save Plot to Database", width='stretch'):
+                try:
+                    supabase.table('box_map_plots').delete().eq('section_name', sec_name).eq('plot_id', selected_id).execute()
+                    supabase.table('box_map_plots').insert({
+                        "section_name": sec_name,
+                        "plot_id": selected_id,
+                        "start_row": start_r,
+                        "start_col": start_c,
+                        "width": width,
+                        "height": height,
+                        "box_count": box_count,
+                        "owner_id": "PENDING" if not phone_input else clean_phone_number(phone_input),
+                        "owner_name": owner_name,
+                        "status": status
+                    }).execute()
+                    st.success(f"✅ Plot {selected_id} saved successfully!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error saving: {e}")
+
+        with a4:
+            st.write("")
+            if st.button("🧹 Erase Selected Plot", width='stretch'):
+                st.session_state.grid_df = edited_df.replace(selected_id, 0)
+                try:
+                    supabase.table('box_map_plots').delete().eq('section_name', sec_name).eq('plot_id', selected_id).execute()
+                except:
+                    pass
+                st.success(f"Plot {selected_id} erased from map!")
+                st.rerun()
+
+        # --- Step 3: The Beautiful Color Map ---
+    st.divider()
+    st.subheader(f"🗺️ Step 3: Visual Map Preview ({sec_name})")
+
+    # 🔥 NEW: Build the HTML with Axis Labels
+    html = '<div style="overflow-x: auto; border: 2px solid #333; padding: 5px; border-radius: 8px; background: #1e1e1e; display: inline-block;">'
+
+    # Header Row (Column Numbers)
+    html += '<div style="display: flex; margin-left: 30px;">'
+    html += '<div style="width: 30px;"></div>'  # Empty space for Row numbers
+    for c in range(cols):
+        html += f'<div style="width: 25px; font-size: 10px; color: #aaa; text-align: center;">{c}</div>'
+    html += '</div>'
+
+    # Grid Rows
     for r in range(rows):
         html += '<div style="display: flex;">'
+        # Row Number on the left
+        html += f'<div style="width: 30px; font-size: 10px; color: #aaa; display: flex; align-items: center; justify-content: center;">{r}</div>'
+        
         for c in range(cols):
-            plot_id = st.session_state.canvas.get(f"{r}_{c}", None)
-            if plot_id:
-                html += f'<div style="width: 25px; height: 25px; background: #888; border: 1px solid white; color: white; font-size: 8px; display: flex; align-items: center; justify-content: center;">{plot_id}</div>'
+            val = edited_df.iloc[r, c]
+            plot_id = int(val) if not pd.isna(val) else 0
+            if plot_id > 0:
+                html += f'<div style="width: 25px; height: 25px; background: #28a745; border: 1px solid white; color: white; font-size: 8px; display: flex; align-items: center; justify-content: center;">{plot_id}</div>'
             else:
                 html += f'<div style="width: 25px; height: 25px; background: #2a2a2a; border: 1px dashed #555;"></div>'
         html += '</div>'
     html += '</div>'
 
     st.markdown(html, unsafe_allow_html=True)
-
-    total_painted = len([v for v in st.session_state.canvas.values() if v])
-    total_boxes = rows * cols
-    c1, c2 = st.columns(2)
-    c1.metric("Total Boxes Painted", total_painted)
-    c2.metric("Total Empty Boxes", total_boxes - total_painted)
