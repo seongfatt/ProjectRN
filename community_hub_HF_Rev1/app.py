@@ -1011,6 +1011,7 @@ if st.session_state.is_authenticated:
         nav_items = [
             {"id": "dashboard", "icon": "📊", "title": "Dashboard"},
             {"id": "checkin", "icon": "🎟️", "title": "Check-In"},
+            {"id": "floorplan", "icon": "🗺️", "title": "Floor Plan"},
         ]
         # Only add Face Check-In if available
         if FACE_AVAILABLE and show_face_checkin is not None:
@@ -1094,6 +1095,9 @@ if st.session_state.is_authenticated:
         show_settings()
     elif page == "face_checkin" and FACE_AVAILABLE and show_face_checkin is not None:
         show_face_checkin()
+    elif page == "floorplan":
+        from pages.floorplan_view import show_floorplan
+        show_floorplan()
     else:
         # If face_checkin is not available, redirect to dashboard
         st.session_state.active_page = "dashboard"
