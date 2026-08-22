@@ -62,47 +62,43 @@ def show_floorplan():
     scale = 15
     walkway_px = int(walkway_cm / 50 * scale)  # Convert cm to unit to px
 
-    # Build the plots
+    # Build the plots - 🔥 CRITICAL FIX: Single line strings with NO leading spaces!
     def build_plot(w, h, label, color):
         width_px = int(w * scale)
         height_px = int(h * scale)
-        return f"""
-        <div style="width:{width_px}px; height:{height_px}px; background:{color}; 
-                    border: 2px solid white; border-radius: 8px; 
-                    display:flex; flex-direction:column; align-items:center; justify-content:center; 
-                    color:white; font-weight:bold; font-size:16px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">
-            <div>Plot {label}</div>
-            <div style="font-size:10px; font-weight:normal;">{w*0.5}m × {h*0.5}m</div>
-            <div style="font-size:10px; font-weight:normal;">({w*h*0.25:.2f} m²)</div>
-        </div>
-        """
+        # Using string concatenation to avoid any newlines or spaces at the start
+        return (
+            f'<div style="width:{width_px}px; height:{height_px}px; background:{color}; '
+            f'border: 2px solid white; border-radius: 8px; '
+            f'display:flex; flex-direction:column; align-items:center; justify-content:center; '
+            f'color:white; font-weight:bold; font-size:16px; box-shadow: 0 4px 10px rgba(0,0,0,0.3);">'
+            f'<div>Plot {label}</div>'
+            f'<div style="font-size:10px; font-weight:normal;">{w*0.5}m × {h*0.5}m</div>'
+            f'<div style="font-size:10px; font-weight:normal;">({w*h*0.25:.2f} m²)</div>'
+            f'</div>'
+        )
 
-    # Build the floor plan using Flexbox
-    floor_plan_html = f"""
-    <div style="background-color: #1a1a2e; padding: 20px; border-radius: 12px; border: 1px solid #333; display: inline-block;">
-        <!-- TOP ROW -->
-        <div style="display: flex; gap: {walkway_px}px; margin-bottom: {walkway_px}px; align-items: flex-start;">
-            {build_plot(p1_w, p1_h, "1", "#2ca02c")}
-            <div style="display:flex; flex-direction:column; justify-content:center; font-size:10px; color:#aaa;">WALKWAY<br>({walkway_cm}cm)</div>
-            {build_plot(p2_w, p2_h, "2", "#ff7f0e")}
-        </div>
-
-        <!-- WALKWAY BETWEEN ROWS -->
-        <div style="width: 100%; height: {walkway_px}px; background: repeating-linear-gradient(45deg, #555, #555 10px, #444 10px, #444 20px); border-radius: 4px; margin-bottom: {walkway_px}px; display:flex; align-items:center; justify-content:center; font-size:10px; color:#ddd;">CONCRETE WALKWAY</div>
-
-        <!-- BOTTOM ROW -->
-        <div style="display: flex; gap: {walkway_px}px; align-items: flex-start;">
-            {build_plot(p3_w, p3_h, "3", "#2ca02c")}
-            <div style="display:flex; flex-direction:column; justify-content:center; font-size:10px; color:#aaa;">WALKWAY<br>({walkway_cm}cm)</div>
-            {build_plot(p4_w, p4_h, "4", "#1f77b4")}
-        </div>
-
-        <!-- EMPTY ROOF SPACE (Dotted/Shaded) -->
-        <div style="margin-top: {walkway_px}px; padding: 20px; border: 2px dashed #555; border-radius: 8px; background: repeating-linear-gradient(45deg, #222, #222 10px, #2a2a2a 10px, #2a2a2a 20px); text-align: center; color: #888; font-size: 12px;">
-            ▒▒ Dotted Shaded Zone: Empty Roof / Concrete Space ▒▒
-        </div>
-    </div>
-    """
+    # Build the floor plan using Flexbox - 🔥 CRITICAL FIX: Starts immediately with <div>!
+    floor_plan_html = (
+        '<div style="background-color: #1a1a2e; padding: 20px; border-radius: 12px; border: 1px solid #333; display: inline-block;">'
+        '<div style="display: flex; gap: ' + str(walkway_px) + 'px; margin-bottom: ' + str(walkway_px) + 'px; align-items: flex-start;">' +
+        build_plot(p1_w, p1_h, "1", "#2ca02c") +
+        '<div style="display:flex; flex-direction:column; justify-content:center; font-size:10px; color:#aaa;">WALKWAY<br>(' + str(walkway_cm) + 'cm)</div>' +
+        build_plot(p2_w, p2_h, "2", "#ff7f0e") +
+        '</div>' +
+        '<div style="width: 100%; height: ' + str(walkway_px) + 'px; background: repeating-linear-gradient(45deg, #555, #555 10px, #444 10px, #444 20px); border-radius: 4px; margin-bottom: ' + str(walkway_px) + 'px; display:flex; align-items:center; justify-content:center; font-size:10px; color:#ddd;">CONCRETE WALKWAY</div>' +
+        '<div style="display: flex; gap: ' + str(walkway_px) + 'px; align-items: flex-start;">' +
+        build_plot(p3_w, p3_h, "3", "#2ca02c") +
+        '<div style="display:flex; flex-direction:column; justify-content:center; font-size:10px; color:#aaa;">WALKWAY<br>(' + str(walkway_cm) + 'cm)</div>' +
+        build_plot(p4_w, p4_h, "4", "#1f77b4") +
+        '</div>' +
+        '<div style="margin-top: ' + str(walkway_px) + 'px; padding: 20px; border: 2px dashed #555; border-radius: 8px; background: repeating-linear-gradient(45deg, #222, #222 10px, #2a2a2a 10px, #2a2a2a 20px); text-align: center; color: #888; font-size: 12px;">' +
+        '▒▒ Dotted Shaded Zone: Empty Roof / Concrete Space ▒▒' +
+        '</div>' +
+        '</div>'
+    )
+    
+    # Render the HTML
     st.markdown(floor_plan_html, unsafe_allow_html=True)
 
     st.divider()
