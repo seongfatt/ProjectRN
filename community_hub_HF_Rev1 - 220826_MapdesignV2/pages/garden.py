@@ -187,12 +187,10 @@ def show_garden():
         with l4: st.markdown("⬛ **Empty Plot** – Unplanted")
         st.markdown("---")
 
-                # ── 3. Visual Grid Display (🔥 SECTION-DRIVEN) ─────────
+        # ── 3. Visual Grid Display (🔥 SECTION-DRIVEN) ─────────
         st.markdown("### Garden Grid Overview")
         price = float(get_setting('garden_monthly_rent', '15.00'))
         sections = _group_sections(layout_data)
-        
-        # Build the "Intact Grid Map" with Axis for each section
         for sec_name, sec_items in sections.items():
             st.subheader(f"{sec_name} ({len(sec_items)} plots)")
             max_row = max([i['grid_row'] for i in sec_items]) + 1
@@ -200,59 +198,53 @@ def show_garden():
             grid = [[None for _ in range(max_col)] for _ in range(max_row)]
             for item in sec_items:
                 grid[item['grid_row']][item['grid_col']] = item['plot_number']
-
-            html = '<div style="overflow-x: auto; border: 2px solid #333; border-radius: 8px; background: #1e1e1e; display: inline-block;">'
-            
-            # Header Row (Column Numbers)
-            html += '<div style="display: flex; margin-left: 30px;">'
-            html += '<div style="width: 30px;"></div>'
-            for c in range(max_col):
-                html += f'<div style="width: 100px; font-size: 10px; color: #aaa; text-align: center;">{c}</div>'
-            html += '</div>'
-
-            # Grid Rows
-            for r in range(max_row):
-                html += '<div style="display: flex;">'
-                # Row Number on the left
-                html += f'<div style="width: 30px; font-size: 10px; color: #aaa; display: flex; align-items: center; justify-content: center;">{r}</div>'
-                
-                for col_idx, plot_num in enumerate(grid[r]):
-                    if plot_num is None:
-                        # Empty Cell (Dotted Grid Line, Intact)
-                        html += '<div style="width: 100px; height: 85px; background: #2a2a2a; border: 1px dashed #555; display: flex; flex-direction: column; align-items: center; justify-content: center;">'
-                        html += '<div style="font-size: 12px; color: #777;">🌱</div>'
-                        html += '<div style="font-size: 9px; color: #777;">Empty</div></div>'
-                    else:
-                        # ORIGINAL PLOT LOGIC (Icons, Labels, Colors)
+            for row in grid:
+                cols_ui = st.columns(len(row))
+                for col_idx, plot_num in enumerate(row):
+                    with cols_ui[col_idx]:
+                        if plot_num is None:
+                            # 🔥 NEW: Draw a Dotted "Empty" Cell so the grid is contiguous
+                            st.markdown(
+                                f'<div style="background:#1e1e1e;border:2px dashed #444;border-radius:8px;width:100%;max-width:110px;min-height:85px;margin:0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#666;font-weight:bold;font-size:16px;box-sizing:border-box;">'
+                                f'<div style="font-size:12px;">🌱</div>'
+                                f'<div style="font-size:9px;color:#777;margin-top:2px;">Empty</div></div>',
+                                unsafe_allow_html=True
+                            )
+                            continue
                         layout_item = next((item for item in layout_data if item['plot_number'] == plot_num), None)
                         plot_type = layout_item['plot_type'] if layout_item and 'plot_type' in layout_item else 'B'
                         pd_item = plots_dict.get(plot_num, {'occupied': False, 'user_id': None})
                         occ = pd_item.get('occupied', False)
                         is_paid = pd_item.get('paid', False)
                         color = get_plot_type_color(plot_type)
-                        
-                        # Build the icon (Kept exactly as before)
-                        icon_html = ''
                         if occ and is_paid:
-                            icon_html = '<div style="position:absolute; top:4px; right:6px; font-size:14px;">💲</div>'
+                            border_style = "border: 2px solid #ffffff; box-shadow: 0 2px 5px rgba(255,255,255,0.2);"
+                            opacity_style = "opacity: 1.0;"
+                            icon_html = '<div style="position:absolute; top:4px; right:6px; font-size:14px; font-weight:bold; color:#ffffff; text-shadow: 0 0 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.6), 0 0 12px rgba(0,0,0,0.4);">💲</div>'
+                            renewal_date_str = pd_item.get('renewal_due_date')
+                            if renewal_date_str:
+                                try:
+                                    renewal_date = datetime.strptime(str(renewal_date_str)[:10], "%Y-%m-%d").date()
+                                    days_left = (renewal_date - datetime.now().date()).days
+                                    if 0 <= days_left <= 30:
+                                        border_style = "border: 3px solid #ff4444; box-shadow: 0 0 10px #ff4444;"
+                                except: pass
                         elif occ and not is_paid:
+                            border_style = "border: 2px solid #ffffff; box-shadow: 0 2px 5px rgba(255,255,255,0.2);"
+                            opacity_style = "opacity: 1.0;"
                             icon_html = '<div style="position:absolute; top:4px; right:6px; font-size:12px;">🤝</div>'
-                        else:
+                        elif not occ:
+                            # 🔥 Restored Icon for Empty Plot
+                            border_style = "border: 2px dashed #00ffff; box-shadow: 0 0 8px #00ffff;"
+                            opacity_style = "opacity: 0.8;"
                             icon_html = '<div style="position:absolute; top:4px; right:6px; font-size:12px;">🌱</div>'
-                        
                         box_count = PLOT_TYPES.get(plot_type, PLOT_TYPES["B"]).get("boxes", 0)
-                        
-                        html += f'<div style="width: 100px; height: 85px; background: {color}; border: 1px solid white; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center;">'
-                        html += f'{icon_html}{plot_num}'
-                        html += f'<div style="font-size:10px;color:#fff;margin-top:2px;">${price:.0f}/mo</div>'
-                        html += f'<div style="font-size:8px;color:#ddd;margin-top:1px;">{box_count} boxes</div>'
-                        html += '</div>'
-                html += '</div>'
-            html += '</div>'
-
-            # Render the entire section as one HTML block
-            st.markdown(html, unsafe_allow_html=True)
-            
+                        st.markdown(
+                            f'<div class="plot-box" style="position:relative; background:{color}; {opacity_style} {border_style} border-radius:8px; width:100%; max-width:110px; min-height:85px; margin:0 auto; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; color:white; font-weight:bold; font-size:16px; box-sizing:border-box;">'
+                            f'{icon_html}{plot_num}'
+                            f'<div style="font-size:10px;color:#fff;margin-top:2px;">${price:.0f}/mo</div>'
+                            f'<div style="font-size:8px;color:#ddd;margin-top:1px;">{box_count} boxes</div></div>',
+                            unsafe_allow_html=True)
     st.divider()
 
     # ── 4. Admin Operation Panel ──────────────────────────────
