@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
-import json
 from config import supabase, DB_CONNECTED
 from utils import find_participant_by_phone, clean_phone_number
 
-# Define Plot Types
+# Define Plot Types with their exact Box dimensions (Width x Height in units of 50cm)
 PLOT_TYPES_CONFIG = {
     "A (12 boxes / 3.0 m²)": {"w": 4, "h": 3, "boxes": 12},
     "B (10 boxes / 2.5 m²)": {"w": 5, "h": 2, "boxes": 10},
@@ -12,150 +11,118 @@ PLOT_TYPES_CONFIG = {
 }
 
 def show_floorplan_designer():
-    st.header("🎨 Box-Map Designer (Bug Fixes)")
-    st.caption("Sections are permanent. Reuses available Plot IDs.")
+    st.header("🎨 Box-Map Designer (Auto-Generate Plot IDs)")
+    st.caption("Select a Type (A/B/C) and click Paint. The system automatically assigns the next Plot ID (1, 2, 3...).")
 
     if not DB_CONNECTED:
         st.error("Database not connected")
         return
 
-    # --- Get all saved sections from DB ---
-    try:
-        sections_data = supabase.table('section_settings').select('*').execute().data
-        saved_sections = {s['section_name']: (int(s['rows']), int(s['cols'])) for s in sections_data}
-    except Exception as e:
-        st.error(f"Missing table: {e}. Please run the SQL command to create it.")
-        saved_sections = {}
+    # --- Controls ---
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        sec_name = st.text_input("Section Name", value="Section 1")
+    with c2:
+        rows = int(st.number_input("Rows", min_value=1, max_value=100, value=22))
+    with c3:
+        cols = int(st.number_input("Cols", min_value=1, max_value=100, value=17))
+    with c4:
+        if st.button("🔄 Reset Canvas", width='stretch'):
+            st.session_state.grid_df = pd.DataFrame(0, index=range(rows), columns=[f"Col {i}" for i in range(cols)])
+            st.rerun()
 
-    # --- Section Selector ---
-    if saved_sections:
-        sec_name = st.selectbox("Select Section", list(saved_sections.keys()), key="sec_selector")
-    else:
-        sec_name = None
+    # 🔥 DYNAMIC MAX PLOT ID: Based on the total grid size!
+    max_plot_id = rows * cols
 
-    # --- Create New Section ---
-    with st.expander("➕ Create New Section", expanded=not saved_sections):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            new_name = st.text_input("Section Name")
-        with c2:
-            new_rows = st.number_input("Rows", min_value=1, max_value=100, value=22)
-        with c3:
-            new_cols = st.number_input("Cols", min_value=1, max_value=100, value=17)
-        
-        if st.button("✅ Create Section", type="primary"):
-            if new_name.strip() and new_name.strip() not in saved_sections:
-                try:
-                    supabase.table('section_settings').upsert({
-                        'section_name': new_name.strip(), 'rows': int(new_rows), 'cols': int(new_cols)
-                    }, on_conflict='section_name').execute()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error saving: {e}")
-            elif new_name.strip() in saved_sections:
-                st.error("Section name already exists.")
-            else:
-                st.error("Please enter a section name.")
-
-    # --- If a section is selected, load its data ---
-    if sec_name:
-        rows, cols = saved_sections[sec_name]
-        c1, c2, c3, c4 = st.columns(4)
-        with c1: st.caption("Section Size (Locked)")
-        with c2: st.metric("Rows", rows)
-        with c3: st.metric("Cols", cols)
-        with c4: st.caption("")
-    else:
-        st.info("Create a new section above to begin.")
-        return
-
-    # --- Initialize Grid & Force Reset on Section Change ---
-    # 🔥 BUG FIX 2: Added current_sec check
-    if 'current_sec' not in st.session_state or st.session_state.current_sec != sec_name:
+    # Initialize DataFrame
+    if 'grid_df' not in st.session_state or st.session_state.grid_df.shape != (rows, cols):
         st.session_state.grid_df = pd.DataFrame(0, index=range(rows), columns=[f"Col {i}" for i in range(cols)])
-        st.session_state.current_sec = sec_name
-        st.session_state.loaded_grid_sec = None  # Force reload for the new section
 
-    # --- Load Grid Data (Fixed typo logic) ---
-    # 🔥 BUG FIX 2: Removed the typo 'loaded_grid_sec' != sec_name
-    if st.session_state.get('loaded_grid_sec') != sec_name:
+    # Load Existing Data from DB
+    if 'loaded_sec' not in st.session_state or st.session_state.get('loaded_sec') != sec_name:
         try:
             st.session_state.grid_df = pd.DataFrame(0, index=range(rows), columns=[f"Col {i}" for i in range(cols)])
             data = supabase.table('box_map_plots').select('*').eq('section_name', sec_name).execute().data
             for row in data:
-                cells = row.get('cells')
-                if isinstance(cells, str): cells = json.loads(cells)
-                if cells:
-                    for r, c in cells:
+                for r in range(row['start_row'], row['start_row'] + row['height']):
+                    for c in range(row['start_col'], row['start_col'] + row['width']):
                         if r < rows and c < cols:
                             st.session_state.grid_df.iloc[r, c] = row['plot_id']
-                else:
-                    for r in range(row['start_row'], row['start_row'] + row['height']):
-                        for c in range(row['start_col'], row['start_col'] + row['width']):
-                            if r < rows and c < cols:
-                                st.session_state.grid_df.iloc[r, c] = row['plot_id']
-            st.session_state.loaded_grid_sec = sec_name
+            st.session_state.loaded_sec = sec_name
         except:
             pass
 
     st.divider()
 
-    # ── Quick Paint (Auto-Generate Plot ID) ──
+    # --- 🔥 QUICK PAINT (Auto-Plot & Auto-ID) ---
     st.subheader("⚡ Quick Paint (Auto-Generate Plot ID)")
-    
-    # 🔥 BUG FIX 1: Find the LOWEST available ID instead of highest!
+
+    # 🔥 Calculate the next available Plot ID automatically!
     existing_ids = set(st.session_state.grid_df.values.flatten().tolist())
     existing_ids.discard(0)
-    next_id = 1
-    while next_id in existing_ids:
-        next_id += 1
+    if not existing_ids:
+        next_id = 1
+    else:
+        next_id = max(existing_ids) + 1
 
     qp1, qp2, qp3, qp4 = st.columns(4)
     with qp1:
-        start_row = st.number_input("Start Row", min_value=0, max_value=rows-1, value=0, key="qp_start_row")
+        start_row = st.number_input("Start Row", min_value=0, max_value=rows-1, value=0)
     with qp2:
-        start_col = st.number_input("Start Col", min_value=0, max_value=cols-1, value=0, key="qp_start_col")
+        start_col = st.number_input("Start Col", min_value=0, max_value=cols-1, value=0)
     with qp3:
-        plot_type_label = st.selectbox("Select Plot Type", list(PLOT_TYPES_CONFIG.keys()) + ["Custom Size"], key="qp_type")
+        # Select Plot Type (including Custom Size)
+        plot_type_label = st.selectbox("Select Plot Type", list(PLOT_TYPES_CONFIG.keys()) + ["Custom Size"])
+        
         if plot_type_label == "Custom Size":
-            cw = st.number_input("Custom Width", min_value=1, max_value=20, value=4, key="qp_cw")
-            ch = st.number_input("Custom Height", min_value=1, max_value=20, value=3, key="qp_ch")
-            plot_type = {"w": int(cw), "h": int(ch)}
+            cw = st.number_input("Custom Width (Boxes)", min_value=1, max_value=20, value=4)
+            ch = st.number_input("Custom Height (Boxes)", min_value=1, max_value=20, value=3)
+            plot_type = {"w": int(cw), "h": int(ch), "boxes": int(cw * ch)}
+            st.caption(f"Custom Size: {plot_type['w']} wide x {plot_type['h']} high ({plot_type['boxes']} boxes)")
         else:
             plot_type = PLOT_TYPES_CONFIG[plot_type_label]
+            st.caption(f"Auto-detect: {plot_type['w']} wide x {plot_type['h']} high")
     with qp4:
+        # 🔥 NOTE: We removed the manual Plot ID input!
         st.success(f"🔥 Next Plot ID: **{next_id}**")
+        st.caption(f"Max allowed: {max_plot_id}")
 
-    if st.button(f"🖌️ Paint Auto-Plot (ID {next_id})", type="primary", width='stretch'):
+    # Paint Button
+    if st.button("🖌️ Paint Auto-Plot (ID " + str(next_id) + ")", type="primary", width='stretch'):
         end_row = int(start_row) + plot_type['h'] - 1
         end_col = int(start_col) + plot_type['w'] - 1
+        
         if end_row < rows and end_col < cols:
             for r in range(int(start_row), end_row + 1):
                 for c in range(int(start_col), end_col + 1):
                     st.session_state.grid_df.iloc[r, c] = next_id
-            
-            # 🔥 THE MAGIC FIX: Delete the data_editor's internal state
-            # so it is forced to accept the new grid_df and not overwrite it!
-            if f"map_editor_{sec_name}" in st.session_state:
-                del st.session_state[f"map_editor_{sec_name}"]
-            
             st.rerun()
         else:
-            st.error(f"❌ Block needs {plot_type['h']} rows and {plot_type['w']} cols. It doesn't fit here.")
+            st.error(f"❌ Invalid coordinate! The block needs {plot_type['h']} rows and {plot_type['w']} cols. It doesn't fit here.")
 
-    # ── Grid (Dropdowns) ──
+    st.divider()
+
+    # --- GRID (Dropdowns + Fixed Axis) ---
     st.subheader("🗺️ Step 1: Fine-Tune Grid (Dropdowns)")
-    max_plot_id = rows * cols
+    # 🔥 DYNAMIC OPTIONS: 0 to max_plot_id
     options_list = list(range(0, max_plot_id + 1))
 
-    # 🔥 BUG FIX 2: Added sec_name to the key so it resets when switching sections!
     edited_df = st.data_editor(
         st.session_state.grid_df,
         use_container_width=True,
-        key=f"map_editor_{sec_name}",  # <--- This is the magic fix for Section 2
+        key="map_editor",
         height=500,
         hide_index=False, 
-        column_config={col: st.column_config.SelectboxColumn(label=col, options=options_list, required=True) for col in st.session_state.grid_df.columns}
+        column_config={
+            col: st.column_config.SelectboxColumn(
+                label=col,
+                help="Pick a Plot ID or 0 for Empty",
+                width="small",
+                options=options_list,
+                required=True
+            )
+            for col in st.session_state.grid_df.columns
+        }
     )
 
     edited_df = edited_df.fillna(0)
@@ -163,7 +130,7 @@ def show_floorplan_designer():
 
     st.divider()
 
-    # ── Assign & Save ──
+    # --- Assign & Save ---
     st.subheader("📋 Step 2: Assign Owner & Save")
     unique_ids = sorted([int(v) for v in edited_df.values.flatten() if v > 0])
 
@@ -172,7 +139,7 @@ def show_floorplan_designer():
     else:
         a1, a2, a3, a4 = st.columns(4)
         with a1:
-            selected_id = st.selectbox("Select Plot ID to Save", unique_ids, key="save_select_id")
+            selected_id = st.selectbox("Select Plot ID to Save", unique_ids)
             rows_list, cols_list = [], []
             for r in range(rows):
                 for c in range(cols):
@@ -188,19 +155,18 @@ def show_floorplan_designer():
                 width = end_c - start_c + 1
                 height = end_r - start_r + 1
                 box_count = len(rows_list)
-                cells = [[r, c] for r, c in zip(rows_list, cols_list)]
                 st.caption(f"**Plot {selected_id}:** {width} x {height} units ({box_count} boxes)")
 
         with a2:
-            phone_input = st.text_input("Owner Phone Number", placeholder="e.g., 91234567", key="save_phone")
+            phone_input = st.text_input("Owner Phone Number", placeholder="e.g., 91234567")
             owner_name = ""
             if phone_input and len(clean_phone_number(phone_input)) >= 8:
                 res = find_participant_by_phone(clean_phone_number(phone_input))
                 if res:
                     owner_name = res['name']
                     st.success(f"Found: **{owner_name}**")
-            owner_name = st.text_input("Or Type Owner Name", value=owner_name, key="save_owner_name")
-            status = st.radio("Status", ["Paid", "Unpaid", "Empty"], horizontal=True, key="save_status")
+            owner_name = st.text_input("Or Type Owner Name", value=owner_name)
+            status = st.radio("Status", ["Paid", "Unpaid", "Empty"], horizontal=True)
 
         with a3:
             st.write("")
@@ -215,7 +181,6 @@ def show_floorplan_designer():
                         "width": width,
                         "height": height,
                         "box_count": box_count,
-                        "cells": json.dumps(cells),
                         "owner_id": "PENDING" if not phone_input else clean_phone_number(phone_input),
                         "owner_name": owner_name,
                         "status": status
@@ -236,17 +201,27 @@ def show_floorplan_designer():
                 st.success(f"Plot {selected_id} erased from map!")
                 st.rerun()
 
-    # ── Step 3: Visual Map Preview (Axis Labels Fixed) ──
+        # --- Step 3: The Beautiful Color Map ---
     st.divider()
     st.subheader(f"🗺️ Step 3: Visual Map Preview ({sec_name})")
+
+    # 🔥 RESTORED: Build the HTML with Axis Labels (Fixed alignment)
     html = '<div style="overflow-x: auto; border: 2px solid #333; padding: 5px; border-radius: 8px; background: #1e1e1e; display: inline-block;">'
-    html += '<div style="display: flex;"><div style="width: 30px;"></div>'
+
+    # Header Row (Column Numbers)
+    # 🔥 FIX: Removed "margin-left: 30px" - only use the 30px spacer to match the grid!
+    html += '<div style="display: flex;">'
+    html += '<div style="width: 30px;"></div>'  # Spacer for the row numbers
     for c in range(cols):
         html += f'<div style="width: 25px; font-size: 10px; color: #aaa; text-align: center;">{c}</div>'
     html += '</div>'
+
+    # Grid Rows
     for r in range(rows):
         html += '<div style="display: flex;">'
+        # Row Number on the left
         html += f'<div style="width: 30px; font-size: 10px; color: #aaa; display: flex; align-items: center; justify-content: center;">{r}</div>'
+        
         for c in range(cols):
             val = edited_df.iloc[r, c]
             plot_id = int(val) if not pd.isna(val) else 0
@@ -256,4 +231,5 @@ def show_floorplan_designer():
                 html += f'<div style="width: 25px; height: 25px; background: #2a2a2a; border: 1px dashed #555;"></div>'
         html += '</div>'
     html += '</div>'
+
     st.markdown(html, unsafe_allow_html=True)
