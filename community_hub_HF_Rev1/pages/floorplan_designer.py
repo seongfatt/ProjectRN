@@ -197,8 +197,11 @@ def show_floorplan_designer():
 
     st.divider()
 
-    # ── Quick Paint (Auto-Generate Plot ID) ──
-    st.subheader("⚡ Quick Paint (Auto-Generate Plot ID)")
+        # ── Quick Paint (Auto-Generate Plot ID or Manual Override) ──
+    st.subheader("⚡ Quick Paint (Plot ID)")
+
+    # Define max plot ID here for the input field
+    max_plot_id = rows * cols
     
     existing_ids = set(st.session_state.grid_df.values.flatten().tolist())
     existing_ids.discard(0)
@@ -219,17 +222,27 @@ def show_floorplan_designer():
             plot_type = {"w": int(cw), "h": int(ch)}
         else:
             plot_type = PLOT_TYPES_CONFIG[plot_type_label]
+            
     with qp4:
-        st.success(f"🔥 Next Plot ID: **{next_id}**")
+        # 🔥 NEW: Let user choose to Auto-Generate or Manual Input
+        use_auto = st.checkbox("Auto-ID", value=True, key=f"auto_id_{sec_name}")
+        
+        if use_auto:
+            manual_id = next_id
+            st.success(f"🔥 Next Plot ID: **{next_id}**")
+        else:
+            manual_id = st.number_input("Manual Plot ID", min_value=1, max_value=max_plot_id, value=next_id, key=f"manual_id_{sec_name}")
+            st.info(f"Using manual ID: **{manual_id}**")
 
-    if st.button(f"🖌️ Paint Auto-Plot (ID {next_id})", type="primary", width='stretch'):
+    if st.button(f"🖌️ Paint Plot (ID {manual_id})", type="primary", width='stretch'):
         end_row = int(start_row) + plot_type['h'] - 1
         end_col = int(start_col) + plot_type['w'] - 1
         if end_row < rows and end_col < cols:
             for r in range(int(start_row), end_row + 1):
                 for c in range(int(start_col), end_col + 1):
-                    st.session_state.grid_df.iloc[r, c] = next_id
+                    st.session_state.grid_df.iloc[r, c] = manual_id
             
+            # The "Magic Fix" to allow the grid to update
             if f"map_editor_{sec_name}" in st.session_state:
                 del st.session_state[f"map_editor_{sec_name}"]
             
