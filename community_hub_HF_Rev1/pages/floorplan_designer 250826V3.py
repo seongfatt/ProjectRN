@@ -12,8 +12,8 @@ PLOT_TYPES_CONFIG = {
 }
 
 def show_floorplan_designer():
-    st.header("🎨 Box-Map Designer (Blue Grid + Live Preview)")
-    st.caption("Click to paint! Painted boxes are Blue. Empty boxes are dotted.")
+    st.header("🎨 Box-Map Designer (Square & Blue)")
+    st.caption("Select a Plot ID brush, then click directly on the map to paint. Perfectly square cells!")
 
     if not DB_CONNECTED:
         st.error("Database not connected")
@@ -57,7 +57,7 @@ def show_floorplan_designer():
             else:
                 st.error("Please enter a section name.")
 
-    # --- Manage Section ---
+    # --- Manage Section (Rename, Resize, Duplicate, Delete) ---
     if sec_name:
         with st.expander("🛠️ Manage Current Section", expanded=False):
             rows, cols = saved_sections[sec_name]
@@ -80,10 +80,10 @@ def show_floorplan_designer():
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error renaming: {e}")
-            st.divider()
 
+            st.divider()
             st.markdown("**📐 Resize Section**")
-            st.caption("⚠️ Existing plots may be cut off.")
+            st.caption("⚠️ Proceed with caution. Existing plots may be cut off.")
             resize_col1, resize_col2, resize_col3 = st.columns([1,1,1])
             with resize_col1:
                 new_rows = st.number_input("New Rows", min_value=1, max_value=100, value=rows, key="resize_rows")
@@ -95,8 +95,8 @@ def show_floorplan_designer():
                     supabase.table('section_settings').update({'rows': int(new_rows), 'cols': int(new_cols)}).eq('section_name', sec_name).execute()
                     st.session_state.current_sec = None
                     st.rerun()
-            st.divider()
 
+            st.divider()
             st.markdown("**📋 Duplicate Section**")
             dup_col1, dup_col2 = st.columns([3, 1])
             with dup_col1:
@@ -116,8 +116,8 @@ def show_floorplan_designer():
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error duplicating: {e}")
-            st.divider()
 
+            st.divider()
             st.markdown("**🗑️ Delete Section**")
             confirm_delete = st.checkbox("I understand this permanently deletes the section.", key="delete_confirm")
             if confirm_delete:
@@ -139,7 +139,7 @@ def show_floorplan_designer():
         st.info("Create a new section above to begin.")
         return
 
-    # --- Initialize Grid ---
+    # --- Initialize Grid (Dictionary for quick updating) ---
     if 'current_sec' not in st.session_state or st.session_state.current_sec != sec_name:
         st.session_state.grid = {f"{r}_{c}": 0 for r in range(rows) for c in range(cols)}
         st.session_state.current_sec = sec_name
@@ -168,7 +168,7 @@ def show_floorplan_designer():
 
     st.divider()
 
-    # ── THE "ONE MAP" EDITOR ──
+    # ── THE "ONE MAP" EDITOR (Quick Paint + Manual) ──
     st.subheader("🗺️ One Map Editor (Click to Paint)")
 
     # Brush Selector
@@ -193,7 +193,7 @@ def show_floorplan_designer():
     with b4:
         eraser_mode = st.radio("Mode", ["Paint", "Erase"], horizontal=True, key="mode")
 
-    # 🔥 BULLETPROOF CSS: FORCE BLUE + DOTTED EMPTY BOXES
+    # 🔥 PERFECT SQUARE CSS + BLUE COLOR OVERRIDE
     st.markdown("""
     <style>
         .map-grid-container {
@@ -208,6 +208,7 @@ def show_floorplan_designer():
         .map-grid-container div[data-testid="stColumn"] {
             gap: 0px !important;
             padding: 0px !important;
+            /* FORCE PERFECT SQUARES: No stretching, no shrinking! */
             width: 30px !important;
             min-width: 30px !important;
             max-width: 30px !important;
@@ -215,7 +216,11 @@ def show_floorplan_designer():
         }
         .map-grid-container div.stButton > button {
             width: 30px !important;
+            min-width: 30px !important;
+            max-width: 30px !important;
             height: 30px !important;
+            min-height: 30px !important;
+            max-height: 30px !important;
             padding: 0 !important;
             margin: 0 !important;
             border-radius: 4px !important;
@@ -223,17 +228,17 @@ def show_floorplan_designer():
             line-height: 1 !important;
             font-weight: bold !important;
         }
-        
-        /* 🔥 TARGET BLUE FOR PAINTED CELLS */
-        .map-grid-container button[kind="primary"] {
+
+        /* 🔥 Painted Cells: Change Red to Blue */
+        .map-grid-container div.stButton > button[data-testid="stBaseButton-primary"] {
             background-color: #1f77b4 !important; 
             border: 1px solid #1a6ea0 !important;
             color: white !important;
             box-shadow: none !important;
         }
 
-        /* 🔥 TARGET DOTTED LINE FOR EMPTY CELLS */
-        .map-grid-container button[kind="secondary"] {
+        /* Empty Cells: Keep them clean and dark */
+        .map-grid-container div.stButton > button[data-testid="stBaseButton-secondary"] {
             background-color: #2a2a2a !important;
             border: 1px dashed #555 !important;
             color: #888 !important;
@@ -241,32 +246,39 @@ def show_floorplan_designer():
     </style>
     """, unsafe_allow_html=True)
 
-    # WRAP THE GRID IN THE CONTAINER
+    # 🔥 WRAP THE GRID IN THE CONTAINER
     st.markdown('<div class="map-grid-container">', unsafe_allow_html=True)
 
     # Add Column Axis Header at the top
     header_cols = st.columns([1] + [1] * cols)
     with header_cols[0]:
-        st.markdown("<div style='height:30px;'></div>", unsafe_allow_html=True)
+        st.markdown("<div style='height:30px;'></div>", unsafe_allow_html=True) # Blank corner
     for c in range(cols):
         with header_cols[c + 1]:
             st.markdown(f"<div style='font-size:10px; color:#aaa; text-align:center; line-height:30px;'>{c}</div>", unsafe_allow_html=True)
 
     # Build the Clickable Map
     for r in range(rows):
+        # Create Row with Axis Label + Cells
         row_cols = st.columns([1] + [1] * cols)
+        
+        # Axis Label
         with row_cols[0]:
             st.markdown(f"<div style='font-size:10px; color:#aaa; text-align:center; line-height:30px;'>{r}</div>", unsafe_allow_html=True)
 
+        # Interactive Cells
         for c in range(cols):
             key = f"{r}_{c}"
             value = st.session_state.grid.get(key, 0)
             
             with row_cols[c + 1]:
                 if value > 0:
+                    # Painted cell (Blue)
                     st.button(str(value), key=f"cell_{key}", type="primary")
                 else:
+                    # Empty cell
                     if st.button(" ", key=f"cell_{key}", type="secondary"):
+                        # Click logic
                         if eraser_mode == "Erase":
                             st.session_state.grid[key] = 0
                         else:
@@ -275,12 +287,12 @@ def show_floorplan_designer():
                                 st.session_state['manual_next'] = next_id
                         st.rerun()
 
-    # CLOSE THE WRAPPER
+    # 🔥 CLOSE THE WRAPPER
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.divider()
 
-    # ── Assign & Save ──
+    # ── Assign & Save (No more "Step" labels) ──
     st.subheader("📋 Assign Owner & Save")
     unique_ids = sorted([v for v in st.session_state.grid.values() if v > 0])
 
@@ -354,30 +366,3 @@ def show_floorplan_designer():
                     pass
                 st.success(f"Plot {selected_id} erased from map!")
                 st.rerun()
-
-    # ── 🆕 LIVE VISUAL PREVIEW (Dotted Empty Boxes + Axis) ──
-    st.divider()
-    st.subheader(f"👁️ Live Visual Preview ({sec_name})")
-    st.caption("Blue = Painted, Dotted Grey = Empty Boxes.")
-
-    html = '<div style="overflow-x: auto; border: 2px solid #333; padding: 5px; border-radius: 8px; background: #1e1e1e; display: inline-block;">'
-    html += '<div style="display: flex;"><div style="width: 30px;"></div>'
-    for c in range(cols):
-        html += f'<div style="width: 25px; font-size: 10px; color: #aaa; text-align: center;">{c}</div>'
-    html += '</div>'
-
-    for r in range(rows):
-        html += '<div style="display: flex;">'
-        html += f'<div style="width: 30px; font-size: 10px; color: #aaa; display: flex; align-items: center; justify-content: center;">{r}</div>'
-        for c in range(cols):
-            val = st.session_state.grid.get(f"{r}_{c}", 0)
-            if val > 0:
-                # BLUE PAINTED BOX
-                html += f'<div style="width: 25px; height: 25px; background: #1f77b4; border: 1px solid white; color: white; font-size: 8px; display: flex; align-items: center; justify-content: center;">{val}</div>'
-            else:
-                # DOTTED GREY BOX
-                html += '<div style="width: 25px; height: 25px; background: #2a2a2a; border: 1px dashed #555;"></div>'
-        html += '</div>'
-    html += '</div>'
-
-    st.markdown(html, unsafe_allow_html=True)

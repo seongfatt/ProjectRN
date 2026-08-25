@@ -12,8 +12,8 @@ PLOT_TYPES_CONFIG = {
 }
 
 def show_floorplan_designer():
-    st.header("🎨 Box-Map Designer (Blue Grid + Live Preview)")
-    st.caption("Click to paint! Painted boxes are Blue. Empty boxes are dotted.")
+    st.header("🎨 Box-Map Designer (Merged & Stable)")
+    st.caption("Add, Edit, Rename, Duplicate sections. Click any box to paint (0s are hidden).")
 
     if not DB_CONNECTED:
         st.error("Database not connected")
@@ -57,7 +57,7 @@ def show_floorplan_designer():
             else:
                 st.error("Please enter a section name.")
 
-    # --- Manage Section ---
+    # --- Manage Section (Rename, Resize, Duplicate, Delete) ---
     if sec_name:
         with st.expander("🛠️ Manage Current Section", expanded=False):
             rows, cols = saved_sections[sec_name]
@@ -80,10 +80,12 @@ def show_floorplan_designer():
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error renaming: {e}")
-            st.divider()
+                    else:
+                        st.error("Please enter a valid new name.")
 
+            st.divider()
             st.markdown("**📐 Resize Section**")
-            st.caption("⚠️ Existing plots may be cut off.")
+            st.caption("⚠️ Proceed with caution. Existing plots may be cut off.")
             resize_col1, resize_col2, resize_col3 = st.columns([1,1,1])
             with resize_col1:
                 new_rows = st.number_input("New Rows", min_value=1, max_value=100, value=rows, key="resize_rows")
@@ -95,8 +97,8 @@ def show_floorplan_designer():
                     supabase.table('section_settings').update({'rows': int(new_rows), 'cols': int(new_cols)}).eq('section_name', sec_name).execute()
                     st.session_state.current_sec = None
                     st.rerun()
-            st.divider()
 
+            st.divider()
             st.markdown("**📋 Duplicate Section**")
             dup_col1, dup_col2 = st.columns([3, 1])
             with dup_col1:
@@ -116,8 +118,8 @@ def show_floorplan_designer():
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error duplicating: {e}")
-            st.divider()
 
+            st.divider()
             st.markdown("**🗑️ Delete Section**")
             confirm_delete = st.checkbox("I understand this permanently deletes the section.", key="delete_confirm")
             if confirm_delete:
@@ -139,16 +141,16 @@ def show_floorplan_designer():
         st.info("Create a new section above to begin.")
         return
 
-    # --- Initialize Grid ---
+    # --- Initialize Grid (using None to hide zeros) ---
     if 'current_sec' not in st.session_state or st.session_state.current_sec != sec_name:
-        st.session_state.grid = {f"{r}_{c}": 0 for r in range(rows) for c in range(cols)}
+        st.session_state.grid_df = pd.DataFrame(None, index=range(rows), columns=[f"Col {i}" for i in range(cols)])
         st.session_state.current_sec = sec_name
         st.session_state.loaded_grid_sec = None
 
-    # --- Load Grid Data ---
+    # --- Load Grid Data (converting 0s to None) ---
     if st.session_state.get('loaded_grid_sec') != sec_name:
         try:
-            st.session_state.grid = {f"{r}_{c}": 0 for r in range(rows) for c in range(cols)}
+            st.session_state.grid_df = pd.DataFrame(None, index=range(rows), columns=[f"Col {i}" for i in range(cols)])
             data = supabase.table('box_map_plots').select('*').eq('section_name', sec_name).execute().data
             for row in data:
                 cells = row.get('cells')
@@ -156,133 +158,91 @@ def show_floorplan_designer():
                 if cells:
                     for r, c in cells:
                         if r < rows and c < cols:
-                            st.session_state.grid[f"{r}_{c}"] = row['plot_id']
+                            st.session_state.grid_df.iloc[r, c] = row['plot_id']
                 else:
                     for r in range(row['start_row'], row['start_row'] + row['height']):
                         for c in range(row['start_col'], row['start_col'] + row['width']):
                             if r < rows and c < cols:
-                                st.session_state.grid[f"{r}_{c}"] = row['plot_id']
+                                st.session_state.grid_df.iloc[r, c] = row['plot_id']
             st.session_state.loaded_grid_sec = sec_name
         except:
             pass
 
     st.divider()
 
-    # ── THE "ONE MAP" EDITOR ──
-    st.subheader("🗺️ One Map Editor (Click to Paint)")
-
-    # Brush Selector
+    # ── Quick Paint (Auto or Manual) ──
+    st.subheader("⚡ Quick Paint (Plot ID)")
     max_plot_id = rows * cols
-    existing_vals = [v for v in st.session_state.grid.values() if v > 0]
-    existing_ids = set(existing_vals)
+    
+    # 🔥 FIX: Handle None values safely
+    existing_vals = [v for v in st.session_state.grid_df.values.flatten().tolist() if v is not None]
+    existing_ids = set(int(v) for v in existing_vals if v > 0)
     next_id = 1
     while next_id in existing_ids:
         next_id += 1
 
-    b1, b2, b3, b4 = st.columns(4)
-    with b1:
-        brush_id = st.selectbox("Current Brush (Plot ID)", list(range(1, max_plot_id + 1)), index=next_id - 1, key="brush_id")
-    with b2:
-        st.write("")
-        use_auto = st.checkbox("Auto Next ID", value=True, key="use_auto")
-    with b3:
-        st.write("")
-        if not use_auto:
-            brush_id = st.number_input("Manual Plot ID", min_value=1, max_value=max_plot_id, value=next_id)
-        st.info(f"Next Auto ID: **{next_id}**")
-    with b4:
-        eraser_mode = st.radio("Mode", ["Paint", "Erase"], horizontal=True, key="mode")
-
-    # 🔥 BULLETPROOF CSS: FORCE BLUE + DOTTED EMPTY BOXES
-    st.markdown("""
-    <style>
-        .map-grid-container {
-            width: fit-content;
-            margin: 0 auto;
-            padding: 10px;
-            border: 1px solid #333;
-            border-radius: 8px;
-            background: #1e1e1e;
-            overflow-x: auto;
-        }
-        .map-grid-container div[data-testid="stColumn"] {
-            gap: 0px !important;
-            padding: 0px !important;
-            width: 30px !important;
-            min-width: 30px !important;
-            max-width: 30px !important;
-            flex: none !important;
-        }
-        .map-grid-container div.stButton > button {
-            width: 30px !important;
-            height: 30px !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            border-radius: 4px !important;
-            font-size: 14px !important;
-            line-height: 1 !important;
-            font-weight: bold !important;
-        }
-        
-        /* 🔥 TARGET BLUE FOR PAINTED CELLS */
-        .map-grid-container button[kind="primary"] {
-            background-color: #1f77b4 !important; 
-            border: 1px solid #1a6ea0 !important;
-            color: white !important;
-            box-shadow: none !important;
-        }
-
-        /* 🔥 TARGET DOTTED LINE FOR EMPTY CELLS */
-        .map-grid-container button[kind="secondary"] {
-            background-color: #2a2a2a !important;
-            border: 1px dashed #555 !important;
-            color: #888 !important;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # WRAP THE GRID IN THE CONTAINER
-    st.markdown('<div class="map-grid-container">', unsafe_allow_html=True)
-
-    # Add Column Axis Header at the top
-    header_cols = st.columns([1] + [1] * cols)
-    with header_cols[0]:
-        st.markdown("<div style='height:30px;'></div>", unsafe_allow_html=True)
-    for c in range(cols):
-        with header_cols[c + 1]:
-            st.markdown(f"<div style='font-size:10px; color:#aaa; text-align:center; line-height:30px;'>{c}</div>", unsafe_allow_html=True)
-
-    # Build the Clickable Map
-    for r in range(rows):
-        row_cols = st.columns([1] + [1] * cols)
-        with row_cols[0]:
-            st.markdown(f"<div style='font-size:10px; color:#aaa; text-align:center; line-height:30px;'>{r}</div>", unsafe_allow_html=True)
-
-        for c in range(cols):
-            key = f"{r}_{c}"
-            value = st.session_state.grid.get(key, 0)
+    qp1, qp2, qp3, qp4 = st.columns(4)
+    with qp1:
+        start_row = st.number_input("Start Row", min_value=0, max_value=rows-1, value=0, key="qp_start_row")
+    with qp2:
+        start_col = st.number_input("Start Col", min_value=0, max_value=cols-1, value=0, key="qp_start_col")
+    with qp3:
+        plot_type_label = st.selectbox("Select Plot Type", list(PLOT_TYPES_CONFIG.keys()) + ["Custom Size"], key="qp_type")
+        if plot_type_label == "Custom Size":
+            cw = st.number_input("Custom Width", min_value=1, max_value=20, value=4, key="qp_cw")
+            ch = st.number_input("Custom Height", min_value=1, max_value=20, value=3, key="qp_ch")
+            plot_type = {"w": int(cw), "h": int(ch)}
+        else:
+            plot_type = PLOT_TYPES_CONFIG[plot_type_label]
             
-            with row_cols[c + 1]:
-                if value > 0:
-                    st.button(str(value), key=f"cell_{key}", type="primary")
-                else:
-                    if st.button(" ", key=f"cell_{key}", type="secondary"):
-                        if eraser_mode == "Erase":
-                            st.session_state.grid[key] = 0
-                        else:
-                            st.session_state.grid[key] = brush_id
-                            if use_auto:
-                                st.session_state['manual_next'] = next_id
-                        st.rerun()
+    with qp4:
+        use_auto = st.checkbox("Auto-ID", value=True, key=f"auto_id_{sec_name}")
+        if use_auto:
+            manual_id = next_id
+            st.success(f"🔥 Next ID: **{next_id}**")
+        else:
+            manual_id = st.number_input("Manual ID", min_value=1, max_value=max_plot_id, value=next_id, key=f"manual_id_{sec_name}")
 
-    # CLOSE THE WRAPPER
-    st.markdown('</div>', unsafe_allow_html=True)
+    if st.button(f"🖌️ Paint Plot (ID {manual_id})", type="primary", width='stretch'):
+        end_row = int(start_row) + plot_type['h'] - 1
+        end_col = int(start_col) + plot_type['w'] - 1
+        if end_row < rows and end_col < cols:
+            for r in range(int(start_row), end_row + 1):
+                for c in range(int(start_col), end_col + 1):
+                    st.session_state.grid_df.iloc[r, c] = manual_id
+            # Magic fix
+            if f"map_editor_{sec_name}" in st.session_state:
+                del st.session_state[f"map_editor_{sec_name}"]
+            st.rerun()
+        else:
+            st.error(f"❌ Block needs {plot_type['h']} rows and {plot_type['w']} cols. It doesn't fit here.")
 
     st.divider()
 
-    # ── Assign & Save ──
+    # ── MERGED GRID EDITOR (Step 1 & 3 Merged, Zeros Hidden) ──
+    st.subheader("🗺️ Map Editor (Click to Paint / Erase)")
+    
+    # Options: None (blank), 1 to max
+    options_list = [None] + list(range(1, max_plot_id + 1))
+
+    edited_df = st.data_editor(
+        st.session_state.grid_df,
+        use_container_width=True,
+        key=f"map_editor_{sec_name}",
+        height=500,
+        hide_index=False, 
+        column_config={col: st.column_config.SelectboxColumn(label=col, options=options_list, required=False) for col in st.session_state.grid_df.columns}
+    )
+
+    # Convert NaN/None back to 0 for saving, but keep display as None later
+    edited_df = edited_df.fillna(0)
+    st.session_state.grid_df = edited_df.replace(0, None)
+
+    st.divider()
+
+    # ── Assign Owner & Save (Renamed) ──
     st.subheader("📋 Assign Owner & Save")
-    unique_ids = sorted([v for v in st.session_state.grid.values() if v > 0])
+    unique_ids = sorted([int(v) for v in edited_df.values.flatten() if v > 0])
 
     if not unique_ids:
         st.info("Paint a plot first.")
@@ -293,7 +253,7 @@ def show_floorplan_designer():
             rows_list, cols_list = [], []
             for r in range(rows):
                 for c in range(cols):
-                    if st.session_state.grid.get(f"{r}_{c}") == selected_id:
+                    if int(edited_df.iloc[r, c]) == selected_id:
                         rows_list.append(r)
                         cols_list.append(c)
 
@@ -345,9 +305,7 @@ def show_floorplan_designer():
         with a4:
             st.write("")
             if st.button("🧹 Erase Selected Plot", width='stretch'):
-                for k, v in st.session_state.grid.items():
-                    if v == selected_id:
-                        st.session_state.grid[k] = 0
+                st.session_state.grid_df = edited_df.replace(selected_id, None)
                 try:
                     supabase.table('box_map_plots').delete().eq('section_name', sec_name).eq('plot_id', selected_id).execute()
                 except:
@@ -355,29 +313,24 @@ def show_floorplan_designer():
                 st.success(f"Plot {selected_id} erased from map!")
                 st.rerun()
 
-    # ── 🆕 LIVE VISUAL PREVIEW (Dotted Empty Boxes + Axis) ──
+    # ── Live Visual Preview (No "Step" label) ──
     st.divider()
     st.subheader(f"👁️ Live Visual Preview ({sec_name})")
-    st.caption("Blue = Painted, Dotted Grey = Empty Boxes.")
-
     html = '<div style="overflow-x: auto; border: 2px solid #333; padding: 5px; border-radius: 8px; background: #1e1e1e; display: inline-block;">'
     html += '<div style="display: flex;"><div style="width: 30px;"></div>'
     for c in range(cols):
         html += f'<div style="width: 25px; font-size: 10px; color: #aaa; text-align: center;">{c}</div>'
     html += '</div>'
-
     for r in range(rows):
         html += '<div style="display: flex;">'
         html += f'<div style="width: 30px; font-size: 10px; color: #aaa; display: flex; align-items: center; justify-content: center;">{r}</div>'
         for c in range(cols):
-            val = st.session_state.grid.get(f"{r}_{c}", 0)
-            if val > 0:
-                # BLUE PAINTED BOX
-                html += f'<div style="width: 25px; height: 25px; background: #1f77b4; border: 1px solid white; color: white; font-size: 8px; display: flex; align-items: center; justify-content: center;">{val}</div>'
+            val = edited_df.iloc[r, c]
+            plot_id = int(val) if not pd.isna(val) else 0
+            if plot_id > 0:
+                html += f'<div style="width: 25px; height: 25px; background: #28a745; border: 1px solid white; color: white; font-size: 8px; display: flex; align-items: center; justify-content: center;">{plot_id}</div>'
             else:
-                # DOTTED GREY BOX
-                html += '<div style="width: 25px; height: 25px; background: #2a2a2a; border: 1px dashed #555;"></div>'
+                html += f'<div style="width: 25px; height: 25px; background: #2a2a2a; border: 1px dashed #555;"></div>'
         html += '</div>'
     html += '</div>'
-
     st.markdown(html, unsafe_allow_html=True)
