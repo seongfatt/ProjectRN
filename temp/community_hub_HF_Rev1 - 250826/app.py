@@ -116,12 +116,10 @@ from pages.volunteer_portal import show_volunteer_portal
 st.markdown(MOBILE_CSS, unsafe_allow_html=True)
 
 def inject_responsive_css():
-    # 🔥 CRITICAL FIX: Apply CSS to everything EXCEPT the map grid.
     st.markdown("""
     <style>
     section.main .block-container { max-width: 1500px; padding-top: 2rem; }
-    /* Do NOT touch the map-grid-container buttons */
-    section.main div[data-testid="stButton"] button:not(.map-grid-container button) {
+    div[data-testid="stButton"] button {
         min-height: 44px;
         border-radius: 10px;
         transition: all .15s ease;
@@ -135,7 +133,7 @@ def inject_responsive_css():
         h1 { font-size: 1.55rem !important; }
         h2 { font-size: 1.3rem !important; }
         h3 { font-size: 1.1rem !important; }
-        section.main div[data-testid="stButton"] button:not(.map-grid-container button) { min-height: 52px; font-size: 17px; }
+        div[data-testid="stButton"] button { min-height: 52px; font-size: 17px; }
         input, select, textarea { font-size: 16px !important; min-height: 46px; }
         div[data-testid="stMetric"] div { font-size: 1.5rem !important; }
         div[data-testid="stMetric"] label { font-size: .85rem !important; }
@@ -1013,7 +1011,9 @@ if st.session_state.is_authenticated:
         nav_items = [
             {"id": "dashboard", "icon": "📊", "title": "Dashboard"},
             {"id": "checkin", "icon": "🎟️", "title": "Check-In"},
+            {"id": "floorplan", "icon": "🗺️", "title": "Floor Plan"},
             {"id": "floorplan_designer", "icon": "🎨", "title": "Map Designer"},
+
         ]
         # Only add Face Check-In if available
         if FACE_AVAILABLE and show_face_checkin is not None:
@@ -1097,6 +1097,9 @@ if st.session_state.is_authenticated:
         show_settings()
     elif page == "face_checkin" and FACE_AVAILABLE and show_face_checkin is not None:
         show_face_checkin()
+    elif page == "floorplan":
+        from pages.floorplan_view import show_floorplan
+        show_floorplan()
     elif page == "floorplan_designer":
         from pages.floorplan_designer import show_floorplan_designer
         show_floorplan_designer()
