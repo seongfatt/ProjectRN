@@ -331,7 +331,7 @@ def show_floorplan_designer():
 
     # ── Assign & Save ──
     st.subheader("📋 Assign Owner & Save")
-    unique_ids = sorted(list(set([v for v in st.session_state.grid.values() if v > 0])))
+    unique_ids = sorted([v for v in st.session_state.grid.values() if v > 0])
 
     if not unique_ids:
         st.info("Paint a plot first.")
@@ -567,29 +567,13 @@ def show_master_map_view():
     for sec in config_data:
         master_grid[sec['map_row']][sec['map_col']] = sec
 
-    # 🔥 NEW: Calculate the exact pixel width for each column so the header aligns!
-    col_widths = []
-    for c in range(max_col + 1):
-        section_found = False
-        for r in range(max_row + 1):
-            if master_grid[r][c]:
-                # 15px per box + 2px borders/margins
-                width_px = (master_grid[r][c]['cols'] * 15) + 2
-                col_widths.append(width_px)
-                section_found = True
-                break
-        if not section_found:
-            col_widths.append(52)  # Default width for empty walkway gaps
-
     # HTML canvas
     html = '<div style="overflow-x: auto; border: 2px solid #333; padding: 5px; border-radius: 8px; background: #1e1e1e; display: inline-block;">'
 
-    # Top axis (Col numbers) - Now perfectly aligned!
+    # Top axis (Col numbers)
     html += '<div style="display: flex;"><div style="width: 30px;"></div>'
     for c in range(max_col + 1):
-        width = col_widths[c]
-        # 🔥 ADDED margin-left/right to match the sections underneath
-        html += f'<div style="width: {width}px; font-size: 12px; color: #aaa; text-align: center; border-bottom: 1px solid #555; padding-bottom: 5px; margin-left: 2px; margin-right: 2px;">Col {c}</div>'
+        html += f'<div style="width: 100px; font-size: 12px; color: #aaa; text-align: center; border-bottom: 1px solid #555; padding-bottom: 5px;">Col {c}</div>'
     html += '</div>'
 
     # Grid rows

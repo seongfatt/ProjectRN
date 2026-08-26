@@ -196,24 +196,22 @@ def show_floorplan_designer():
 
     qp1, qp2, qp3, qp4 = st.columns(4)
     with qp1:
-        # This dropdown now actually works!
-        selected_brush = st.selectbox("Current Brush (Plot ID)", list(range(1, max_plot_id + 1)), index=next_id - 1, key="brush_id")
+        brush_id = st.selectbox("Current Brush (Plot ID)", list(range(1, max_plot_id + 1)), index=next_id - 1, key="brush_id")
     with qp2:
+        st.write("")
+        use_auto = st.checkbox("Auto Next ID", value=True, key="use_auto")
+    with qp3:
         plot_type_label = st.selectbox("Select Plot Type", list(PLOT_TYPES_CONFIG.keys()) + ["Custom Size"], key="qp_type")
         if plot_type_label == "Custom Size":
             cw = st.number_input("Custom Width", min_value=1, max_value=20, value=4, key="qp_cw")
             ch = st.number_input("Custom Height", min_value=1, max_value=20, value=3, key="qp_ch")
-            plot_type_label = "Custom Size"
-    with qp3:
-        use_auto = st.checkbox("Auto Next ID", value=True, key="use_auto")
+            plot_type_label = "Custom Size"  # Overwrite the label
+        # 🔥 Now plot_type_label is DEFINED and accessible later!
     with qp4:
-        if use_auto:
-            brush_id = next_id
-            st.success(f"⚡ Auto-Generating ID: **{brush_id}**")
-        else:
-            # 🔥 FIX: Use the dropdown selection as the actual brush!
-            brush_id = selected_brush
-            st.info(f"Manual Brush Selected: **{brush_id}**")
+        st.write("")
+        if not use_auto:
+            brush_id = st.number_input("Manual Plot ID", min_value=1, max_value=max_plot_id, value=next_id)
+        st.info(f"Next Auto ID: **{next_id}**")
 
     # 🔥 FIX: Define eraser_mode OUTSIDE the block so it is always accessible!
     eraser_mode = "Paint"  # Default value
@@ -321,8 +319,7 @@ def show_floorplan_designer():
                             st.session_state.grid[cell_id] = current_brush
                             # 🔥 Store the type so it gets the right color!
                             st.session_state.plot_types[current_brush] = current_label
-                        # 🔥 FIX: Rerun the WHOLE page so "Assign & Save" instantly updates!
-                        st.rerun()
+                        st.rerun(scope="fragment")
 
     render_grid(brush_id, plot_type_label, eraser_mode)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -331,7 +328,7 @@ def show_floorplan_designer():
 
     # ── Assign & Save ──
     st.subheader("📋 Assign Owner & Save")
-    unique_ids = sorted(list(set([v for v in st.session_state.grid.values() if v > 0])))
+    unique_ids = sorted([v for v in st.session_state.grid.values() if v > 0])
 
     if not unique_ids:
         st.info("Paint a plot first.")
@@ -404,11 +401,11 @@ def show_floorplan_designer():
                 st.success(f"Plot {selected_id} erased from map!")
                 st.rerun()
 
-        # ── 📊 LIVE VISUAL PREVIEW & DATA SUMMARY ──
+    # ── LIVE VISUAL PREVIEW (Dynamic Colors) ──
     st.divider()
     st.subheader(f"👁️ Live Visual Preview ({sec_name})")
+    st.caption("Colors follow Type (A=Green, B=Orange, C=Blue)")
 
-    # Build the Preview Grid
     html = '<div style="overflow-x: auto; border: 2px solid #333; padding: 5px; border-radius: 8px; background: #1e1e1e; display: inline-block;">'
     html += '<div style="display: flex;"><div style="width: 30px;"></div>'
     for c in range(cols):
@@ -421,87 +418,19 @@ def show_floorplan_designer():
         for c in range(cols):
             val = st.session_state.grid.get(f"{r}_{c}", 0)
             if val > 0:
-                # Use the box count for color
+                # 🔥 AUTO-COUNT: Count total boxes for this Plot ID
                 box_count = sum(1 for v in st.session_state.grid.values() if v == val)
+                
+                # 🔥 AUTO-COLOR: Get color based on box count
                 color = get_color_from_box_count(box_count)
+                
                 html += f'<div style="width: 25px; height: 25px; background: {color}; border: 1px solid white; color: white; font-size: 8px; display: flex; align-items: center; justify-content: center;">{val}</div>'
             else:
                 html += '<div style="width: 25px; height: 25px; background: #2a2a2a; border: 1px dashed #555;"></div>'
         html += '</div>'
     html += '</div>'
+
     st.markdown(html, unsafe_allow_html=True)
-
-    # ── 📊 1. SECTION DATA SUMMARY (Metrics) ──
-    all_vals = list(st.session_state.grid.values())
-    # 🔥 FIX: Use SET to guarantee NO repeats!
-    unique_ids = sorted(list(set([v for v in all_vals if v > 0])))
-
-    if unique_ids:
-        total_boxes = sum(len([v for v in all_vals if v == pid]) for pid in unique_ids)
-        total_area = total_boxes * 0.25  # 1 box = 0.25 m²
-        
-        st.markdown("#### 📊 Section Data Summary")
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("📍 Total Plots", len(unique_ids))
-        m2.metric("📦 Total Boxes (50x50cm)", total_boxes)
-        m3.metric("📐 Total Area", f"{total_area:.2f} m²")
-        m4.metric("📏 Average Plot Size", f"{total_area / len(unique_ids):.2f} m²")
-
-        # ── 🎨 2. PLOT TYPE LEGEND ──
-        st.markdown("#### 🎨 Plot Type Legend")
-        st.markdown("""
-        <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-bottom: 10px; padding: 10px; background: #1e1e1e; border-radius: 8px;">
-            <div style="display: flex; align-items: center; gap: 5px;"> <div style="width: 15px; height: 15px; background: #2ca02c; border-radius: 2px;"></div> <span>Type A (12 boxes) = 3.0 m²</span> </div>
-            <div style="display: flex; align-items: center; gap: 5px;"> <div style="width: 15px; height: 15px; background: #ff7f0e; border-radius: 2px;"></div> <span>Type B (10 boxes) = 2.5 m²</span> </div>
-            <div style="display: flex; align-items: center; gap: 5px;"> <div style="width: 15px; height: 15px; background: #1f77b4; border-radius: 2px;"></div> <span>Type C (8 boxes) = 2.0 m²</span> </div>
-            <div style="display: flex; align-items: center; gap: 5px;"> <div style="width: 15px; height: 15px; background: #6f42c1; border-radius: 2px;"></div> <span>Custom (Any size)</span> </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # ── 📋 3. PLOT BREAKDOWN TABLE (NO REPEATS, AUTO-LABELS!) ──
-        st.markdown("#### 📋 Plot Breakdown")
-        st.caption("One row per unique Plot ID. Auto-classified by size.")
-
-        # 🔥 HELPER: Auto-identify type based on box count
-        def get_type_auto(box_count):
-            if box_count == 12: return "Type A (12 boxes)"
-            if box_count == 10: return "Type B (10 boxes)"
-            if box_count == 8: return "Type C (8 boxes)"
-            return "Custom Size"
-
-        table_html = "<table style='width: 100%; border-collapse: collapse; color: white; font-size: 14px;'>"
-        table_html += "<tr style='background: #333; text-align: left;'>"
-        table_html += "<th style='padding: 8px; border: 1px solid #555;'>Plot ID</th>"
-        table_html += "<th style='padding: 8px; border: 1px solid #555;'>Type</th>"
-        table_html += "<th style='padding: 8px; border: 1px solid #555;'>Box Count</th>"
-        table_html += "<th style='padding: 8px; border: 1px solid #555;'>Area (m²)</th>"
-        table_html += "<th style='padding: 8px; border: 1px solid #555;'>Color</th>"
-        table_html += "</tr>"
-
-        for pid in unique_ids:
-            box_count = len([v for v in all_vals if v == pid])
-            area = box_count * 0.25
-            
-            # 🔥 FIX: Auto-classify the type based on size
-            type_label = get_type_auto(box_count)
-            
-            # 🔥 FIX: Get color based on box count (so colors match the legend perfectly)
-            color = get_color_from_box_count(box_count)
-            
-            # Add a row for this unique Plot ID
-            table_html += "<tr style='text-align: center;'>"
-            table_html += f"<td style='padding: 8px; border: 1px solid #555;'>{pid}</td>"
-            table_html += f"<td style='padding: 8px; border: 1px solid #555;'>{type_label}</td>"
-            table_html += f"<td style='padding: 8px; border: 1px solid #555;'>{box_count}</td>"
-            table_html += f"<td style='padding: 8px; border: 1px solid #555;'>{area:.2f}</td>"
-            table_html += f"<td style='padding: 8px; border: 1px solid #555;'><div style='width: 20px; height: 20px; background: {color}; border-radius: 2px; margin: 0 auto;'></div></td>"
-            table_html += "</tr>"
-            
-        table_html += "</table>"
-        
-        st.html(table_html)
-    else:
-        st.info("Paint a plot to see the section data summary and breakdown.")
 
 
 # ==========================================
@@ -567,29 +496,13 @@ def show_master_map_view():
     for sec in config_data:
         master_grid[sec['map_row']][sec['map_col']] = sec
 
-    # 🔥 NEW: Calculate the exact pixel width for each column so the header aligns!
-    col_widths = []
-    for c in range(max_col + 1):
-        section_found = False
-        for r in range(max_row + 1):
-            if master_grid[r][c]:
-                # 15px per box + 2px borders/margins
-                width_px = (master_grid[r][c]['cols'] * 15) + 2
-                col_widths.append(width_px)
-                section_found = True
-                break
-        if not section_found:
-            col_widths.append(52)  # Default width for empty walkway gaps
-
     # HTML canvas
     html = '<div style="overflow-x: auto; border: 2px solid #333; padding: 5px; border-radius: 8px; background: #1e1e1e; display: inline-block;">'
 
-    # Top axis (Col numbers) - Now perfectly aligned!
+    # Top axis (Col numbers)
     html += '<div style="display: flex;"><div style="width: 30px;"></div>'
     for c in range(max_col + 1):
-        width = col_widths[c]
-        # 🔥 ADDED margin-left/right to match the sections underneath
-        html += f'<div style="width: {width}px; font-size: 12px; color: #aaa; text-align: center; border-bottom: 1px solid #555; padding-bottom: 5px; margin-left: 2px; margin-right: 2px;">Col {c}</div>'
+        html += f'<div style="width: 100px; font-size: 12px; color: #aaa; text-align: center; border-bottom: 1px solid #555; padding-bottom: 5px;">Col {c}</div>'
     html += '</div>'
 
     # Grid rows
