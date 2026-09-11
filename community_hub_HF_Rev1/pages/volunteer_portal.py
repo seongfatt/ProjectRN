@@ -393,7 +393,7 @@ def show_volunteer_portal(token, activity_param=None):
                         # 2. Show Processing State
                         st.markdown(f"""
                         <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                            <h4 style="margin: 0 0 8px 0; color: #0d47a1; font-size: 18px;"> Processing Check-In...</h4>
+                            <h4 style="margin: 0 0 8px 0; color: #0d47a1; font-size: 18px;">🔄 Processing Check-In...</h4>
                             <p style="margin: 0 0 5px 0; color: #1a1a1a; font-size: 20px; font-weight: bold;">{resident_name}</p>
                             <p style="margin: 0; color: #555; font-size: 14px;">Status: {resident_type}</p>
                         </div>
@@ -405,46 +405,65 @@ def show_volunteer_portal(token, activity_param=None):
                         )
                         
                         if success:
+                            # ✅ NEW CHECK-IN SUCCESS
                             st.balloons()
                             st.session_state.checkin_success = True
                             
-                            # 🔥 FULLY HANDS-FREE AUTO-RESET
-                            # This shows a success message and automatically refreshes the page after 3 seconds
+                            # Show success with auto-reset
                             st.markdown("""
-                            <div style="background: #d4edda; border: 2px solid #28a745; padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0;">
-                                <h2 style="color: #155724; margin: 0;">✅ Check-in Successful!</h2>
-                                <p style="color: #155724; font-size: 18px; margin: 10px 0 0 0;">Ready for next resident in 3 seconds...</p>
+                            <div style="background: #d4edda; border: 3px solid #28a745; padding: 25px; border-radius: 12px; text-align: center; margin: 20px 0; animation: fadeIn 0.5s;">
+                                <div style="font-size: 48px; margin-bottom: 10px;">✅</div>
+                                <h2 style="color: #155724; margin: 0 0 10px 0;">Check-in Successful!</h2>
+                                <p style="color: #155724; font-size: 18px; margin: 0;">Auto-resetting for next resident...</p>
+                                <p style="color: #856404; font-size: 14px; margin: 15px 0 0 0;">Page will refresh in 3 seconds</p>
                             </div>
                             <script>
-                                // Wait 3 seconds, then reload the page to clear everything for the next scan
                                 setTimeout(function() {
                                     window.location.reload();
                                 }, 3000);
                             </script>
                             """, unsafe_allow_html=True)
                             
-                            # Stop the script here so it doesn't show the "Clear" button
-                            st.stop() 
+                            st.stop()  # Stop execution to prevent showing clear button
                             
                         else:
-                            # ️ ALREADY CHECKED IN - Show friendly info
-                            if "already" in message.lower() or "fully checked in" in message.lower():
-                                st.markdown(f"""
-                                <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                                    <div style="display: flex; align-items: center; gap: 10px;">
-                                        <span style="font-size: 24px;">ℹ️</span>
-                                        <div>
-                                            <h4 style="margin: 0 0 5px 0; color: #856404; font-size: 16px;">Already Checked In</h4>
-                                            <p style="margin: 0; color: #1a1a1a; font-size: 14px;">
-                                                <strong>{resident_name}</strong> is already registered for <strong>{selected_activity}</strong> today.
-                                            </p>
-                                        </div>
+                            # ℹ️ ALREADY CHECKED IN - Show prominent yellow box
+                            st.markdown(f"""
+                            <div style="background: #fff3cd; border: 3px solid #ffc107; padding: 25px; border-radius: 12px; margin: 20px 0; animation: fadeIn 0.5s;">
+                                <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 15px;">
+                                    <span style="font-size: 48px;">ℹ️</span>
+                                    <div>
+                                        <h3 style="margin: 0 0 5px 0; color: #856404; font-size: 22px;">Already Checked In</h3>
+                                        <p style="margin: 0; color: #1a1a1a; font-size: 18px; font-weight: bold;">{resident_name}</p>
                                     </div>
                                 </div>
-                                """, unsafe_allow_html=True)
-                            else:
-                                st.error(message)
-                            st.rerun()
+                                <div style="background: #ffe8a1; padding: 15px; border-radius: 8px; margin: 15px 0;">
+                                    <p style="margin: 0 0 10px 0; color: #856404; font-size: 16px;">
+                                        <strong>Activity:</strong> {selected_activity}
+                                    </p>
+                                    <p style="margin: 0 0 10px 0; color: #856404; font-size: 16px;">
+                                        <strong>Date:</strong> {selected_date.strftime('%d %B %Y')}
+                                    </p>
+                                    <p style="margin: 0; color: #856404; font-size: 14px;">
+                                        {message}
+                                    </p>
+                                </div>
+                                <div style="text-align: center; margin-top: 15px; padding-top: 15px; border-top: 2px solid #ffc107;">
+                                    <p style="color: #856404; font-size: 14px; margin: 0;">
+                                        ℹ️ No action needed - resident is already registered for today
+                                    </p>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # Add a manual clear button for "already checked in" cases
+                            if st.button("✅ Acknowledge & Continue", type="primary", use_container_width=True, key="ack_already_checked"):
+                                st.session_state.last_processed_qr = ""
+                                if 'unified_qr_input' in st.session_state:
+                                    del st.session_state.unified_qr_input
+                                st.rerun()
+                            
+                            st.stop()  # Stop to prevent showing other buttons
                     else:
                         st.error("❌ Resident not found in database.")
                         st.rerun()
