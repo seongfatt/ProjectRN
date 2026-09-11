@@ -335,7 +335,7 @@ def show_volunteer_portal(token, activity_param=None):
     if method == "📸 Real-Time QR Scanner (Auto-Detect)":
         st.markdown("""
         <div class="method-card">
-            <h3> Real-Time QR Scanner</h3>
+            <h3>📸 Real-Time QR Scanner</h3>
             <p style="font-size: 15px; font-weight: 500;">Point camera at QR code - automatic detection!</p>
             <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin: 15px 0; color: #1a1a1a;">
                 <strong>📱 How it works:</strong> Allow camera access and point at the QR code.<br>
@@ -357,27 +357,25 @@ def show_volunteer_portal(token, activity_param=None):
         </div>
         """, unsafe_allow_html=True)
         
-                # Real-time QR scanner
         qr_code_scanner_auto_detect()
         
-        st.info(" **Auto-Check-In Enabled:** Point camera at QR code to check in instantly.")
+        st.info("💡 **Auto-Fill:** Scanned QR codes will appear below. You can also type manually.")
         
-        # Hidden text input to capture scanned data
-        scanned_qr = st.text_input(
-            "Scanned QR Code (Auto-filled)",
-            placeholder="Waiting for scan...",
-            key="auto_scanned_qr",
+        # 🔥 SINGLE INPUT FIELD (serves both auto-scan and manual entry)
+        qr_input = st.text_input(
+            "QR Code ID (Auto-filled or Manual Entry)",
+            placeholder="Waiting for scan or type ID here...",
+            key="unified_qr_input",
             label_visibility="collapsed"
         )
         
-        # 🔥 AUTO CHECK-IN LOGIC
-        if scanned_qr and len(scanned_qr.strip()) > 5:
-            extracted_pid = scanned_qr.strip()
+        if qr_input and len(qr_input.strip()) > 5:
+            extracted_pid = qr_input.strip()
             
             # Handle URL format (e.g., https://...?pid=12345)
-            if 'pid=' in scanned_qr:
+            if 'pid=' in qr_input:
                 try:
-                    parsed_url = urllib.parse.urlparse(scanned_qr)
+                    parsed_url = urllib.parse.urlparse(qr_input)
                     query_params = urllib.parse.parse_qs(parsed_url.query)
                     extracted_pid = query_params.get('pid', [None])[0]
                 except:
@@ -390,13 +388,13 @@ def show_volunteer_portal(token, activity_param=None):
                     
                     if resident.data:
                         resident_name = resident.data[0]['name']
-                        resident_type = " New" if resident.data[0].get('is_new') else "⭐ Regular"
+                        resident_type = "🆕 New" if resident.data[0].get('is_new') else "⭐ Regular"
                         
                         # 2. Show Processing State
                         st.markdown(f"""
                         <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; border-radius: 8px; margin: 10px 0;">
                             <h4 style="margin: 0 0 8px 0; color: #0d47a1; font-size: 18px;">🔄 Processing Check-In...</h4>
-                            <p style="margin: 0; color: #1a1a1a; font-size: 16px; font-weight: bold;">{resident_name}</p>
+                            <p style="margin: 0 0 5px 0; color: #1a1a1a; font-size: 20px; font-weight: bold;">{resident_name}</p>
                             <p style="margin: 0; color: #555; font-size: 14px;">Status: {resident_type}</p>
                         </div>
                         """, unsafe_allow_html=True)
@@ -410,24 +408,24 @@ def show_volunteer_portal(token, activity_param=None):
                             st.balloons()
                             st.session_state.checkin_success = True
                             # Clear the input so it's ready for the next person
-                            st.session_state.auto_scanned_qr = "" 
+                            st.session_state.unified_qr_input = ""
                             st.rerun()
                         else:
                             st.error(message)
                             # Clear input to allow retry or next scan
-                            st.session_state.auto_scanned_qr = ""
+                            st.session_state.unified_qr_input = ""
                             st.rerun()
                     else:
                         st.error("❌ Resident not found in database.")
-                        st.session_state.auto_scanned_qr = ""
+                        st.session_state.unified_qr_input = ""
                         st.rerun()
                 except Exception as e:
                     st.error(f"Error: {e}")
-                    st.session_state.auto_scanned_qr = ""
+                    st.session_state.unified_qr_input = ""
                     st.rerun()
         
         st.divider()
-        st.markdown("<p style='color: #1a1a1a !important; font-weight: bold; margin-bottom: 5px;'>⌨️ Or enter manually:</p>", unsafe_allow_html=True)
+        st.caption("💡 **Tip:** The camera scanner auto-fills the field above. You can also type the resident ID manually if needed.")
         
         if 'clear_manual_qr' not in st.session_state:
             st.session_state.clear_manual_qr = False
