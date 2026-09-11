@@ -400,7 +400,7 @@ def show_volunteer_portal(token, activity_param=None):
                         )
                         
                         if success:
-                            st.balloons()
+                            # st.balloons()
                             st.session_state.checkin_success = True
                             st.rerun()
                         else:
@@ -413,10 +413,15 @@ def show_volunteer_portal(token, activity_param=None):
                     st.error(f"Error: {e}")
                     st.rerun()
         
+                # 🔥 Manual Clear Button (Safe way to reset the box for the next person)
         if st.session_state.last_processed_qr != "":
             if st.button("🔄 Clear & Scan Next Person", use_container_width=True):
                 st.session_state.last_processed_qr = ""
-                st.session_state.unified_qr_input = ""
+                
+                # 🔥 FIX: Use 'del' to safely clear the widget state without StreamlitAPIException
+                if 'unified_qr_input' in st.session_state:
+                    del st.session_state.unified_qr_input
+                    
                 st.rerun()
 
         st.divider()
