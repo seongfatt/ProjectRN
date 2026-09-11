@@ -365,10 +365,11 @@ def show_volunteer_portal(token, activity_param=None):
         if 'last_processed_qr' not in st.session_state:
             st.session_state.last_processed_qr = ""
 
-        # AUTO CHECK-IN LOGIC - Only triggers if the QR code is NEW
+                # AUTO CHECK-IN LOGIC - Only triggers if the QR code is NEW
         if qr_input and len(qr_input.strip()) > 5 and qr_input.strip() != st.session_state.last_processed_qr:
             extracted_pid = qr_input.strip()
             
+            # Handle URL format (e.g., https://...?pid=12345)
             if 'pid=' in qr_input:
                 try:
                     parsed_url = urllib.parse.urlparse(qr_input)
@@ -378,33 +379,71 @@ def show_volunteer_portal(token, activity_param=None):
                     pass
             
             if extracted_pid and len(str(extracted_pid)) > 5:
+                # Mark as processed IMMEDIATELY to prevent infinite loop on rerun
                 st.session_state.last_processed_qr = extracted_pid
                 
                 try:
+                    # 1. Find Resident
                     resident = supabase.table('participants').select("*").eq('id', extracted_pid).execute()
                     
                     if resident.data:
                         resident_name = resident.data[0]['name']
                         resident_type = "🆕 New" if resident.data[0].get('is_new') else "⭐ Regular"
                         
+                        # 2. Show Processing State
                         st.markdown(f"""
                         <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                            <h4 style="margin: 0 0 8px 0; color: #0d47a1; font-size: 18px;">🔄 Processing Check-In...</h4>
+                            <h4 style="margin: 0 0 8px 0; color: #0d47a1; font-size: 18px;"> Processing Check-In...</h4>
                             <p style="margin: 0 0 5px 0; color: #1a1a1a; font-size: 20px; font-weight: bold;">{resident_name}</p>
                             <p style="margin: 0; color: #555; font-size: 14px;">Status: {resident_type}</p>
                         </div>
                         """, unsafe_allow_html=True)
                         
+                        # 3. AUTO EXECUTE CHECK-IN
                         success, message, _ = AttendanceService.process_checkin(
                             extracted_pid, selected_date, selected_activity, s1, s2, s3, s4
                         )
                         
                         if success:
-                            # st.balloons()
+                            st.balloons()
                             st.session_state.checkin_success = True
-                            st.rerun()
+                            
+                            # 🔥 FULLY HANDS-FREE AUTO-RESET
+                            # This shows a success message and automatically refreshes the page after 3 seconds
+                            st.markdown("""
+                            <div style="background: #d4edda; border: 2px solid #28a745; padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0;">
+                                <h2 style="color: #155724; margin: 0;">✅ Check-in Successful!</h2>
+                                <p style="color: #155724; font-size: 18px; margin: 10px 0 0 0;">Ready for next resident in 3 seconds...</p>
+                            </div>
+                            <script>
+                                // Wait 3 seconds, then reload the page to clear everything for the next scan
+                                setTimeout(function() {
+                                    window.location.reload();
+                                }, 3000);
+                            </script>
+                            """, unsafe_allow_html=True)
+                            
+                            # Stop the script here so it doesn't show the "Clear" button
+                            st.stop() 
+                            
                         else:
-                            st.error(message)
+                            # ️ ALREADY CHECKED IN - Show friendly info
+                            if "already" in message.lower() or "fully checked in" in message.lower():
+                                st.markdown(f"""
+                                <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <span style="font-size: 24px;">ℹ️</span>
+                                        <div>
+                                            <h4 style="margin: 0 0 5px 0; color: #856404; font-size: 16px;">Already Checked In</h4>
+                                            <p style="margin: 0; color: #1a1a1a; font-size: 14px;">
+                                                <strong>{resident_name}</strong> is already registered for <strong>{selected_activity}</strong> today.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                            else:
+                                st.error(message)
                             st.rerun()
                     else:
                         st.error("❌ Resident not found in database.")
@@ -412,17 +451,6 @@ def show_volunteer_portal(token, activity_param=None):
                 except Exception as e:
                     st.error(f"Error: {e}")
                     st.rerun()
-        
-                # 🔥 Manual Clear Button (Safe way to reset the box for the next person)
-        if st.session_state.last_processed_qr != "":
-            if st.button("🔄 Clear & Scan Next Person", use_container_width=True):
-                st.session_state.last_processed_qr = ""
-                
-                # 🔥 FIX: Use 'del' to safely clear the widget state without StreamlitAPIException
-                if 'unified_qr_input' in st.session_state:
-                    del st.session_state.unified_qr_input
-                    
-                st.rerun()
 
         st.divider()
         st.caption("💡 **Tip:** The camera scanner auto-fills the field above. Click 'Clear & Scan Next Person' when ready for the next resident.")
