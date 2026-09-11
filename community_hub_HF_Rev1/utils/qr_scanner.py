@@ -34,8 +34,8 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
             // --- STREAMLIT INTEGRATION ---
             // Access the parent window (the main Streamlit app)
             const parentDoc = window.parent.document;
-            // Find the specific text input by its placeholder
-            const targetInput = parentDoc.querySelector('input[placeholder="Waiting for scan..."]');
+            // Find the specific text input by partial placeholder match (much more robust!)
+            const targetInput = parentDoc.querySelector('input[placeholder*="Waiting for scan"]');
             
             if (targetInput) {{
                 // Use the native setter to bypass React's controlled input restrictions
@@ -48,7 +48,7 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
                 
                 console.log("Successfully injected QR code into Streamlit input.");
             }} else {{
-                console.log("Could not find Streamlit input with placeholder 'Waiting for scan...'");
+                console.log("Could not find Streamlit input with placeholder containing 'Waiting for scan'");
             }}
             // -----------------------------
 
