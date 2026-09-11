@@ -15,17 +15,17 @@ from PIL import Image
 import numpy as np
 import io
 from services import AttendanceService, RegistrationService
+from utils.qr_scanner import qr_code_scanner_auto_detect, clear_scanned_qr
 
-# 🔥 Optional: Try to import cv2 for QR scanning
+# 🔥 Optional: Try to import cv2 for QR scanning (fallback)
 try:
     import cv2
     CV2_AVAILABLE = True
 except ImportError:
     CV2_AVAILABLE = False
     cv2 = None
-    print("⚠️ cv2 not available — QR scanning fallback only")
 
-# 🔥 Optional: Try to import pyzbar for QR scanning (Most Reliable)
+# 🔥 Optional: Try to import pyzbar for QR scanning (fallback)
 try:
     from pyzbar import pyzbar
     PYZBAR_AVAILABLE = True
@@ -33,14 +33,10 @@ except ImportError:
     PYZBAR_AVAILABLE = False
 
 
-# ============================================
-# QR DECODING FUNCTION (Multi-Method Fallback)
-# ============================================
-
 def decode_qr_from_image(image):
-    """Decode QR code from PIL Image using multiple methods."""
+    """Decode QR code from PIL Image using multiple methods (fallback)."""
     
-    # Method 1: Try pyzbar (most reliable for standard QR codes)
+    # Method 1: Try pyzbar (most reliable)
     if PYZBAR_AVAILABLE:
         try:
             decoded_objects = pyzbar.decode(image)
@@ -49,7 +45,7 @@ def decode_qr_from_image(image):
                 print(f"✅ QR decoded with pyzbar: {qr_data}")
                 return qr_data
         except Exception as e:
-            print(f"⚠️ pyzbar error: {e}")
+            print(f"️ pyzbar error: {e}")
     
     # Method 2: Try OpenCV QRCodeDetector
     if CV2_AVAILABLE:
@@ -64,24 +60,9 @@ def decode_qr_from_image(image):
         except Exception as e:
             print(f"⚠️ OpenCV QR error: {e}")
     
-    # Method 3: Try OpenCV WeChat QR Detector (more robust for damaged/blurry codes)
-    if CV2_AVAILABLE:
-        try:
-            detector = cv2.wechat_qrcode_WeChatQRCode()
-            data, _ = detector.detectAndDecode(np.array(image))
-            if data:
-                print(f"✅ QR decoded with WeChat detector: {data}")
-                return data
-        except Exception:
-            pass  # WeChat detector not available in this cv2 build
-    
     print("❌ All QR detection methods failed")
     return None
 
-
-# ============================================
-# LOGO HELPER FUNCTION
-# ============================================
 
 def _get_logo_base64(logo_path="logo.png"):
     """Convert local logo to base64 so it renders inside HTML components."""
@@ -103,10 +84,6 @@ def _get_logo_base64(logo_path="logo.png"):
     )
 
 
-# ============================================
-# PROCESS CHECK-IN FUNCTION (1-4 SESSIONS)
-# ============================================
-
 def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
     """Core logic: Time Validation + SESSION UPDATE (1-4 sessions). Returns True/False."""
     try:
@@ -122,7 +99,7 @@ def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
 
         res = supabase.table('participants').select("*").eq('id', pid).execute()
         if not res.data:
-            st.error(f"❌ Resident ID not found: {pid}")
+            st.error(f" Resident ID not found: {pid}")
             return False
         resident = res.data[0]
 
@@ -213,12 +190,8 @@ def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
             return False
 
 
-# ============================================
-# MAIN VOLUNTEER PORTAL FUNCTION
-# ============================================
-
 def show_volunteer_portal(token, activity_param=None):
-    """UNIFIED VOLUNTEER PORTAL WITH RELIABLE QR SCANNING"""
+    """UNIFIED VOLUNTEER PORTAL WITH REAL-TIME QR SCANNING"""
     from pages.volunteer_access import validate_volunteer_token
     is_valid, msg = validate_volunteer_token(token)
     
@@ -333,7 +306,7 @@ def show_volunteer_portal(token, activity_param=None):
     flags = (flags + [False, False, False, False])[:4]
     s1, s2, s3, s4 = flags
 
-    # Show session time info if available (🔥 Dynamically checks up to 4 sessions)
+    # Show session time info if available
     if act_config:
         time_info = []
         for i in range(1, 5):
@@ -352,100 +325,94 @@ def show_volunteer_portal(token, activity_param=None):
 
     st.divider()
     st.subheader("📱 Step 3: Choose Check-In Method")
-    method = st.radio("How would you like to check in residents?", ["📸 Scan QR Code (Camera)", "⌨️ Phone / Name Search", "📝 Register New Resident"], horizontal=False, key="portal_method")
+    method = st.radio("How would you like to check in residents?", 
+                     ["📸 Real-Time QR Scanner (Auto-Detect)", 
+                      " Snapshot QR Scanner", 
+                      "️ Phone / Name Search", 
+                      " Register New Resident"], 
+                     horizontal=False, key="portal_method")
 
-    if method == "📸 Scan QR Code (Camera)":
+    if method == "📸 Real-Time QR Scanner (Auto-Detect)":
         st.markdown("""
         <div class="method-card">
-            <h3>📸 Scan QR Code</h3>
-            <p style="font-size: 15px; font-weight: 500;">Use your camera to scan the resident's QR code instantly.</p>
+            <h3> Real-Time QR Scanner</h3>
+            <p style="font-size: 15px; font-weight: 500;">Point camera at QR code - automatic detection!</p>
             <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin: 15px 0; color: #1a1a1a;">
-                <strong>📱 How it works:</strong> Click "Take Photo" to open your camera. Position the QR code within the frame and capture.<br>
-                <span style="font-size: 14px; color: #666;">✅ Works reliably on both iOS and Android devices.</span>
+                <strong>📱 How it works:</strong> Allow camera access and point at the QR code.<br>
+                <span style="font-size: 14px; color: #666;">✅ Auto-detects and checks in instantly!</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
         
         if st.session_state.get('checkin_success', False):
             st.session_state.checkin_success = False
+            clear_scanned_qr()
             st.rerun()
         
+        # Real-time QR scanner
         st.markdown("""
         <div class="qr-scanner-container">
-            <h4 style="color: #667eea; margin-top: 0;">📸 Camera Scanner</h4>
-            <p style="color: #666; font-size: 14px;">Take a photo of the QR code to scan it</p>
+            <h4 style="color: #667eea; margin-top: 0;">📸 Live Camera Scanner</h4>
+            <p style="color: #666; font-size: 14px;">Point camera at QR code - auto-detection enabled</p>
         </div>
         """, unsafe_allow_html=True)
         
-        camera_image = st.camera_input(
-            "📸 Position the QR code in the frame and click capture", 
-            key="qr_camera",
-            disabled=False,
-            label_visibility="visible"
+        qr_code_scanner_auto_detect()
+        
+        # Check if QR was scanned (via session state update from JavaScript)
+        # Note: This requires a Streamlit custom component or periodic refresh
+        # For now, we'll use a manual input fallback
+        st.info("💡 **Note:** After scanning, the QR code will appear in the manual input field below.")
+        
+        scanned_qr = st.text_input(
+            "Scanned QR Code (Auto-filled)",
+            placeholder="Waiting for scan...",
+            key="auto_scanned_qr",
+            label_visibility="collapsed"
         )
         
-        if camera_image is not None:
-            try:
-                image = Image.open(camera_image)
-                # ✅ FIX: Replaced use_container_width=True with width='stretch'
-                st.image(image, caption="📸 Captured Image", width='stretch')
-                
-                with st.spinner("🔍 Scanning QR code..."):
-                    qr_data = decode_qr_from_image(image)
-                
-                if qr_data:
-                    st.markdown('<div class="status-success">✅ QR Code detected successfully!</div>', unsafe_allow_html=True)
-                    with st.expander("📋 View QR Data"):
-                        st.code(qr_data, language="text")
-                    
-                    extracted_pid = qr_data
-                    if 'pid=' in qr_data:
-                        try:
-                            parsed_url = urllib.parse.urlparse(qr_data)
-                            query_params = urllib.parse.parse_qs(parsed_url.query)
-                            extracted_pid = query_params.get('pid', [None])[0]
-                        except: pass
-                    
-                    if extracted_pid and len(str(extracted_pid)) > 5:
-                        try:
-                            resident = supabase.table('participants').select("*").eq('id', extracted_pid).execute()
-                            if resident.data:
-                                resident_name = resident.data[0]['name']
-                                resident_type = "🆕 New" if resident.data[0].get('is_new') else "⭐ Regular"
-                                col1, col2 = st.columns([3, 1])
-                                with col1:
-                                    st.info(f"👤 **Resident:** {resident_name}\n\n📋 **Status:** {resident_type}")
-                                with col2:
-                                    # ✅ FIX: Replaced use_container_width=True with width='stretch'
-                                    if st.button("✅ Check In Now", type="primary", width='stretch', key="checkin_btn"):
-                                        with st.spinner("Processing check-in..."):
-                                            success, message, _ = AttendanceService.process_checkin(extracted_pid, selected_date, selected_activity, s1, s2, s3, s4)
-                                            if success:
-                                                st.rerun()
-                            else:
-                                st.markdown('<div class="status-error">❌ Resident not found in database. Please check the QR code.</div>', unsafe_allow_html=True)
-                        except Exception as e:
-                            st.error(f"Error finding resident: {e}")
+        if scanned_qr and len(scanned_qr.strip()) > 5:
+            extracted_pid = scanned_qr.strip()
+            if 'pid=' in scanned_qr:
+                try:
+                    parsed_url = urllib.parse.urlparse(scanned_qr)
+                    query_params = urllib.parse.parse_qs(parsed_url.query)
+                    extracted_pid = query_params.get('pid', [None])[0]
+                except:
+                    pass
+            
+            if extracted_pid and len(str(extracted_pid)) > 5:
+                try:
+                    resident = supabase.table('participants').select("*").eq('id', extracted_pid).execute()
+                    if resident.data:
+                        resident_name = resident.data[0]['name']
+                        resident_type = "🆕 New" if resident.data[0].get('is_new') else "⭐ Regular"
+                        
+                        st.markdown(f"""
+                        <div style="background: #d4edda; border-left: 4px solid #28a745; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                            <h4 style="margin: 0 0 8px 0; color: #155724; font-size: 18px;">✅ Resident Found</h4>
+                            <p style="margin: 0 0 5px 0; color: #1a1a1a; font-size: 20px; font-weight: bold;">{resident_name}</p>
+                            <p style="margin: 0; color: #495057; font-size: 14px;">Status: {resident_type}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        if st.button("✅ Check In Now", type="primary", width='stretch', key="auto_checkin_btn"):
+                            with st.spinner("Processing check-in..."):
+                                success, message, _ = AttendanceService.process_checkin(
+                                    extracted_pid, selected_date, selected_activity, s1, s2, s3, s4
+                                )
+                                if success:
+                                    st.success(message)
+                                    st.balloons()
+                                    st.session_state.checkin_success = True
+                                    clear_scanned_qr()
+                                    st.rerun()
+                                else:
+                                    st.error(message)
                     else:
-                        st.markdown('<div class="status-error">❌ Invalid QR code format. Could not extract resident ID.</div>', unsafe_allow_html=True)
-                else:
-                    st.markdown('<div class="status-error">❌ No QR code detected. Please try again with a clear image.</div>', unsafe_allow_html=True)
-                    with st.expander("💡 Tips for better scanning"):
-                        st.markdown("""
-                        - **💡 Ensure good lighting** - Avoid shadows or glare on the QR code
-                        - **📱 Hold steady** - Keep the camera still when taking the photo
-                        - **📏 Proper distance** - QR code should fill about 30-50% of the frame
-                        - **🎯 Focus** - Tap the screen to focus on the QR code
-                        """)
-            except Exception as e:
-                st.error(f"Error processing image: {e}")
-                st.info("Please try taking another photo.")
-        else:
-            st.markdown("""
-            <div style="text-align: center; color: #666; padding: 10px;">
-                <span style="font-size: 14px;">📷 Ready for next scan. Take a photo to continue.</span>
-            </div>
-            """, unsafe_allow_html=True)
+                        st.error("❌ Resident not found in database.")
+                except Exception as e:
+                    st.error(f"Error: {e}")
         
         st.divider()
         st.markdown("<p style='color: #1a1a1a !important; font-weight: bold; margin-bottom: 5px;'>⌨️ Or enter manually:</p>", unsafe_allow_html=True)
@@ -482,6 +449,121 @@ def show_volunteer_portal(token, activity_param=None):
                     st.session_state.clear_manual_qr = True
                     st.rerun()
 
+    elif method == "📷 Snapshot QR Scanner":
+        st.markdown("""
+        <div class="method-card">
+            <h3>📷 Snapshot QR Scanner</h3>
+            <p style="font-size: 15px; font-weight: 500;">Take a photo of the QR code to scan it.</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if st.session_state.get('checkin_success', False):
+            st.session_state.checkin_success = False
+            st.rerun()
+        
+        camera_image = st.camera_input(
+            "📸 Position the QR code in the frame and click capture", 
+            key="qr_camera",
+            disabled=False,
+            label_visibility="visible"
+        )
+        
+        if camera_image is not None:
+            try:
+                image = Image.open(camera_image)
+                st.image(image, caption="📸 Captured Image", width='stretch')
+                
+                with st.spinner(" Scanning QR code..."):
+                    qr_data = decode_qr_from_image(image)
+                
+                if qr_data:
+                    st.markdown('<div class="status-success">✅ QR Code detected successfully!</div>', unsafe_allow_html=True)
+                    with st.expander("📋 View QR Data"):
+                        st.code(qr_data, language="text")
+                    
+                    extracted_pid = qr_data
+                    if 'pid=' in qr_data:
+                        try:
+                            parsed_url = urllib.parse.urlparse(qr_data)
+                            query_params = urllib.parse.parse_qs(parsed_url.query)
+                            extracted_pid = query_params.get('pid', [None])[0]
+                        except: pass
+                    
+                    if extracted_pid and len(str(extracted_pid)) > 5:
+                        try:
+                            resident = supabase.table('participants').select("*").eq('id', extracted_pid).execute()
+                            if resident.data:
+                                resident_name = resident.data[0]['name']
+                                resident_type = "🆕 New" if resident.data[0].get('is_new') else "⭐ Regular"
+                                col1, col2 = st.columns([3, 1])
+                                with col1:
+                                    st.info(f"👤 **Resident:** {resident_name}\n\n **Status:** {resident_type}")
+                                with col2:
+                                    if st.button("✅ Check In Now", type="primary", width='stretch', key="checkin_btn"):
+                                        with st.spinner("Processing check-in..."):
+                                            success, message, _ = AttendanceService.process_checkin(extracted_pid, selected_date, selected_activity, s1, s2, s3, s4)
+                                            if success:
+                                                st.rerun()
+                            else:
+                                st.markdown('<div class="status-error">❌ Resident not found in database. Please check the QR code.</div>', unsafe_allow_html=True)
+                        except Exception as e:
+                            st.error(f"Error finding resident: {e}")
+                    else:
+                        st.markdown('<div class="status-error">❌ Invalid QR code format. Could not extract resident ID.</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<div class="status-error"> No QR code detected. Please try again with a clear image.</div>', unsafe_allow_html=True)
+                    with st.expander("💡 Tips for better scanning"):
+                        st.markdown("""
+                        - **💡 Ensure good lighting** - Avoid shadows or glare on the QR code
+                        - **📱 Hold steady** - Keep the camera still when taking the photo
+                        - **📏 Proper distance** - QR code should fill about 30-50% of the frame
+                        - **🎯 Focus** - Tap the screen to focus on the QR code
+                        """)
+            except Exception as e:
+                st.error(f"Error processing image: {e}")
+                st.info("Please try taking another photo.")
+        else:
+            st.markdown("""
+            <div style="text-align: center; color: #666; padding: 10px;">
+                <span style="font-size: 14px;">📷 Ready for next scan. Take a photo to continue.</span>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.divider()
+        st.markdown("<p style='color: #1a1a1a !important; font-weight: bold; margin-bottom: 5px;'>⌨️ Or enter manually:</p>", unsafe_allow_html=True)
+        
+        if 'clear_manual_qr' not in st.session_state:
+            st.session_state.clear_manual_qr = False
+            
+        qr_input_value = ""
+        if st.session_state.get('clear_manual_qr'):
+            qr_input_value = ""
+            st.session_state.clear_manual_qr = False
+        else:
+            qr_input_value = st.session_state.get('portal_qr_input', '')
+            
+        qr_input = st.text_input(
+            "Enter QR Code ID", 
+            placeholder="e.g., 2026080316562190", 
+            value=qr_input_value,
+            key="portal_qr_input_manual"
+        )
+        
+        if qr_input and len(qr_input.strip()) > 5:
+            input_text = qr_input.strip()
+            extracted_pid = input_text
+            if 'pid=' in input_text:
+                try:
+                    parsed_url = urllib.parse.urlparse(input_text)
+                    query_params = urllib.parse.parse_qs(parsed_url.query)
+                    extracted_pid = query_params.get('pid', [None])[0]
+                except: pass
+            if extracted_pid and len(str(extracted_pid)) > 5:
+                success = process_portal_checkin(extracted_pid, selected_date, selected_activity, s1, s2, s3, s4)
+                if success:
+                    st.session_state.clear_manual_qr = True
+                    st.rerun()
+
     elif method == "⌨️ Phone / Name Search":
         st.markdown("""
         <div class="method-card">
@@ -496,9 +578,8 @@ def show_volunteer_portal(token, activity_param=None):
             clean_phone = clean_phone_number(phone_input)
             resident = find_participant_by_phone(clean_phone)
             if resident:
-                status_text = '⭐ Regular' if not resident.get('is_new') else '🆕 New'
+                status_text = '⭐ Regular' if not resident.get('is_new') else ' New'
                 st.success(f"✅ **Resident Found:** {resident['name']} ({status_text})")
-                # ✅ FIX: Replaced use_container_width=True with width='stretch'
                 if st.button("✅ Check In (Phone)", type="primary", width='stretch', key="portal_checkin_phone"):
                     with st.spinner("Processing check-in..."):
                         success, message, _ = AttendanceService.process_checkin(resident['id'], selected_date, selected_activity, s1, s2, s3, s4)
@@ -508,11 +589,11 @@ def show_volunteer_portal(token, activity_param=None):
                 st.info("📱 Phone number not found. Try searching by name below.")
 
         st.divider()
-        st.markdown("**🔍 Browse Residents**")
+        st.markdown("** Browse Residents**")
         
         browse_mode = st.radio(
             "Select mode:",
-            ["🔎 Search by Name or ID", "📋 Show All (All Active Residents)"],
+            ["🔎 Search by Name or ID", " Show All (All Active Residents)"],
             horizontal=True,
             key="portal_browse_mode"
         )
@@ -524,7 +605,7 @@ def show_volunteer_portal(token, activity_param=None):
         
         filtered_participants = []
         
-        if browse_mode == "🔎 Search by Name or ID":
+        if browse_mode == " Search by Name or ID":
             name_search = st.text_input("Type Name or ID...", placeholder="e.g., AHMAD, 2026", key="portal_name_search")
             if name_search:
                 s = name_search.lower()
@@ -563,7 +644,6 @@ def show_volunteer_portal(token, activity_param=None):
                     st.markdown(f"**{p['name']}**")
                     st.caption(f"ID: {p['id'][:8]}... | {badge}")
                 with col2:
-                    # ✅ FIX: Replaced use_container_width=True with width='stretch'
                     if st.button("✅ Check In", key=f"portal_name_check_{p['id']}", width='stretch'):
                         with st.spinner("Processing..."):
                             success = process_portal_checkin(p['id'], selected_date, selected_activity, s1, s2, s3, s4)
@@ -592,7 +672,6 @@ def show_volunteer_portal(token, activity_param=None):
         if block_consent: 
             block_no = st.text_input("Block No.", placeholder="e.g., 622, 624A", key="portal_reg_block_no").strip().upper()
         
-        # ✅ FIX: Replaced use_container_width=True with width='stretch'
         if st.button("Register & Check In", type="primary", width='stretch', key="portal_reg_submit"):
             if not name.strip(): 
                 st.error("❌ Name is required")
@@ -625,7 +704,6 @@ def show_volunteer_portal(token, activity_param=None):
                         block_no=block_no
                     )
                     if success:
-                        # Then check them in
                         success2, msg2, _ = AttendanceService.process_checkin(new_id, selected_date, selected_activity, s1, s2, s3, s4)
                         if success2:
                             st.success(f"✅ {name.strip().upper()} registered & checked in successfully!")
