@@ -5,7 +5,7 @@ import streamlit as st
 def qr_code_scanner_auto_detect(key="qr_scanner"):
     """
     Real-time QR code scanner with auto-detection using html5-qrcode library.
-    Returns the scanned QR code data when detected.
+    Renders a live camera feed that automatically detects QR codes.
     """
     st.markdown("""
     <style>
@@ -22,9 +22,7 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
     
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <script>
-    let qrCodeScanner;
     let lastScannedCode = null;
-    let scanTimeout = null;
     
     function onScanSuccess(decodedText, decodedResult) {{
         // Prevent duplicate scans within 2 seconds
@@ -53,12 +51,6 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
         console.warn(`QR scan error: ${{error}}`);
     }}
     
-    function onCameraPermissionError(error) {{
-        console.error("Camera permission error:", error);
-        document.getElementById('reader').innerHTML = 
-            '<p style="color: red; padding: 20px;">️ Camera access denied. Please allow camera permissions and refresh the page.</p>';
-    }}
-    
     // Initialize scanner
     let html5QrcodeScanner = new Html5QrcodeScanner(
         "reader",
@@ -71,20 +63,9 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
         /* verbose= */ false
     );
     
-    html5QrcodeScanner.render(onScanSuccess, onScanFailure)
-        .catch(onCameraPermissionError);
+    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
     </script>
     """
     
+    # Render the HTML component
     components.html(scanner_html, height=500)
-    
-    # Use session state to capture scanned QR code
-    if 'scanned_qr_code' not in st.session_state:
-        st.session_state.scanned_qr_code = None
-    
-    return st.session_state.scanned_qr_code
-
-def clear_scanned_qr():
-    """Clear the scanned QR code from session state"""
-    if 'scanned_qr_code' in st.session_state:
-        st.session_state.scanned_qr_code = None
