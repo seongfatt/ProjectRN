@@ -23,30 +23,35 @@ try:
 except ImportError:
     CV2_AVAILABLE = False
     cv2 = None
-    print("⚠️ cv2 not available — QR scanning disabled")
+    print("⚠️ cv2 not available — QR scanning fallback only")
 
-
-# Add this import at the top
+# 🔥 Optional: Try to import pyzbar for QR scanning (Most Reliable)
 try:
     from pyzbar import pyzbar
     PYZBAR_AVAILABLE = True
 except ImportError:
     PYZBAR_AVAILABLE = False
 
-# Replace the decode_qr_from_image function with this:
+
+# ============================================
+# QR DECODING FUNCTION (Multi-Method Fallback)
+# ============================================
+
 def decode_qr_from_image(image):
     """Decode QR code from PIL Image using multiple methods."""
     
-    # Method 1: Try pyzbar (more reliable)
+    # Method 1: Try pyzbar (most reliable for standard QR codes)
     if PYZBAR_AVAILABLE:
         try:
             decoded_objects = pyzbar.decode(image)
             if decoded_objects:
-                return decoded_objects[0].data.decode('utf-8')
+                qr_data = decoded_objects[0].data.decode('utf-8')
+                print(f"✅ QR decoded with pyzbar: {qr_data}")
+                return qr_data
         except Exception as e:
-            print(f"pyzbar error: {e}")
+            print(f"⚠️ pyzbar error: {e}")
     
-    # Method 2: Try OpenCV
+    # Method 2: Try OpenCV QRCodeDetector
     if CV2_AVAILABLE:
         try:
             img_array = np.array(image)
@@ -54,22 +59,25 @@ def decode_qr_from_image(image):
             qr_detector = cv2.QRCodeDetector()
             data, bbox, _ = qr_detector.detectAndDecode(gray)
             if data:
+                print(f"✅ QR decoded with OpenCV: {data}")
                 return data
         except Exception as e:
-            print(f"cv2 error: {e}")
+            print(f"⚠️ OpenCV QR error: {e}")
     
-    # Method 3: Last resort - try to extract from URL if it looks like one
-    img_str = str(image)
-    if 'pid=' in img_str:
+    # Method 3: Try OpenCV WeChat QR Detector (more robust for damaged/blurry codes)
+    if CV2_AVAILABLE:
         try:
-            import re
-            match = re.search(r'pid=([^&\s]+)', img_str)
-            if match:
-                return match.group(1)
-        except:
-            pass
+            detector = cv2.wechat_qrcode_WeChatQRCode()
+            data, _ = detector.detectAndDecode(np.array(image))
+            if data:
+                print(f"✅ QR decoded with WeChat detector: {data}")
+                return data
+        except Exception:
+            pass  # WeChat detector not available in this cv2 build
     
+    print("❌ All QR detection methods failed")
     return None
+
 
 # ============================================
 # LOGO HELPER FUNCTION
@@ -94,27 +102,6 @@ def _get_logo_base64(logo_path="logo.png"):
         "ZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZm9udC13ZWlnaHQ9ImJvbGQiPldaNjwvdGV4dD48L3N2Zz4="
     )
 
-# ============================================
-# QR DECODING FUNCTION
-# ============================================
-
-def decode_qr_from_image(image):
-    """Decode QR code from PIL Image using OpenCV (if available)."""
-    if not CV2_AVAILABLE:
-        st.warning("⚠️ QR scanning is not available. Please use phone search or manual entry.")
-        return None
-    
-    try:
-        img_array = np.array(image)
-        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-        qr_detector = cv2.QRCodeDetector()
-        data, bbox, _ = qr_detector.detectAndDecode(gray)
-        if data:
-            return data
-        return None
-    except Exception as e:
-        print(f"Error decoding QR: {e}")
-        return None
 
 # ============================================
 # PROCESS CHECK-IN FUNCTION (1-4 SESSIONS)
@@ -224,6 +211,7 @@ def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
         else:
             st.error(f"Error: {e}")
             return False
+
 
 # ============================================
 # MAIN VOLUNTEER PORTAL FUNCTION
@@ -399,7 +387,8 @@ def show_volunteer_portal(token, activity_param=None):
         if camera_image is not None:
             try:
                 image = Image.open(camera_image)
-                st.image(image, caption="📸 Captured Image", width=None, use_container_width=True)
+                # ✅ FIX: Replaced use_container_width=True with width='stretch'
+                st.image(image, caption="📸 Captured Image", width='stretch')
                 
                 with st.spinner("🔍 Scanning QR code..."):
                     qr_data = decode_qr_from_image(image)
@@ -427,9 +416,9 @@ def show_volunteer_portal(token, activity_param=None):
                                 with col1:
                                     st.info(f"👤 **Resident:** {resident_name}\n\n📋 **Status:** {resident_type}")
                                 with col2:
-                                    if st.button("✅ Check In Now", type="primary", use_container_width=True, key="checkin_btn"):
+                                    # ✅ FIX: Replaced use_container_width=True with width='stretch'
+                                    if st.button("✅ Check In Now", type="primary", width='stretch', key="checkin_btn"):
                                         with st.spinner("Processing check-in..."):
-                                            # 🔥 Pass s1, s2, s3, s4
                                             success, message, _ = AttendanceService.process_checkin(extracted_pid, selected_date, selected_activity, s1, s2, s3, s4)
                                             if success:
                                                 st.rerun()
@@ -488,7 +477,6 @@ def show_volunteer_portal(token, activity_param=None):
                     extracted_pid = query_params.get('pid', [None])[0]
                 except: pass
             if extracted_pid and len(str(extracted_pid)) > 5:
-                # 🔥 Pass s1, s2, s3, s4
                 success = process_portal_checkin(extracted_pid, selected_date, selected_activity, s1, s2, s3, s4)
                 if success:
                     st.session_state.clear_manual_qr = True
@@ -510,9 +498,9 @@ def show_volunteer_portal(token, activity_param=None):
             if resident:
                 status_text = '⭐ Regular' if not resident.get('is_new') else '🆕 New'
                 st.success(f"✅ **Resident Found:** {resident['name']} ({status_text})")
-                if st.button("✅ Check In (Phone)", type="primary", use_container_width=True, key="portal_checkin_phone"):
+                # ✅ FIX: Replaced use_container_width=True with width='stretch'
+                if st.button("✅ Check In (Phone)", type="primary", width='stretch', key="portal_checkin_phone"):
                     with st.spinner("Processing check-in..."):
-                        # 🔥 Pass s1, s2, s3, s4
                         success, message, _ = AttendanceService.process_checkin(resident['id'], selected_date, selected_activity, s1, s2, s3, s4)
                         if success:
                             st.rerun()
@@ -575,9 +563,9 @@ def show_volunteer_portal(token, activity_param=None):
                     st.markdown(f"**{p['name']}**")
                     st.caption(f"ID: {p['id'][:8]}... | {badge}")
                 with col2:
-                    if st.button(f"✅ Check In", key=f"portal_name_check_{p['id']}", use_container_width=True):
+                    # ✅ FIX: Replaced use_container_width=True with width='stretch'
+                    if st.button("✅ Check In", key=f"portal_name_check_{p['id']}", width='stretch'):
                         with st.spinner("Processing..."):
-                            # 🔥 Pass s1, s2, s3, s4
                             success = process_portal_checkin(p['id'], selected_date, selected_activity, s1, s2, s3, s4)
                             if success:
                                 st.rerun()
@@ -604,7 +592,8 @@ def show_volunteer_portal(token, activity_param=None):
         if block_consent: 
             block_no = st.text_input("Block No.", placeholder="e.g., 622, 624A", key="portal_reg_block_no").strip().upper()
         
-        if st.button("Register & Check In", type="primary", use_container_width=True, key="portal_reg_submit"):
+        # ✅ FIX: Replaced use_container_width=True with width='stretch'
+        if st.button("Register & Check In", type="primary", width='stretch', key="portal_reg_submit"):
             if not name.strip(): 
                 st.error("❌ Name is required")
             elif not no_phone and not contact.strip(): 
