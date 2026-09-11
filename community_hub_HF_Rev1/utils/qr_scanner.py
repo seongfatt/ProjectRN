@@ -36,7 +36,7 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
             document.dispatchEvent(event);
             
             // Pause scanning briefly
-            if (html5QrcodeScanner) {{
+            if (typeof html5QrcodeScanner !== 'undefined') {{
                 html5QrcodeScanner.pause();
                 setTimeout(() => {{
                     html5QrcodeScanner.resume();
@@ -69,3 +69,8 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
     
     # Render the HTML component
     components.html(scanner_html, height=500)
+
+def clear_scanned_qr():
+    """Clear the scanned QR code from session state"""
+    if 'scanned_qr_code' in st.session_state:
+        st.session_state.scanned_qr_code = None
