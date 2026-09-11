@@ -26,50 +26,7 @@ except ImportError:
     print("⚠️ cv2 not available — QR scanning disabled")
 
 
-# Add this import at the top
-try:
-    from pyzbar import pyzbar
-    PYZBAR_AVAILABLE = True
-except ImportError:
-    PYZBAR_AVAILABLE = False
 
-# Replace the decode_qr_from_image function with this:
-def decode_qr_from_image(image):
-    """Decode QR code from PIL Image using multiple methods."""
-    
-    # Method 1: Try pyzbar (more reliable)
-    if PYZBAR_AVAILABLE:
-        try:
-            decoded_objects = pyzbar.decode(image)
-            if decoded_objects:
-                return decoded_objects[0].data.decode('utf-8')
-        except Exception as e:
-            print(f"pyzbar error: {e}")
-    
-    # Method 2: Try OpenCV
-    if CV2_AVAILABLE:
-        try:
-            img_array = np.array(image)
-            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-            qr_detector = cv2.QRCodeDetector()
-            data, bbox, _ = qr_detector.detectAndDecode(gray)
-            if data:
-                return data
-        except Exception as e:
-            print(f"cv2 error: {e}")
-    
-    # Method 3: Last resort - try to extract from URL if it looks like one
-    img_str = str(image)
-    if 'pid=' in img_str:
-        try:
-            import re
-            match = re.search(r'pid=([^&\s]+)', img_str)
-            if match:
-                return match.group(1)
-        except:
-            pass
-    
-    return None
 
 # ============================================
 # LOGO HELPER FUNCTION
