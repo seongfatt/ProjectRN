@@ -961,7 +961,7 @@ if st.session_state.is_authenticated:
         *All administrative actions are logged in the Audit Trail for accountability.*
         """)
         if st.checkbox("I have read and agree to the Terms of Use"):
-            if st.button("Accept & Continue", type="primary", width='stretch'):
+            if st.button("Accept & Continue", type="primary", use_container_width=True):
                 st.session_state.chairman_tc_accepted = True
                 st.rerun()
         st.stop()
@@ -1119,7 +1119,7 @@ else:
         with c2:
             st.write(" ")
             st.write(" ")
-            if st.button("Login", type="primary", width='stretch'):
+            if st.button("Login", type="primary", use_container_width=True):
                 if verify_password(pwd, "admin"):
                     st.session_state.is_authenticated = True
                     st.session_state.user_role = "admin"
@@ -1134,12 +1134,12 @@ else:
                 if st.session_state.is_authenticated:
                     st.session_state.show_login = False
                     st.rerun()
-            if st.button("Cancel", width='stretch'):
+            if st.button("Cancel", use_container_width=True):
                 st.session_state.show_login = False
                 st.rerun()
     else:
         st.info("Please login to access admin features")
-        if st.button("Login", type="primary", width='stretch'):
+        if st.button("Login", type="primary", use_container_width=True):
             st.session_state.show_login = True
             st.rerun()
 
