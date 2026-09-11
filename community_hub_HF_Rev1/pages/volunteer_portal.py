@@ -357,13 +357,12 @@ def show_volunteer_portal(token, activity_param=None):
         </div>
         """, unsafe_allow_html=True)
         
+                # Real-time QR scanner
         qr_code_scanner_auto_detect()
         
-        # Check if QR was scanned (via session state update from JavaScript)
-        # Note: This requires a Streamlit custom component or periodic refresh
-        # For now, we'll use a manual input fallback
-        st.info("💡 **Note:** After scanning, the QR code will appear in the manual input field below.")
+        st.info(" **Auto-Check-In Enabled:** Point camera at QR code to check in instantly.")
         
+        # Hidden text input to capture scanned data
         scanned_qr = st.text_input(
             "Scanned QR Code (Auto-filled)",
             placeholder="Waiting for scan...",
@@ -371,8 +370,11 @@ def show_volunteer_portal(token, activity_param=None):
             label_visibility="collapsed"
         )
         
+        # 🔥 AUTO CHECK-IN LOGIC
         if scanned_qr and len(scanned_qr.strip()) > 5:
             extracted_pid = scanned_qr.strip()
+            
+            # Handle URL format (e.g., https://...?pid=12345)
             if 'pid=' in scanned_qr:
                 try:
                     parsed_url = urllib.parse.urlparse(scanned_qr)
@@ -383,36 +385,46 @@ def show_volunteer_portal(token, activity_param=None):
             
             if extracted_pid and len(str(extracted_pid)) > 5:
                 try:
+                    # 1. Find Resident
                     resident = supabase.table('participants').select("*").eq('id', extracted_pid).execute()
+                    
                     if resident.data:
                         resident_name = resident.data[0]['name']
-                        resident_type = "🆕 New" if resident.data[0].get('is_new') else "⭐ Regular"
+                        resident_type = " New" if resident.data[0].get('is_new') else "⭐ Regular"
                         
+                        # 2. Show Processing State
                         st.markdown(f"""
-                        <div style="background: #d4edda; border-left: 4px solid #28a745; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                            <h4 style="margin: 0 0 8px 0; color: #155724; font-size: 18px;">✅ Resident Found</h4>
-                            <p style="margin: 0 0 5px 0; color: #1a1a1a; font-size: 20px; font-weight: bold;">{resident_name}</p>
-                            <p style="margin: 0; color: #495057; font-size: 14px;">Status: {resident_type}</p>
+                        <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                            <h4 style="margin: 0 0 8px 0; color: #0d47a1; font-size: 18px;">🔄 Processing Check-In...</h4>
+                            <p style="margin: 0; color: #1a1a1a; font-size: 16px; font-weight: bold;">{resident_name}</p>
+                            <p style="margin: 0; color: #555; font-size: 14px;">Status: {resident_type}</p>
                         </div>
                         """, unsafe_allow_html=True)
                         
-                        if st.button("✅ Check In Now", type="primary", width='stretch', key="auto_checkin_btn"):
-                            with st.spinner("Processing check-in..."):
-                                success, message, _ = AttendanceService.process_checkin(
-                                    extracted_pid, selected_date, selected_activity, s1, s2, s3, s4
-                                )
-                                if success:
-                                    st.success(message)
-                                    st.balloons()
-                                    st.session_state.checkin_success = True
-                                    clear_scanned_qr()
-                                    st.rerun()
-                                else:
-                                    st.error(message)
+                        # 3. AUTO EXECUTE CHECK-IN (No button needed!)
+                        success, message, _ = AttendanceService.process_checkin(
+                            extracted_pid, selected_date, selected_activity, s1, s2, s3, s4
+                        )
+                        
+                        if success:
+                            st.balloons()
+                            st.session_state.checkin_success = True
+                            # Clear the input so it's ready for the next person
+                            st.session_state.auto_scanned_qr = "" 
+                            st.rerun()
+                        else:
+                            st.error(message)
+                            # Clear input to allow retry or next scan
+                            st.session_state.auto_scanned_qr = ""
+                            st.rerun()
                     else:
                         st.error("❌ Resident not found in database.")
+                        st.session_state.auto_scanned_qr = ""
+                        st.rerun()
                 except Exception as e:
                     st.error(f"Error: {e}")
+                    st.session_state.auto_scanned_qr = ""
+                    st.rerun()
         
         st.divider()
         st.markdown("<p style='color: #1a1a1a !important; font-weight: bold; margin-bottom: 5px;'>⌨️ Or enter manually:</p>", unsafe_allow_html=True)
