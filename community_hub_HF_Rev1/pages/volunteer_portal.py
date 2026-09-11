@@ -352,7 +352,7 @@ def show_volunteer_portal(token, activity_param=None):
         # Real-time QR scanner
         st.markdown("""
         <div class="qr-scanner-container">
-            <h4 style="color: #667eea; margin-top: 0;">📸 Live Camera Scanner</h4>
+            <h4 style="color: #667eea; margin-top: 0;"> Live Camera Scanner</h4>
             <p style="color: #666; font-size: 14px;">Point camera at QR code - auto-detection enabled</p>
         </div>
         """, unsafe_allow_html=True)
@@ -361,7 +361,7 @@ def show_volunteer_portal(token, activity_param=None):
         
         st.info("💡 **Auto-Fill:** Scanned QR codes will appear below. You can also type manually.")
         
-        # 🔥 SINGLE INPUT FIELD (serves both auto-scan and manual entry)
+        # 🔥 SINGLE INPUT FIELD ONLY (removed duplicate)
         qr_input = st.text_input(
             "QR Code ID (Auto-filled or Manual Entry)",
             placeholder="Waiting for scan or type ID here...",
@@ -369,6 +369,7 @@ def show_volunteer_portal(token, activity_param=None):
             label_visibility="collapsed"
         )
         
+        # 🔥 AUTO CHECK-IN LOGIC - Execute immediately when QR is detected
         if qr_input and len(qr_input.strip()) > 5:
             extracted_pid = qr_input.strip()
             
