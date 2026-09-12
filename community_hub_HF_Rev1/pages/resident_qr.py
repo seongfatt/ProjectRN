@@ -39,7 +39,6 @@ def _get_logo_base64(logo_path="logo.png"):
     )
 
 def _safe_str(value, default="N/A"):
-    """Safely convert any value (including None) to a stripped string."""
     if value is None:
         return default
     return str(value).strip()
@@ -77,13 +76,14 @@ def display_resident_qr_card(resident):
     except Exception:
         qr_image_src = qr_api_url
 
-    # 🔗 Build WhatsApp link
+    # 🔗 Build WhatsApp link (kept outside the card)
     phone = resident.get("contact")
     clean_phone = clean_phone_number(phone) if phone else ""
     wa_phone = f"65{clean_phone}" if clean_phone and len(clean_phone) == 8 else clean_phone
     wa_text = urllib.parse.quote(f"Here is my QR code for Woodlands Zone 6: {APP_URL}/resident_qr?phone={clean_phone}")
     whatsapp_link = f"https://wa.me/{wa_phone}?text={wa_text}" if wa_phone else "#"
 
+    # ✅ Professional Badge HTML/CSS
     card_html = f"""
 <!DOCTYPE html>
 <html>
@@ -95,180 +95,179 @@ def display_resident_qr_card(resident):
             margin: 0;
             padding: 20px;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: transparent; /* Blends with Streamlit dark mode */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }}
+        .badge {{
+            width: 340px;
             background: #ffffff;
-            color: #000000;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            border: 1px solid #e0e0e0;
+            text-align: center;
+            color: #1a1a1a;
+        }}
+        .badge-header {{
+            background: linear-gradient(135deg, #4a6cf7, #3b5bdb);
+            color: white;
+            padding: 20px 15px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            max-width: 400px;
-            width: 100%;
+            gap: 8px;
         }}
-        .card {{
-            background: #ffffff;
-            color: #1a1a1a;
-            border-radius: 20px;
-            padding: 30px 24px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
-            width: 100%;
-            text-align: center;
-        }}
-        .header {{
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            margin-bottom: 20px;
-            width: 100%;
-        }}
-        .logo {{
-            width: 60px;
-            height: 60px;
+        .badge-header img {{
+            width: 50px;
+            height: 50px;
             object-fit: contain;
-            background: #f8f9fa;
-            border-radius: 10px;
+            background: white;
+            border-radius: 50%;
             padding: 5px;
         }}
-        .title-group h2 {{
-            color: #4a6cf7;
+        .badge-header h2 {{
             margin: 0;
-            font-size: 22px;
+            font-size: 18px;
             font-weight: 700;
-            line-height: 1.2;
-        }}
-        .title-group p {{
-            color: #666;
-            margin: 2px 0 0 0;
-            font-size: 12px;
-            text-transform: uppercase;
             letter-spacing: 1px;
         }}
-        .divider {{
-            border: 0;
-            border-top: 1px solid #eee;
-            margin: 20px 0;
-            width: 100%;
+        .badge-header p {{
+            margin: 0;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            opacity: 0.8;
+        }}
+        .badge-body {{
+            padding: 20px;
         }}
         .resident-name {{
-            margin: 10px 0;
-            font-size: 28px;
+            font-size: 24px;
             font-weight: bold;
-            color: #000;
+            margin: 0 0 5px 0;
+            color: #1a1a1a;
             word-break: break-word;
         }}
         .resident-block {{
-            font-size: 18px;
-            color: #555;
-            margin: 5px 0;
+            font-size: 16px;
+            color: #666;
+            margin: 0 0 15px 0;
             font-weight: 500;
         }}
-        .qr-wrap {{
-            margin: 15px 0;
-            display: flex;
-            justify-content: center;
-        }}
-        .qr-wrap img {{
-            width: 220px;
-            height: 220px;
+        .qr-container {{
+            display: inline-block;
+            padding: 10px;
             border: 2px dashed #4a6cf7;
-            border-radius: 8px;
-            padding: 8px;
+            border-radius: 12px;
             background: #fff;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            margin-bottom: 10px;
         }}
-        .qr-hint {{
-            font-size: 12px;
-            color: #666;
-            margin: 8px 0 0 0;
-            text-align: center;
+        .qr-container img {{
+            width: 180px;
+            height: 180px;
+            display: block;
+        }}
+        .scan-hint {{
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 0 0 15px 0;
         }}
         .id-box {{
             background: #f8f9fa;
-            padding: 12px;
-            border-radius: 8px;
-            margin-top: 15px;
-            text-align: center;
-            font-family: 'Courier New', monospace;
-        }}
-        .id-box p {{
-            font-size: 20px;
-            font-weight: bold;
-            color: #000;
-            margin: 0;
-            letter-spacing: 1px;
-        }}
-        .footer-link {{
-            margin-top: 20px;
             padding: 10px;
-            background: #f0f4ff;
             border-radius: 8px;
-            font-size: 13px;
-            color: #2c3e50;
-            text-align: center;
-            word-break: break-all;
-            border: 1px dashed #4a6cf7;
-        }}
-        .footer-text {{
-            font-weight: 600;
-            color: #4a6cf7;
+            font-family: 'Courier New', monospace;
             font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            letter-spacing: 1px;
+            border: 1px solid #eee;
+        }}
+        .badge-footer {{
+            background: #f8f9fa;
+            padding: 12px;
+            border-top: 1px solid #eee;
+            font-size: 11px;
+            color: #4a6cf7;
+            font-weight: bold;
             text-transform: uppercase;
             letter-spacing: 1px;
-            margin-top: 20px;
         }}
-        .download-btn {{
+        .actions {{
             margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }}
+        .btn {{
             background: #4a6cf7;
             color: white;
             border: none;
-            padding: 10px 20px;
+            padding: 10px 18px;
             border-radius: 8px;
-            font-size: 16px;
+            font-size: 14px;
             cursor: pointer;
             font-weight: bold;
+            transition: 0.2s;
         }}
-        .download-btn:hover {{
+        .btn:hover {{
             background: #3b5bdb;
+        }}
+        .btn-outline {{
+            background: transparent;
+            color: #4a6cf7;
+            border: 2px solid #4a6cf7;
+        }}
+        .btn-outline:hover {{
+            background: #f0f4ff;
+        }}
+        
+        /* Print Styles */
+        @media print {{
+            body {{ margin: 0; padding: 0; background: white; }}
+            .badge {{ box-shadow: none; border: 1px solid #ccc; width: 100%; max-width: 350px; margin: 0 auto; }}
+            .actions {{ display: none !important; }}
         }}
     </style>
 </head>
 <body>
-    <div class="card" id="qr-card">
-        <div class="header">
-            <img src="{logo_src}" class="logo" alt="Logo">
-            <div class="title-group">
-                <h2>WOODLANDS ZONE 6</h2>
-                <p>Community Hub</p>
+    <div class="badge" id="badge">
+        <div class="badge-header">
+            <img src="{logo_src}" alt="Logo">
+            <h2>WOODLANDS ZONE 6</h2>
+            <p>Community Hub</p>
+        </div>
+        <div class="badge-body">
+            <h1 class="resident-name">{resident_name}</h1>
+            <p class="resident-block">Block: {resident_block}</p>
+            <div class="qr-container">
+                <img src="{qr_image_src}" alt="QR Code">
             </div>
+            <p class="scan-hint">Scan at Kiosk</p>
+            <div class="id-box">ID: {resident_id}</div>
         </div>
-        <hr class="divider">
-        <h1 class="resident-name">{resident_name}</h1>
-        <p class="resident-block">Block: {resident_block}</p>
-        <hr class="divider">
-        <div class="qr-wrap">
-            <img src="{qr_image_src}" alt="QR Code">
-        </div>
-        <p class="qr-hint">Scan at Kiosk</p>
-        <div class="id-box">
-            <p>ID: {resident_id}</p>
-        </div>
-        <div class="footer-link">
-            🔗 Shareable Link:<br>
-            {APP_URL}/resident_qr?phone={urllib.parse.quote(clean_phone_number(resident.get('contact', '')))}
-        </div>
-        <p class="footer-text">COMMUNITY ACTIVITIES</p>
+        <div class="badge-footer">COMMUNITY ACTIVITIES</div>
     </div>
-    <button class="download-btn" onclick="downloadCard()">📥 Download as PNG</button>
+    
+    <div class="actions">
+        <button class="btn" onclick="downloadCard()">📥 Download PNG</button>
+        <button class="btn btn-outline" onclick="window.print()">🖨️ Print Badge</button>
+    </div>
 
     <script>
         function downloadCard() {{
-            const card = document.getElementById('qr-card');
+            const card = document.getElementById('badge');
             html2canvas(card, {{
                 scale: 2,
                 useCORS: true,
                 backgroundColor: '#ffffff'
             }}).then(canvas => {{
                 const link = document.createElement('a');
-                link.download = 'Resident_QR_{resident_name.replace(" ", "_")}.png';
+                link.download = 'Resident_Badge_{resident_name.replace(" ", "_")}.png';
                 link.href = canvas.toDataURL('image/png');
                 link.click();
             }});
@@ -279,12 +278,12 @@ def display_resident_qr_card(resident):
 """
 
     from streamlit.components.v1 import html
-    html(card_html, height=800, scrolling=True)
+    html(card_html, height=680, scrolling=True)
 
     # External WhatsApp button
     st.markdown(
         f"<div style='text-align:center; margin-top:10px;'>"
-        f"<a href='{whatsapp_link}' target='_blank' style='background:#25D366; color:white; padding:10px 20px; text-decoration:none; border-radius:8px; font-weight:bold;'>"
+        f"<a href='{whatsapp_link}' target='_blank' style='background:#25D366; color:white; padding:10px 20px; text-decoration:none; border-radius:8px; font-weight:bold; display:inline-block;'>"
         f"📲 Share via WhatsApp</a></div>",
         unsafe_allow_html=True
     )
@@ -295,8 +294,9 @@ def display_resident_qr_card(resident):
 st.markdown("<h2 style='text-align:center;'>📱 Your QR Code</h2>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center; color:#666;'>Enter your 8-digit mobile number to view your personal QR code.</p>", unsafe_allow_html=True)
 
-query_params = st.experimental_get_query_params()
-default_phone = query_params.get("phone", [""])[0].strip()
+# ✅ FIXED: Use st.query_params instead of st.experimental_get_query_params
+query_params = st.query_params
+default_phone = query_params.get("phone", "").strip()
 
 phone_input = st.text_input(
     "Enter your 8-digit mobile number",
@@ -317,10 +317,11 @@ if phone_input:
             st.success("✅ Found your QR code!")
             display_resident_qr_card(resident)
 
+            # Personal link shown OUTSIDE the card (for their reference only)
             full_link = f"{APP_URL}/resident_qr?phone={cleaned}"
             st.markdown(
-                f"<div style='background:#f8f9fa; padding:12px; border-radius:8px; margin-top:16px; text-align:center; font-size:14px;'>"
-                f"🔗 <strong>Shareable Link</strong><br>"
+                f"<div style='background:#f8f9fa; padding:12px; border-radius:8px; margin-top:16px; text-align:center; font-size:14px; border:1px solid #ddd;'>"
+                f"🔗 <strong>Your Personal Link</strong><br>"
                 f"<code style='font-size:13px; background:#eef2f7; padding:4px 8px; border-radius:4px;'>{full_link}</code>"
                 f"</div>",
                 unsafe_allow_html=True
@@ -330,7 +331,7 @@ if phone_input:
     else:
         st.warning("⚠️ Please enter a valid 8-digit mobile number.")
 else:
-    st.info("👉 Enter your phone number above — or open this link with `?phone=YOUR_NUMBER` in the URL.")
+    st.info("👉 Enter your phone number above to get your QR code.")
 
 st.markdown(
     "<hr><p style='text-align:center; font-size:12px; color:#999;'>This link is personal and secure. Do not share publicly.</p>",

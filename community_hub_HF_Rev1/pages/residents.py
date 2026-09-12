@@ -10,7 +10,6 @@ import os
 import streamlit.components.v1 as components
 
 def _get_logo_base64(logo_path="logo.png"):
-    """Convert local logo to base64 so it renders inside HTML components."""
     try:
         if os.path.exists(logo_path):
             with open(logo_path, "rb") as f:
@@ -29,13 +28,11 @@ def _get_logo_base64(logo_path="logo.png"):
     )
 
 def _safe_str(value, default="N/A"):
-    """Safely convert any value (including None) to a stripped string."""
     if value is None:
         return default
     return str(value).strip()
 
 def _display_qr_card(resident):
-    """Render QR card with white background, no download button in PNG, and shareable link."""
     resident_id = _safe_str(resident.get("id"), "UNKNOWN")
     resident_name = _safe_str(resident.get("name"), "Unknown Resident")
     resident_block = _safe_str(resident.get("block_no"), "N/A")
@@ -55,17 +52,13 @@ def _display_qr_card(resident):
     except Exception:
         qr_image_src = qr_api_url
 
-    # 🔗 Build shareable URL and WhatsApp link
     phone = resident.get("contact")
     clean_phone = clean_phone_number(phone) if phone else ""
-    share_link = f"{APP_URL}/resident_qr?phone={clean_phone}" if clean_phone else "#"
-    
-    # WhatsApp requires country code (assuming Singapore +65 for Woodlands)
     wa_phone = f"65{clean_phone}" if clean_phone and len(clean_phone) == 8 else clean_phone
-    wa_text = urllib.parse.quote(f"Hello {resident_name}, here is your QR code link for Woodlands Zone 6: {share_link}")
+    wa_text = urllib.parse.quote(f"Hello {resident_name}, here is your QR code link for Woodlands Zone 6: {APP_URL}/resident_qr?phone={clean_phone}")
     whatsapp_link = f"https://wa.me/{wa_phone}?text={wa_text}" if wa_phone else "#"
 
-    # ✅ White-themed card with html2canvas for PNG download
+    # ✅ Professional Badge HTML/CSS (Same as resident_qr.py)
     card_html = f"""
 <!DOCTYPE html>
 <html>
@@ -77,173 +70,177 @@ def _display_qr_card(resident):
             margin: 0;
             padding: 20px;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: transparent;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }}
+        .badge {{
+            width: 340px;
             background: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            border: 1px solid #e0e0e0;
+            text-align: center;
             color: #1a1a1a;
+        }}
+        .badge-header {{
+            background: linear-gradient(135deg, #4a6cf7, #3b5bdb);
+            color: white;
+            padding: 20px 15px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            max-width: 400px;
-            width: 100%;
+            gap: 8px;
         }}
-        .card {{
-            background: #ffffff;
-            color: #1a1a1a;
-            border-radius: 20px;
-            padding: 30px 24px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
-            width: 100%;
-            text-align: center;
-        }}
-        .header {{
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 15px;
-            margin-bottom: 20px;
-        }}
-        .logo {{
-            width: 60px;
-            height: 60px;
+        .badge-header img {{
+            width: 50px;
+            height: 50px;
             object-fit: contain;
-            background: #f8f9fa;
-            border-radius: 10px;
+            background: white;
+            border-radius: 50%;
             padding: 5px;
         }}
-        .title-group h2 {{
-            color: #4a6cf7;
+        .badge-header h2 {{
             margin: 0;
-            font-size: 22px;
+            font-size: 18px;
             font-weight: 700;
-        }}
-        .title-group p {{
-            color: #666;
-            margin: 2px 0 0 0;
-            font-size: 12px;
-            text-transform: uppercase;
             letter-spacing: 1px;
         }}
-        .divider {{
-            border: 0;
-            border-top: 2px solid #eee;
-            margin: 20px 0;
+        .badge-header p {{
+            margin: 0;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            opacity: 0.8;
+        }}
+        .badge-body {{
+            padding: 20px;
         }}
         .resident-name {{
-            margin: 10px 0;
-            font-size: 32px;
+            font-size: 24px;
             font-weight: bold;
+            margin: 0 0 5px 0;
             color: #1a1a1a;
             word-break: break-word;
         }}
         .resident-block {{
-            font-size: 20px;
-            color: #555;
-            margin: 5px 0;
+            font-size: 16px;
+            color: #666;
+            margin: 0 0 15px 0;
             font-weight: 500;
         }}
-        .qr-wrap {{
-            margin: 15px 0;
-        }}
-        .qr-wrap img {{
-            width: 220px;
-            height: 220px;
-            border: 2px dashed #4a6cf7;
-            border-radius: 10px;
+        .qr-container {{
+            display: inline-block;
             padding: 10px;
+            border: 2px dashed #4a6cf7;
+            border-radius: 12px;
             background: #fff;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-bottom: 10px;
         }}
-        .qr-hint {{
-            font-size: 12px;
-            color: #666;
-            margin: 8px 0 0 0;
+        .qr-container img {{
+            width: 180px;
+            height: 180px;
+            display: block;
+        }}
+        .scan-hint {{
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 0 0 15px 0;
         }}
         .id-box {{
             background: #f8f9fa;
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 20px;
-        }}
-        .id-box p {{
-            font-size: 24px;
-            font-weight: bold;
-            color: #1a1a1a;
-            font-family: 'Courier New', monospace;
-            margin: 0;
-            letter-spacing: 1px;
-        }}
-        .share-link {{
-            margin: 18px 0;
-            padding: 12px;
-            background: #f0f4ff;
+            padding: 10px;
             border-radius: 8px;
-            font-size: 14px;
-            color: #2c3e50;
-            text-align: center;
-            border: 1px dashed #4a6cf7;
-            word-break: break-all;
-        }}
-        .footer-text {{
-            font-weight: 600;
-            color: #4a6cf7;
+            font-family: 'Courier New', monospace;
             font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            letter-spacing: 1px;
+            border: 1px solid #eee;
+        }}
+        .badge-footer {{
+            background: #f8f9fa;
+            padding: 12px;
+            border-top: 1px solid #eee;
+            font-size: 11px;
+            color: #4a6cf7;
+            font-weight: bold;
             text-transform: uppercase;
             letter-spacing: 1px;
-            margin: 20px 0 0 0;
         }}
-        .download-btn {{
+        .actions {{
             margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }}
+        .btn {{
             background: #4a6cf7;
             color: white;
             border: none;
-            padding: 10px 20px;
+            padding: 10px 18px;
             border-radius: 8px;
-            font-size: 16px;
+            font-size: 14px;
             cursor: pointer;
             font-weight: bold;
+            transition: 0.2s;
         }}
-        .download-btn:hover {{
+        .btn:hover {{
             background: #3b5bdb;
+        }}
+        .btn-outline {{
+            background: transparent;
+            color: #4a6cf7;
+            border: 2px solid #4a6cf7;
+        }}
+        .btn-outline:hover {{
+            background: #f0f4ff;
+        }}
+        @media print {{
+            body {{ margin: 0; padding: 0; background: white; }}
+            .badge {{ box-shadow: none; border: 1px solid #ccc; width: 100%; max-width: 350px; margin: 0 auto; }}
+            .actions {{ display: none !important; }}
         }}
     </style>
 </head>
 <body>
-    <div class="card" id="qr-card">
-        <div class="header">
-            <img src="{logo_src}" class="logo" alt="Logo">
-            <div class="title-group">
-                <h2>WOODLANDS ZONE 6</h2>
-                <p>Community Hub</p>
+    <div class="badge" id="badge">
+        <div class="badge-header">
+            <img src="{logo_src}" alt="Logo">
+            <h2>WOODLANDS ZONE 6</h2>
+            <p>Community Hub</p>
+        </div>
+        <div class="badge-body">
+            <h1 class="resident-name">{resident_name}</h1>
+            <p class="resident-block">Block: {resident_block}</p>
+            <div class="qr-container">
+                <img src="{qr_image_src}" alt="QR Code">
             </div>
+            <p class="scan-hint">Scan at Kiosk</p>
+            <div class="id-box">ID: {resident_id}</div>
         </div>
-        <hr class="divider">
-        <h1 class="resident-name">{resident_name}</h1>
-        <p class="resident-block">Block: {resident_block}</p>
-        <hr class="divider">
-        <div class="qr-wrap">
-            <img src="{qr_image_src}" alt="QR Code">
-        </div>
-        <p class="qr-hint">Scan at Kiosk</p>
-        <div class="id-box">
-            <p>ID: {resident_id}</p>
-        </div>
-        <div class="share-link">
-            📲 Shareable Link:<br>
-            <code>{share_link}</code>
-        </div>
-        <p class="footer-text">COMMUNITY ACTIVITIES</p>
+        <div class="badge-footer">COMMUNITY ACTIVITIES</div>
     </div>
-    <button class="download-btn" onclick="downloadCard()">📥 Download as PNG</button>
+    
+    <div class="actions">
+        <button class="btn" onclick="downloadCard()">📥 Download PNG</button>
+        <button class="btn btn-outline" onclick="window.print()">🖨️ Print Badge</button>
+    </div>
 
     <script>
         function downloadCard() {{
-            const card = document.getElementById('qr-card');
+            const card = document.getElementById('badge');
             html2canvas(card, {{
-                scale: 2, // Higher resolution
+                scale: 2,
                 useCORS: true,
                 backgroundColor: '#ffffff'
             }}).then(canvas => {{
                 const link = document.createElement('a');
-                link.download = 'Resident_QR_{resident_name.replace(" ", "_")}.png';
+                link.download = 'Resident_Badge_{resident_name.replace(" ", "_")}.png';
                 link.href = canvas.toDataURL('image/png');
                 link.click();
             }});
@@ -254,12 +251,11 @@ def _display_qr_card(resident):
 """
 
     from streamlit.components.v1 import html
-    html(card_html, height=800, scrolling=True)
+    html(card_html, height=680, scrolling=True)
 
-    # ✅ External WhatsApp share button
     st.markdown(
         f"<div style='text-align:center; margin-top:10px;'>"
-        f"<a href='{whatsapp_link}' target='_blank' style='background:#25D366; color:white; padding:10px 20px; text-decoration:none; border-radius:8px; font-weight:bold;'>"
+        f"<a href='{whatsapp_link}' target='_blank' style='background:#25D366; color:white; padding:10px 20px; text-decoration:none; border-radius:8px; font-weight:bold; display:inline-block;'>"
         f"📲 Share via WhatsApp</a></div>",
         unsafe_allow_html=True
     )
@@ -573,7 +569,13 @@ def show_residents():
     # ══════ QR CODE GENERATOR SECTION ══════
     st.divider()
     st.subheader("📱 Generate QR Code for Resident")
-    st.caption("Generate a permanent QR code card for elderly residents to carry")
+    st.caption("Generate a permanent QR code badge for elderly residents to carry")
+
+    # ✅ Group Share Link Section
+    st.info("📢 **Group Share Link**\n\nCopy this link and send it to your WhatsApp group. Residents can click it, enter their phone number, and get their own QR code.")
+    group_link = f"{APP_URL}/resident_qr"
+    st.code(group_link, language="text")
+    st.markdown("---")
 
     qr_mode = st.radio(
         "Select Mode:",
