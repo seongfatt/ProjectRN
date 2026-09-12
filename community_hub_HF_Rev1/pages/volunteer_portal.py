@@ -573,12 +573,12 @@ def show_volunteer_portal(token, activity_param=None):
                                     </div>
                                 </div>
                                 """, unsafe_allow_html=True)
-                                if st.button("🔄 Clear & Scan Next Person", use_container_width=True):
-                                    st.session_state.last_processed_qr = ""
-                                    if qr_key in st.session_state:
-                                        del st.session_state[qr_key]
-                                    st.session_state.qr_scan_counter += 1
-                                    st.rerun()
+                                # if st.button("🔄 Clear & Scan Next Person", use_container_width=True):
+                                #     st.session_state.last_processed_qr = ""
+                                #     if qr_key in st.session_state:
+                                #         del st.session_state[qr_key]
+                                #     st.session_state.qr_scan_counter += 1
+                                #     st.rerun()
                         else:
                             st.error("❌ Resident not found in database.")
                     except Exception as e:
@@ -591,12 +591,12 @@ def show_volunteer_portal(token, activity_param=None):
             </div>
             """, unsafe_allow_html=True)
 
-        # # ✅ Clear & Scan Next Person
-        # if st.button("🔄 Clear & Scan Next Person", key="clear_qr_input", use_container_width=True):
-        #     if qr_key in st.session_state:
-        #         del st.session_state[qr_key]
-        #     st.session_state.qr_scan_counter += 1
-        #     st.rerun()
+        # ✅ Clear & Scan Next Person
+        if st.button("🔄 Clear & Scan Next Person", key="clear_qr_input", use_container_width=True):
+            if qr_key in st.session_state:
+                del st.session_state[qr_key]
+            st.session_state.qr_scan_counter += 1
+            st.rerun()
 
         st.divider()
         st.caption("💡 **Tip:** The camera scanner auto-fills the field above. Click 'Clear & Scan Next Person' when ready for the next resident.")
