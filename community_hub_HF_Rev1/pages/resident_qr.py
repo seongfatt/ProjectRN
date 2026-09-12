@@ -13,10 +13,13 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# ✅ Hide Streamlit UI elements + Sidebar via CSS
 hide_streamlit_style = """
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
+    [data-testid="stSidebar"] {display: none;}
+    [data-testid="collapsedControl"] {display: none;}
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
@@ -76,7 +79,7 @@ def display_resident_qr_card(resident):
     except Exception:
         qr_image_src = qr_api_url
 
-    # 🔗 Build WhatsApp link (kept outside the card)
+    # 🔗 Build WhatsApp link
     phone = resident.get("contact")
     clean_phone = clean_phone_number(phone) if phone else ""
     wa_phone = f"65{clean_phone}" if clean_phone and len(clean_phone) == 8 else clean_phone
@@ -95,7 +98,7 @@ def display_resident_qr_card(resident):
             margin: 0;
             padding: 20px;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: transparent; /* Blends with Streamlit dark mode */
+            background: transparent;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -245,7 +248,7 @@ def display_resident_qr_card(resident):
             <h1 class="resident-name">{resident_name}</h1>
             <p class="resident-block">Block: {resident_block}</p>
             <div class="qr-container">
-                <img src="{qr_image_src}" alt="QR Code">
+                <img src="{qr_image_src}" alt="QR Code" id="qr-img">
             </div>
             <p class="scan-hint">Scan at Kiosk</p>
             <div class="id-box">ID: {resident_id}</div>
@@ -261,15 +264,35 @@ def display_resident_qr_card(resident):
     <script>
         function downloadCard() {{
             const card = document.getElementById('badge');
+            const qrImg = document.getElementById('qr-img');
+            
+            // ✅ FIX: Wait for the QR image to fully load before capturing
+            if (qrImg && !qrImg.complete) {{
+                qrImg.onload = function() {{
+                    captureCard(card);
+                }};
+            }} else {{
+                // Slight delay to ensure rendering
+                setTimeout(() => {{
+                    captureCard(card);
+                }}, 300);
+            }}
+        }}
+
+        function captureCard(card) {{
             html2canvas(card, {{
                 scale: 2,
                 useCORS: true,
-                backgroundColor: '#ffffff'
+                backgroundColor: '#ffffff',
+                allowTaint: false
             }}).then(canvas => {{
                 const link = document.createElement('a');
                 link.download = 'Resident_Badge_{resident_name.replace(" ", "_")}.png';
                 link.href = canvas.toDataURL('image/png');
                 link.click();
+            }}).catch(err => {{
+                console.error('html2canvas error:', err);
+                alert('Could not download image. Please try again.');
             }});
         }}
     </script>
@@ -294,7 +317,7 @@ def display_resident_qr_card(resident):
 st.markdown("<h2 style='text-align:center;'>📱 Your QR Code</h2>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center; color:#666;'>Enter your 8-digit mobile number to view your personal QR code.</p>", unsafe_allow_html=True)
 
-# ✅ FIXED: Use st.query_params instead of st.experimental_get_query_params
+# ✅ Use st.query_params (modern replacement for experimental)
 query_params = st.query_params
 default_phone = query_params.get("phone", "").strip()
 
@@ -317,12 +340,12 @@ if phone_input:
             st.success("✅ Found your QR code!")
             display_resident_qr_card(resident)
 
-            # Personal link shown OUTSIDE the card (for their reference only)
+            # ✅ FIX: Removed white background, used transparent/dark theme friendly styling
             full_link = f"{APP_URL}/resident_qr?phone={cleaned}"
             st.markdown(
-                f"<div style='background:#f8f9fa; padding:12px; border-radius:8px; margin-top:16px; text-align:center; font-size:14px; border:1px solid #ddd;'>"
+                f"<div style='padding:12px; border-radius:8px; margin-top:16px; text-align:center; font-size:14px; border:1px solid #444;'>"
                 f"🔗 <strong>Your Personal Link</strong><br>"
-                f"<code style='font-size:13px; background:#eef2f7; padding:4px 8px; border-radius:4px;'>{full_link}</code>"
+                f"<code style='font-size:13px; background:transparent; padding:4px 8px; color:#4a6cf7;'>{full_link}</code>"
                 f"</div>",
                 unsafe_allow_html=True
             )
