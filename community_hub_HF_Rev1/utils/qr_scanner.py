@@ -14,39 +14,42 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
     </style>
     """, unsafe_allow_html=True)
 
-    scanner_html = f"""
-    <div class="scanner-container">
-        <div id="reader"></div>
-        <p style="color: #666; margin-top: 15px;">📷 Point camera at QR code - Auto-detection enabled</p>
-    </div>
+scanner_html = f"""
+<div class="scanner-container">
+    <div id="reader"></div>
+    <p style="color: #666; margin-top: 15px;">📷 Point camera at QR code - Auto-detection enabled</p>
+</div>
 
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-    <script>
-    let html5QrcodeScanner = null;
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<script>
+let html5QrcodeScanner = null;
 
-    function onScanSuccess(decodedText) {{
-        console.log("QR scanned:", decodedText);
-        // 🔥 Redirect to self with QR in URL (forces full reload)
-        const url = new URL(window.location);
-        url.searchParams.set('qr', decodedText);
-        window.location.href = url.toString();
-    }}
+function onScanSuccess(decodedText) {{
+    console.log("QR scanned:", decodedText);
+    // 🔥 Send QR to Streamlit via postMessage
+    window.parent.postMessage({{ type: 'QR_SCAN', data: decodedText }}, '*');
+    // Pause briefly to avoid rapid-fire scans
+    html5QrcodeScanner.pause();
+    setTimeout(() => {{
+        html5QrcodeScanner.resume();
+    }}, 1000);
+}}
 
-    function onScanFailure() {{}}
+function onScanFailure() {{}}
 
-    html5QrcodeScanner = new Html5QrcodeScanner("reader", {{
-        fps: 10,
-        qrbox: {{ width: 250, height: 250 }},
-        aspectRatio: 1.0,
-        disableFlip: false
-    }}, false);
+html5QrcodeScanner = new Html5QrcodeScanner("reader", {{
+    fps: 10,
+    qrbox: {{ width: 250, height: 250 }},
+    aspectRatio: 1.0,
+    disableFlip: false
+}}, false);
 
-    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-    </script>
-    """
+html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+</script>
+"""
 
-    # Render the HTML component
-    components.html(scanner_html, height=500)
+# Render the HTML component
+components.html(scanner_html, height=500)
 
 def clear_scanned_qr():
     """Clear the scanned QR code from session state"""

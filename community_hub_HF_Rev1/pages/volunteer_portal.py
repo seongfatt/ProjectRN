@@ -127,7 +127,7 @@ def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
             supabase.table('attendance').update(updates).eq('id', record['id']).execute()
 
             sync_session_attendance_async(pid, resident['name'], activity, formatted_date,
-                                          st.session_state.get('user_role', 'volunteer'))
+                                         st.session_state.get('user_role', 'volunteer'))
             st.success(f"✅ Updated {resident['name']} with additional session(s)!")
             return True
 
@@ -156,7 +156,7 @@ def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
         if s3: session_text.append("Session 3")
         if s4: session_text.append("Session 4")
         session_display = " & ".join(session_text) if session_text else "Attendance"
-        
+
         st.markdown(f"""
         <div style="background: #e8f5e9; color: #1e7e34; padding: 20px; border-radius: 8px; border-left: 5px solid #28a745; margin: 15px 0;">
             <div style="display: flex; align-items: center; gap: 12px;">
@@ -184,23 +184,7 @@ def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
         else:
             st.error(f"Error: {e}")
             return False
-    # 🔥 Handle QR scan from camera (URL redirect)
-query_params = st.experimental_get_query_params()
-qr_from_url = query_params.get("qr", [None])[0]
-if qr_from_url:
-    # Clean ID (handle pid=...)
-    extracted_pid = qr_from_url.strip()
-    if 'pid=' in qr_from_url:
-        try:
-            parsed = urllib.parse.urlparse(f"https://dummy?{qr_from_url}")
-            q = urllib.parse.parse_qs(parsed.query)
-            extracted_pid = q.get('pid', [extracted_pid])[0]
-        except:
-            pass
-    # Store and clear URL
-    st.session_state.qr_auto_scan = extracted_pid
-    st.experimental_set_query_params()  # Remove ?qr=...
-    st.rerun()  # Force re-run with qr_auto_scan set
+
 
 def show_volunteer_portal(token, activity_param=None):
     """UNIFIED VOLUNTEER PORTAL WITH REAL-TIME QR SCANNING"""
@@ -338,7 +322,25 @@ def show_volunteer_portal(token, activity_param=None):
                       "📝 Register New Resident"],
                      horizontal=False, key="portal_method")
 
-        # ✅ Auto-check-in from URL scan
+    # ✅ Auto-check-in from URL scan
+    query_params = st.experimental_get_query_params()
+    qr_from_url = query_params.get("qr", [None])[0]
+    if qr_from_url:
+        # Clean ID (handle pid=...)
+        extracted_pid = qr_from_url.strip()
+        if 'pid=' in qr_from_url:
+            try:
+                parsed = urllib.parse.urlparse(f"https://dummy?{qr_from_url}")
+                q = urllib.parse.parse_qs(parsed.query)
+                extracted_pid = q.get('pid', [extracted_pid])[0]
+            except:
+                pass
+        # Store and clear URL
+        st.session_state.qr_auto_scan = extracted_pid
+        st.experimental_set_query_params()  # Remove ?qr=...
+        st.rerun()  # Force re-run with qr_auto_scan set
+
+    # ✅ Auto-check-in from QR scan
     if st.session_state.get('qr_auto_scan'):
         extracted_pid = st.session_state.qr_auto_scan
         del st.session_state.qr_auto_scan
@@ -421,28 +423,6 @@ def show_volunteer_portal(token, activity_param=None):
             clear_scanned_qr()
             st.rerun()
 
-        # 🔥 Listen for QR_SCAN message and inject into input field
-        st.markdown("""
-        <script>
-        window.addEventListener("message", (event) => {
-            if (event.data.type === "QR_SCAN") {
-                const qrCode = event.data.data;
-                const input = document.querySelector('input[placeholder*="Waiting for scan"]');
-                if (input) {
-                    // Use native setter to bypass React restrictions
-                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-                    nativeInputValueSetter.call(input, qrCode);
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                    input.dispatchEvent(new Event('change', { bubbles: true }));
-                    console.log("Injected QR into input:", qrCode);
-                } else {
-                    console.warn("No input field found with placeholder 'Waiting for scan'");
-                }
-            }
-        });
-        </script>
-        """, unsafe_allow_html=True)
-
         # Show camera scanner
         st.markdown("""
         <div class="qr-scanner-container">
@@ -488,7 +468,6 @@ def show_volunteer_portal(token, activity_param=None):
                     pass
 
             if extracted_pid and len(str(extracted_pid)) > 5:
-                # Mark as processed IMMEDIATELY to prevent infinite loop on rerun
                 st.session_state.last_processed_qr = extracted_pid
 
                 try:
@@ -499,7 +478,6 @@ def show_volunteer_portal(token, activity_param=None):
                         resident_name = resident.data[0]['name']
                         resident_type = "🆕 New" if resident.data[0].get('is_new') else "⭐ Regular"
 
-                        # 2. Show Processing State
                         st.markdown(f"""
                         <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; border-radius: 8px; margin: 10px 0;">
                             <h4 style="margin: 0 0 8px 0; color: #0d47a1; font-size: 18px;">🔄 Processing Check-In...</h4>
@@ -517,7 +495,6 @@ def show_volunteer_portal(token, activity_param=None):
                             st.balloons()
                             st.session_state.checkin_success = True
 
-                            # Show success and auto-reset
                             st.markdown("""
                             <div style="background: #d4edda; border: 2px solid #28a745; padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0;">
                                 <h2 style="color: #155724; margin: 0;">✅ Check-in Successful!</h2>
@@ -533,8 +510,7 @@ def show_volunteer_portal(token, activity_param=None):
                             st.stop()  # Prevent further rendering
 
                         else:
-                            # ℹ️ Already checked in
-                            if "already" in message.lower() or "fully checked in" in message.lower():
+                            if "already" in message.lower():
                                 st.markdown(f"""
                                 <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; margin: 10px 0;">
                                     <div style="display: flex; align-items: center; gap: 10px;">
@@ -548,15 +524,6 @@ def show_volunteer_portal(token, activity_param=None):
                                     </div>
                                 </div>
                                 """, unsafe_allow_html=True)
-
-                                # Optional: Add a manual "Acknowledge" button to clear the field
-                                if st.button("✅ Acknowledge", use_container_width=True, key="ack_already_checked"):
-                                    st.session_state.last_processed_qr = ""
-                                    if qr_key in st.session_state:
-                                        del st.session_state[qr_key]
-                                    st.session_state.qr_scan_counter += 1
-                                    st.rerun()
-
                             else:
                                 st.error(message)
                             st.rerun()
