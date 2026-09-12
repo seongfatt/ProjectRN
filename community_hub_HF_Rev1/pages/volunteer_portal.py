@@ -405,6 +405,28 @@ def show_volunteer_portal(token, activity_param=None):
             clear_scanned_qr()
             st.rerun()
 
+        # 🔥 Listen for QR_SCAN message and inject into input field
+        st.markdown("""
+        <script>
+        window.addEventListener("message", (event) => {
+            if (event.data.type === "QR_SCAN") {
+                const qrCode = event.data.data;
+                const input = document.querySelector('input[placeholder*="Waiting for scan"]');
+                if (input) {
+                    // Use native setter to bypass React restrictions
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                    nativeInputValueSetter.call(input, qrCode);
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                    console.log("Injected QR into input:", qrCode);
+                } else {
+                    console.warn("No input field found with placeholder 'Waiting for scan'");
+                }
+            }
+        });
+        </script>
+        """, unsafe_allow_html=True)
+
         # Show camera scanner
         st.markdown("""
         <div class="qr-scanner-container">

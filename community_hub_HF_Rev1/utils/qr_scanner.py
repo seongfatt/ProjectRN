@@ -4,9 +4,8 @@ import streamlit as st
 
 def qr_code_scanner_auto_detect(key="qr_scanner"):
     """
-    Real-time QR code scanner with auto-detection using html5-qrcode library.
-    Renders a live camera feed that automatically detects QR codes and injects the result into a Streamlit text input.
-    Now includes a hidden trigger button to force Streamlit reactivity on JS-injected values.
+    Renders a live camera feed that automatically detects QR codes and sends the result to Streamlit
+    using postMessage(), which is more reliable than DOM injection in modern Streamlit apps.
     """
     st.markdown("""
     <style>
@@ -14,7 +13,7 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
     .scanner-container { text-align: center; padding: 20px; }
     </style>
     """, unsafe_allow_html=True)
-    
+
     scanner_html = f"""
     <div class="scanner-container">
         <div id="reader"></div>
@@ -27,13 +26,13 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
 
     function onScanSuccess(decodedText) {{
         console.log("QR scanned:", decodedText);
-        // 🔥 Redirect to self with QR in query param (forces full reload)
-        const url = new URL(window.location);
-        url.searchParams.set('qr', decodedText);
-        window.location.href = url.toString();
+        // 🔥 Send QR to Streamlit via postMessage
+        window.parent.postMessage({{ type: 'QR_SCAN', data: decodedText }}, '*');
     }}
 
-    function onScanFailure() {{}}
+    function onScanFailure() {{
+        // Ignore failure, keep scanning
+    }}
 
     html5QrcodeScanner = new Html5QrcodeScanner("reader", {{
         fps: 10,
@@ -43,9 +42,14 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
     }}, false);
 
     html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+
+    // Optional: Notify parent frame that scanner is ready
+    window.addEventListener('load', () => {{
+        window.parent.postMessage({{ type: 'QR_SCANNER_READY' }}, '*');
+    }});
     </script>
     """
-    
+
     # Render the HTML component
     components.html(scanner_html, height=500)
 
