@@ -342,9 +342,28 @@ def show_volunteer_portal(token, activity_param=None):
             clear_scanned_qr()
             st.rerun()
 
-        # 🔥 CRITICAL: Use a dynamic key to force reactivity on QR injection
-        # This ensures Streamlit re-runs when JS injects the value
-        qr_key = f"unified_qr_input_{st.session_state.get('qr_scan_counter', 0)}"
+        # 🔥 Initialize scan counter for dynamic key
+        if 'qr_scan_counter' not in st.session_state:
+            st.session_state.qr_scan_counter = 0
+
+        # Show camera scanner
+        st.markdown("""
+        <div class="qr-scanner-container">
+            <h4 style="color: #667eea; margin-top: 0;">📸 Live Camera Scanner</h4>
+            <p style="color: #666; font-size: 14px;">Point camera at QR code - auto-detection enabled</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        try:
+            qr_code_scanner_auto_detect()
+        except Exception as e:
+            st.error(f"⚠️ Camera scanner failed: {e}")
+            st.caption("💡 Try refreshing the page or use 'Snapshot QR Scanner' instead.")
+
+        st.info("💡 **Auto-Fill:** Scanned QR codes will appear below. You can also type manually.")
+
+        # 🔥 Use dynamic key to force reactivity on JS injection
+        qr_key = f"unified_qr_input_{st.session_state.qr_scan_counter}"
         qr_input = st.text_input(
             "QR Code ID (Auto-filled or Manual Entry)",
             placeholder="Waiting for scan or type ID here...",
@@ -352,19 +371,15 @@ def show_volunteer_portal(token, activity_param=None):
             label_visibility="collapsed"
         )
 
-        # Track scan counter to refresh key on next scan
-        if 'qr_scan_counter' not in st.session_state:
-            st.session_state.qr_scan_counter = 0
-
-        # SAFE TRACKER to prevent infinite loops
+        # Track last processed to avoid infinite loops
         if 'last_processed_qr' not in st.session_state:
             st.session_state.last_processed_qr = ""
 
-        # 🔥 AUTO CHECK-IN LOGIC — now reliably triggered on JS injection
+        # ✅ AUTO CHECK-IN LOGIC
         if qr_input and len(qr_input.strip()) > 5 and qr_input.strip() != st.session_state.last_processed_qr:
             extracted_pid = qr_input.strip()
 
-            # Handle URL format (e.g., https://...?pid=12345)
+            # Handle URL format
             if 'pid=' in qr_input:
                 try:
                     parsed_url = urllib.parse.urlparse(qr_input)
@@ -383,7 +398,6 @@ def show_volunteer_portal(token, activity_param=None):
                         resident_name = resident.data[0]['name']
                         resident_type = "🆕 New" if resident.data[0].get('is_new') else "⭐ Regular"
 
-                        # Show processing
                         st.markdown(f"""
                         <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; border-radius: 8px; margin: 10px 0;">
                             <h4 style="margin: 0 0 8px 0; color: #0d47a1; font-size: 18px;">🔄 Processing Check-In...</h4>
@@ -400,13 +414,11 @@ def show_volunteer_portal(token, activity_param=None):
                             st.balloons()
                             st.session_state.checkin_success = True
 
-                            # ✅ CLEAR INPUT & FORCE FULL RESET
-                            # Delete the current key so next scan uses new key
+                            # ✅ SAFE CLEAR & RESET
                             if qr_key in st.session_state:
                                 del st.session_state[qr_key]
-                            st.session_state.qr_scan_counter += 1  # Increment to change key next time
+                            st.session_state.qr_scan_counter += 1
                             
-                            # Auto-refresh page to reset UI
                             st.markdown("""
                             <div style="background: #d4edda; border: 2px solid #28a745; padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0;">
                                 <h2 style="color: #155724; margin: 0;">✅ Check-in Successful!</h2>
@@ -418,10 +430,9 @@ def show_volunteer_portal(token, activity_param=None):
                                 }, 3000);
                             </script>
                             """, unsafe_allow_html=True)
-                            st.stop()  # Prevent further rendering
+                            st.stop()
 
                         else:
-                            # ℹ️ Already checked in
                             if "already" in message.lower():
                                 st.markdown(f"""
                                 <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; margin: 10px 0;">
@@ -447,6 +458,13 @@ def show_volunteer_portal(token, activity_param=None):
                 except Exception as e:
                     st.error(f"Error: {e}")
                     st.rerun()
+
+        # ✅ Manual Clear Button (works reliably)
+        if st.button("🔄 Clear & Scan Next Person", type="secondary", use_container_width=True):
+            if 'unified_qr_input' in st.session_state:
+                del st.session_state.unified_qr_input
+            st.session_state.qr_scan_counter += 1
+            st.rerun()
 
                 # Manual check-in button
         if qr_input and len(qr_input.strip()) > 5 and qr_input.strip() == st.session_state.last_processed_qr:
@@ -490,10 +508,10 @@ def show_volunteer_portal(token, activity_param=None):
                                     </div>
                                 </div>
                                 """, unsafe_allow_html=True)
-                                if st.button("🔄 Clear & Scan Next Person", use_container_width=True):
-                                    st.session_state.last_processed_qr = ""
+                                if st.button("🔄 Clear & Scan Next Person", type="secondary", use_container_width=True):
                                     if 'unified_qr_input' in st.session_state:
                                         del st.session_state.unified_qr_input
+                                    st.session_state.qr_scan_counter += 1
                                     st.rerun()
                         else:
                             st.error("❌ Resident not found in database.")
