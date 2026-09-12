@@ -288,7 +288,7 @@ def show_floorplan_designer():
         st.markdown(f"<style>{css_rules}</style>", unsafe_allow_html=True)
 
     # --- THE GRID FRAGMENT ---
-    @st.experimental_fragment  # <--- CHANGE THIS LINE
+    @st.fragment
     def render_grid(current_brush, current_label, current_mode):
         header_cols = st.columns([1] + [1] * cols)
         with header_cols[0]:
