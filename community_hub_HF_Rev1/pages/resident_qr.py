@@ -9,6 +9,7 @@ from utils import clean_phone_number, mask_phone
 # 🔒 Hide sidebar + header for resident-facing page
 st.set_page_config(
     page_title="Your QR Code",
+    page_icon="logo.png",  # <--- This changes the browser tab icon!
     layout="wide",
     initial_sidebar_state="collapsed"
 )

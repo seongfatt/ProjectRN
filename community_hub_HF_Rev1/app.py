@@ -31,7 +31,7 @@ else:
 # ─── PAGE CONFIG (Must be the very first Streamlit command) ───
 st.set_page_config(
     page_title="Community Hub",
-    page_icon="🏘️",
+    page_icon="logo.png",
     layout="wide",
     initial_sidebar_state="expanded"
 )
