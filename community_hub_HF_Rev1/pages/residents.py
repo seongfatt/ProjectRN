@@ -127,6 +127,7 @@ def show_residents():
             name_display = f"🤝 {p.get('name', 'Unknown')}"
         else:
             name_display = f"👤 {p.get('name', 'Unknown')}"
+
         display_data.append(
             {
                 "ID": pid,
@@ -150,6 +151,7 @@ def show_residents():
     if not display_data:
         st.info("No residents found matching criteria")
         return
+
     df = pd.DataFrame(display_data)
     st.dataframe(df, use_container_width=True, hide_index=True)
     st.divider()
@@ -182,9 +184,9 @@ def show_residents():
         ent_layout = supabase.table('garden_layout').select('*').eq('block_name', ent_block).order('plot_number').execute().data or []
     except Exception:
         ent_layout = []
+
     layout_map = {i['plot_number']: i for i in ent_layout}
     ent_plot_nums = [i['plot_number'] for i in ent_layout] or list(range(1, 77))
-
     block_plots = [p for p in all_plots if (p.get('block_name') or 'Block 622') == ent_block]
     plots_dict = {p['plot_number']: p for p in block_plots}
     plot_owners = [p for p in block_plots if p.get('occupied')]
@@ -381,7 +383,7 @@ def show_residents():
                             st.session_state[f"show_qr_{resident_id}"] = True
                         if st.session_state.get(f"show_qr_{resident_id}"):
                             _display_qr_code(p)
-                            if st.button("❌ Close", key=f"close_qr_{resident_id}"):
+                            if st.button("❌ Close", key=f"close_qr_{resident_id}", use_container_width=True):
                                 st.session_state[f"show_qr_{resident_id}"] = False
                                 st.rerun()
                         st.divider()
@@ -392,26 +394,51 @@ def show_residents():
     if st.session_state.get("user_role") == "admin":
         st.divider()
         st.subheader("🔗 Generate QR Links for Residents")
-        if st.button("📧 Generate All QR Links"):
-            active_residents = [p for p in participants if p.get("active", True)]
-            links = []
-            for p in active_residents:
-                contact = p.get("contact")
-                if contact:
-                    cleaned = clean_phone_number(contact)
-                    if len(cleaned) >= 8:
-                        link = f"{APP_URL}/resident_qr?phone={cleaned}"
-                        links.append(f"{p['name']},{cleaned},{link}")
 
-            if links:
-                st.download_button(
-                    "📥 Download QR Links (CSV)",
-                    data="\n".join(["Name,Phone,Link"] + links),
-                    file_name="resident_qr_links.csv",
-                    mime="text/csv"
-                )
-            else:
-                st.info("No residents found with valid phone numbers.")
+        # Toggle visibility for QR Link Generator
+        if 'show_qr_link_gen' not in st.session_state:
+            st.session_state.show_qr_link_gen = False
+
+        show_gen = st.checkbox("Show QR Link Generator", value=st.session_state.show_qr_link_gen, key="toggle_qr_link_gen")
+        st.session_state.show_qr_link_gen = show_gen
+
+        if show_gen:
+            if st.button("📧 Generate All QR Links", type="primary", use_container_width=True):
+                active_residents = [p for p in participants if p.get("active", True)]
+                links = []
+                for p in active_residents:
+                    contact = p.get("contact")
+                    if contact:
+                        cleaned = clean_phone_number(contact)
+                        if len(cleaned) >= 8:
+                            link = f"{APP_URL}/resident_qr?phone={cleaned}"
+                            links.append(f"{p['name']},{cleaned},{link}")
+
+                if links:
+                    st.markdown("""
+                    <div style="background: #1e293b; padding: 16px; border-radius: 10px; margin: 10px 0; text-align: center;">
+                        <strong>📋 Copy All Links (CSV Format)</strong><br>
+                        <code style="background: #0f172a; padding: 8px 12px; border-radius: 4px; font-size: 14px; color: #60a5fa; display: block; white-space: pre-wrap;">
+                        Name,Phone,Link
+                    """ + "\n".join(links) + """
+                        </code>
+                        <button onclick="navigator.clipboard.writeText(`Name,Phone,Link\\n""" + "\\n".join([l.replace("`", "'") for l in links]) + """`); st.toast('✅ Copied to clipboard!', {icon: '📋'});" 
+                            style="margin-top: 12px; padding: 8px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+                            📋 Copy All Links
+                        </button>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    # 📥 Download CSV (fallback)
+                    st.download_button(
+                        label="📥 Download QR Links (CSV)",
+                        data="\n".join(["Name,Phone,Link"] + links),
+                        file_name=f"resident_qr_links_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+                        mime="text/csv",
+                        key="btn_download_qr_links"
+                    )
+                else:
+                    st.info("ℹ️ No residents found with valid 8-digit phone numbers.")
 
 
 def _display_qr_code(p):
@@ -422,7 +449,7 @@ def _display_qr_code(p):
         return
     resident_id = str(resident_id).strip()
     resident_name = str(p.get("name", "Unknown Resident")).strip()
-    resident_block = str(p.get("block_no", "N/A")).strip()
+    resident_block = p.get("block_no", "N/A")
     logo_src = _get_logo_base64()
     qr_data = resident_id
     qr_api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={urllib.parse.quote(qr_data)}"
@@ -437,66 +464,47 @@ def _display_qr_code(p):
     except Exception:
         qr_image_src = qr_api_url
 
-    card_html = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
-<style>
-* {{ margin: 0; padding: 0; box-sizing: border-box; }}
-body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: transparent; display: flex; flex-direction: column; align-items: center; padding: 10px; }}
-.card {{ background: #ffffff; color: #1a1a1a; border-radius: 20px; padding: 30px 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); width: 100%; max-width: 400px; text-align: center; }}
-.header {{ display: flex; align-items: center; justify-content: center; gap: 15px; margin-bottom: 20px; }}
-.logo {{ width: 60px; height: 60px; object-fit: contain; background: #f8f9fa; border-radius: 10px; padding: 5px; flex-shrink: 0; }}
-.title-group {{ text-align: left; }}
-.title-group h2 {{ color: #667eea; margin: 0; font-size: 22px; font-weight: 800; line-height: 1.1; }}
-.title-group p {{ color: #666; margin: 2px 0 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }}
-.divider {{ border: 0; border-top: 2px solid #eee; margin: 20px 0; }}
-.resident-name {{ margin: 10px 0; font-size: 36px; font-weight: bold; color: #1a1a1a; word-break: break-word; }}
-.resident-block {{ font-size: 20px; color: #555; margin: 5px 0 20px 0; font-weight: 500; }}
-.qr-wrap {{ margin: 10px 0; }}
-.qr-wrap img {{ width: 220px; height: 220px; border: 2px dashed #667eea; border-radius: 10px; padding: 10px; background: #fff; }}
-.qr-hint {{ font-size: 12px; color: #888; margin: 8px 0 0 0; }}
-.id-box {{ background: #f8f9fa; padding: 15px; border-radius: 10px; margin-top: 20px; }}
-.id-box p {{ font-size: 24px; font-weight: bold; color: #1a1a1a; font-family: 'Courier New', monospace; margin: 0; letter-spacing: 1px; }}
-.footer-text {{ font-weight: bold; color: #667eea; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; margin-top: 15px; }}
-.download-btn {{ margin-top: 20px; padding: 12px 24px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 16px; width: 100%; max-width: 400px; }}
-</style>
-</head>
-<body>
-<div class="card" id="residentCard">
-  <div class="header">
-    <img src="{logo_src}" class="logo" alt="Logo">
-    <div class="title-group"><h2>WOODLANDS ZONE 6</h2><p>Community Hub</p></div>
-  </div>
-  <hr class="divider">
-  <h1 class="resident-name">{resident_name}</h1>
-  <p class="resident-block">Block: {resident_block}</p>
-  <hr class="divider">
-  <div class="qr-wrap"><img src="{qr_image_src}" alt="QR Code"></div>
-  <p class="qr-hint">Scan at Kiosk</p>
-  <div class="id-box"><p>ID: {resident_id}</p></div>
-  <p class="footer-text">Community Activities</p>
-</div>
-<button class="download-btn" onclick="downloadCard()">Download Card as PNG</button>
-<script>
-function downloadCard() {{
-  const card = document.getElementById('residentCard');
-  html2canvas(card, {{ backgroundColor: '#ffffff', scale: 2, useCORS: true, allowTaint: true }}).then(canvas => {{
-    const link = document.createElement('a');
-    link.download = 'Resident_Card_{resident_id}.png';
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-  }});
-}}
-</script>
-</body>
-</html>"""
+    card_html = f"""
+    <div class="card" id="residentCard">
+        <div class="header">
+            <img src="{logo_src}" class="logo" alt="Logo">
+            <div class="title-group">
+                <h2>WOODLANDS ZONE 6</h2>
+                <p>Community Hub</p>
+            </div>
+        </div>
+        <hr class="divider">
+        <h1 class="resident-name">{resident_name}</h1>
+        <p class="resident-block">Block: {resident_block}</p>
+        <hr class="divider">
+        <div class="qr-wrap">
+            <img src="{qr_image_src}" alt="QR Code" style="width:220px;height:220px;border:2px dashed #667eea;border-radius:10px;background:#fff;padding:10px;">
+        </div>
+        <p class="qr-hint">Scan at Kiosk</p>
+        <div class="id-box">
+            <p>ID: {resident_id}</p>
+        </div>
+        <p class="footer-text">Community Activities</p>
+    </div>
+    <button class="download-btn" onclick="downloadCard()">Download Card as PNG</button>
+    <script>
+    function downloadCard() {{
+        const card = document.getElementById('residentCard');
+        html2canvas(card, {{ backgroundColor: '#ffffff', scale: 2, useCORS: true, allowTaint: true }}).then(canvas => {{
+            const link = document.createElement('a');
+            link.download = 'Resident_Card_{resident_id}.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }});
+    }}
+    </script>
+    """
 
     col1, col2, col3 = st.columns([1, 3, 1])
     with col2:
-        components.html(card_html, height=750, scrolling=False)
-    st.caption("💡 **Tip:** Click 'Download Card as PNG' button above, or use Ctrl+P to print.")
+        components.html(card_html, height=720, scrolling=False)
+
+    st.caption("💡 **Tip:** Click 'Download Card as PNG' to save for printing or screenshot.")
     card_info = f"""WOODLANDS ZONE 6 - COMMUNITY HUB
 RESIDENT CARD
 Name: {resident_name}
@@ -518,19 +526,16 @@ Scan QR code at check-in kiosk
 # This is the standalone face enrollment section that appears in Management tab
 def show_face_enrollment():
     """Standalone face enrollment section for the Management tab"""
-    
     st.markdown("---")
     st.subheader("📸 Face Enrollment for Group Check-In")
     st.caption("Enroll residents' faces for group photo check-in.")
-    
+
     # Search for resident to enroll
     search_face = st.text_input("Search resident by Name or ID", key="face_enroll_search")
-    
     if search_face:
         s = search_face.lower()
         participants = st.session_state.participants
         matches = [p for p in participants if p.get('active', True) and (s in p['name'].lower() or s in str(p.get('id', '')).lower())]
-        
         if matches:
             for p in matches[:5]:
                 with st.container():
@@ -543,21 +548,18 @@ def show_face_enrollment():
                         st.warning("⚠️ Face enrolled (encoding only) - Please re-upload photo to fix")
                     else:
                         st.warning("⚠️ Face not enrolled")
-                    
+
                     with st.expander("📷 Upload Face Photo", expanded=False):
                         st.caption("Upload a clear photo of the resident's face.")
                         st.caption("💡 **Tips:** Well-lit, face looking forward, single face only.")
-                        
                         face_photo = st.file_uploader(
                             "Upload Face Photo",
                             type=['jpg', 'jpeg', 'png'],
                             key=f"face_enroll_{p['id']}"
                         )
-                        
                         if face_photo:
                             st.image(face_photo, caption="📸 Preview", width=150)
-                            
-                            if st.button("✅ Enroll Face", key=f"enroll_btn_{p['id']}", type="primary"):
+                            if st.button("✅ Enroll Face", key=f"enroll_btn_{p['id']}", use_container_width=True):
                                 try:
                                     import io
                                     import json
@@ -572,10 +574,10 @@ def show_face_enrollment():
 
                                     # Detect face
                                     face_locations = face_recognition.face_locations(image_np, model='hog')
-                                    if len(face_locations) == 0:
+                                    if not face_locations:
                                         face_locations = face_recognition.face_locations(image_np, number_of_times_to_upsample=2, model='hog')
-                                    if len(face_locations) == 0:
-                                        st.error("❌ No face detected. Please ensure the face is clearly visible and forward-facing.")
+                                    if not face_locations:
+                                        st.error("❌ No face detected. Ensure the face is clearly visible and forward-facing.")
                                         st.stop()
                                     if len(face_locations) > 1:
                                         st.error("❌ Multiple faces detected. Please upload a photo with only this resident.")
@@ -584,7 +586,7 @@ def show_face_enrollment():
                                     # Generate encoding
                                     encodings = face_recognition.face_encodings(image_np, face_locations)
                                     if not encodings:
-                                        st.error("❌ Could not generate a face encoding. Try a clearer, better-lit photo.")
+                                        st.error("❌ Could not generate face encoding. Try a clearer, better-lit photo.")
                                         st.stop()
 
                                     encoding_str = json.dumps(encodings[0].tolist())
@@ -593,24 +595,22 @@ def show_face_enrollment():
                                     file_ext = face_photo.name.split('.')[-1]
                                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                                     unique_storage_path = f"resident_faces/{p['id']}_{timestamp}.{file_ext}"
-                                    
                                     supabase.storage.from_('face_photos').upload(
                                         path=unique_storage_path,
                                         file=face_photo.getvalue(),
                                         file_options={"content-type": face_photo.type}
                                     )
-                                    
+
                                     # Generate URL and update database
                                     public_url = supabase.storage.from_('face_photos').get_public_url(unique_storage_path)
-                                    
                                     supabase.table('participants').update({
                                         'face_encoding': encoding_str,
                                         'face_enrolled': True,
                                         'face_photo_url': public_url,
                                         'face_updated_at': datetime.now().isoformat()
                                     }).eq('id', p['id']).execute()
-                                    
-                                    # Reload face cache immediately
+
+                                    # Reload face cache
                                     try:
                                         from services.face_service import get_face_service
                                         get_face_service().reload()
@@ -619,7 +619,7 @@ def show_face_enrollment():
 
                                     st.success(f"✅ Face enrolled and photo saved successfully for {p['name']}!")
                                     st.info("💡 The new face is active immediately — no restart needed.")
-                                    
+
                                 except Exception as e:
                                     st.error(f"❌ Error during enrollment: {str(e)}")
                     st.divider()
