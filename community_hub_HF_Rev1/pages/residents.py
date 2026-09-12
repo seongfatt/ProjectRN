@@ -9,7 +9,6 @@ import base64
 import os
 import streamlit.components.v1 as components
 
-
 def _get_logo_base64(logo_path="logo.png"):
     """Convert local logo to base64 so it renders inside HTML components."""
     try:
@@ -29,12 +28,18 @@ def _get_logo_base64(logo_path="logo.png"):
         "ZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZm9udC13ZWlnaHQ9ImJvbGQiPldaNjwvdGV4dD48L3N2Zz4="
     )
 
+def _safe_str(value, default="N/A"):
+    """Safely convert any value (including None) to a stripped string."""
+    if value is None:
+        return default
+    return str(value).strip()
 
 def _display_qr_card(resident):
-    """Render a clean, downloadable QR card (same as resident_qr.py)"""
-    resident_id = str(resident['id']).strip()
-    resident_name = resident['name'].strip()
-    resident_block = resident.get('block_no', 'N/A').strip()
+    """Render QR card with white background, no download button in PNG, and shareable link."""
+    resident_id = _safe_str(resident.get("id"), "UNKNOWN")
+    resident_name = _safe_str(resident.get("name"), "Unknown Resident")
+    resident_block = _safe_str(resident.get("block_no"), "N/A")
+
     logo_src = _get_logo_base64()
     qr_data = resident_id
     qr_api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={urllib.parse.quote(qr_data)}"
@@ -50,188 +55,214 @@ def _display_qr_card(resident):
     except Exception:
         qr_image_src = qr_api_url
 
-    # 🎨 Card HTML (dark mode, centered, mobile-responsive)
-    card_html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            body {{
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background: #0f172a;
-                color: #f1f5f9;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                padding: 20px;
-            }}
-            .card {{
-                background: #1e293b;
-                color: #f1f5f9;
-                border-radius: 20px;
-                padding: 30px 24px;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-                max-width: 400px;
-                width: 100%;
-                text-align: center;
-            }}
-            .header {{
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 15px;
-                margin-bottom: 20px;
-            }}
-            .logo {{
-                width: 60px;
-                height: 60px;
-                object-fit: contain;
-                background: #0f172a;
-                border-radius: 12px;
-                padding: 5px;
-            }}
-            .title-group {{
-                text-align: left;
-            }}
-            .title-group h2 {{
-                color: #60a5fa;
-                margin: 0;
-                font-size: 20px;
-                font-weight: 700;
-                line-height: 1.2;
-            }}
-            .title-group p {{
-                color: #94a3b8;
-                margin: 2px 0 0 0;
-                font-size: 12px;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-            }}
-            .divider {{
-                border: 0;
-                border-top: 1px solid #334155;
-                margin: 20px 0;
-            }}
-            .resident-name {{
-                margin: 12px 0;
-                font-size: 28px;
-                font-weight: bold;
-                color: #f1f5f9;
-                word-break: break-word;
-            }}
-            .resident-block {{
-                font-size: 18px;
-                color: #cbd5e1;
-                margin: 6px 0;
-                font-weight: 500;
-            }}
-            .qr-wrap {{
-                margin: 14px 0;
-            }}
-            .qr-wrap img {{
-                width: 210px;
-                height: 210px;
-                border: 2px dashed #60a5fa;
-                border-radius: 10px;
-                padding: 10px;
-                background: #0f172a;
-                box-shadow: inset 0 0 0 2px #1e293b;
-            }}
-            .qr-hint {{
-                font-size: 12px;
-                color: #94a3b8;
-                margin: 8px 0;
-            }}
-            .id-box {{
-                background: #0f172a;
-                padding: 14px;
-                border-radius: 10px;
-                margin-top: 16px;
-            }}
-            .id-box p {{
-                font-size: 22px;
-                font-weight: bold;
-                color: #f1f5f9;
-                font-family: 'Courier New', monospace;
-                margin: 0;
-                letter-spacing: 1px;
-            }}
-            .footer-text {{
-                font-weight: 600;
-                color: #60a5fa;
-                font-size: 16px;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-                margin-top: 14px;
-            }}
-            .download-btn {{
-                margin: 20px 0;
-                padding: 12px 24px;
-                background: #3b82f6;
-                color: white;
-                border: none;
-                border-radius: 8px;
-                cursor: pointer;
-                font-weight: 600;
-                font-size: 16px;
-                width: 100%;
-                max-width: 400px;
-                transition: background 0.2s;
-            }}
-            .download-btn:hover {{
-                background: #2563eb;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="card" id="residentCard">
-            <div class="header">
-                <img src="{logo_src}" class="logo" alt="Logo">
-                <div class="title-group">
-                    <h2>WOODLANDS ZONE 6</h2>
-                    <p>Community Hub</p>
-                </div>
-            </div>
-            <hr class="divider">
-            <h1 class="resident-name">{resident_name}</h1>
-            <p class="resident-block">Block: {resident_block}</p>
-            <hr class="divider">
-            <div class="qr-wrap">
-                <img src="{qr_image_src}" alt="QR Code">
-            </div>
-            <p class="qr-hint">Scan at Kiosk</p>
-            <div class="id-box">
-                <p>ID: {resident_id}</p>
-            </div>
-            <p class="footer-text">Community Activities</p>
-            <button class="download-btn" onclick="downloadCard()">Download Card as PNG</button>
-        </div>
+    # 🔗 Build shareable URL and WhatsApp link
+    phone = resident.get("contact")
+    clean_phone = clean_phone_number(phone) if phone else ""
+    share_link = f"{APP_URL}/resident_qr?phone={clean_phone}" if clean_phone else "#"
+    
+    # WhatsApp requires country code (assuming Singapore +65 for Woodlands)
+    wa_phone = f"65{clean_phone}" if clean_phone and len(clean_phone) == 8 else clean_phone
+    wa_text = urllib.parse.quote(f"Hello {resident_name}, here is your QR code link for Woodlands Zone 6: {share_link}")
+    whatsapp_link = f"https://wa.me/{wa_phone}?text={wa_text}" if wa_phone else "#"
 
-        <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
-        <script>
-            function downloadCard() {{
-                const card = document.getElementById('residentCard');
-                html2canvas(card, {{
-                    backgroundColor: '#0f172a',
-                    scale: 2,
-                    useCORS: true,
-                    allowTaint: false
-                }}).then(canvas => {{
-                    const link = document.createElement('a');
-                    link.download = 'Resident_Card_{resident_id}.png';
-                    link.href = canvas.toDataURL('image/png');
-                    link.click();
-                }});
-            }}
-        </script>
-    </body>
-    </html>
-    """
+    # ✅ White-themed card with html2canvas for PNG download
+    card_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body {{
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #ffffff;
+            color: #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            max-width: 400px;
+            width: 100%;
+        }}
+        .card {{
+            background: #ffffff;
+            color: #1a1a1a;
+            border-radius: 20px;
+            padding: 30px 24px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+            width: 100%;
+            text-align: center;
+        }}
+        .header {{
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+        }}
+        .logo {{
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 5px;
+        }}
+        .title-group h2 {{
+            color: #4a6cf7;
+            margin: 0;
+            font-size: 22px;
+            font-weight: 700;
+        }}
+        .title-group p {{
+            color: #666;
+            margin: 2px 0 0 0;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }}
+        .divider {{
+            border: 0;
+            border-top: 2px solid #eee;
+            margin: 20px 0;
+        }}
+        .resident-name {{
+            margin: 10px 0;
+            font-size: 32px;
+            font-weight: bold;
+            color: #1a1a1a;
+            word-break: break-word;
+        }}
+        .resident-block {{
+            font-size: 20px;
+            color: #555;
+            margin: 5px 0;
+            font-weight: 500;
+        }}
+        .qr-wrap {{
+            margin: 15px 0;
+        }}
+        .qr-wrap img {{
+            width: 220px;
+            height: 220px;
+            border: 2px dashed #4a6cf7;
+            border-radius: 10px;
+            padding: 10px;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }}
+        .qr-hint {{
+            font-size: 12px;
+            color: #666;
+            margin: 8px 0 0 0;
+        }}
+        .id-box {{
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+        }}
+        .id-box p {{
+            font-size: 24px;
+            font-weight: bold;
+            color: #1a1a1a;
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            letter-spacing: 1px;
+        }}
+        .share-link {{
+            margin: 18px 0;
+            padding: 12px;
+            background: #f0f4ff;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #2c3e50;
+            text-align: center;
+            border: 1px dashed #4a6cf7;
+            word-break: break-all;
+        }}
+        .footer-text {{
+            font-weight: 600;
+            color: #4a6cf7;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 20px 0 0 0;
+        }}
+        .download-btn {{
+            margin-top: 15px;
+            background: #4a6cf7;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            font-weight: bold;
+        }}
+        .download-btn:hover {{
+            background: #3b5bdb;
+        }}
+    </style>
+</head>
+<body>
+    <div class="card" id="qr-card">
+        <div class="header">
+            <img src="{logo_src}" class="logo" alt="Logo">
+            <div class="title-group">
+                <h2>WOODLANDS ZONE 6</h2>
+                <p>Community Hub</p>
+            </div>
+        </div>
+        <hr class="divider">
+        <h1 class="resident-name">{resident_name}</h1>
+        <p class="resident-block">Block: {resident_block}</p>
+        <hr class="divider">
+        <div class="qr-wrap">
+            <img src="{qr_image_src}" alt="QR Code">
+        </div>
+        <p class="qr-hint">Scan at Kiosk</p>
+        <div class="id-box">
+            <p>ID: {resident_id}</p>
+        </div>
+        <div class="share-link">
+            📲 Shareable Link:<br>
+            <code>{share_link}</code>
+        </div>
+        <p class="footer-text">COMMUNITY ACTIVITIES</p>
+    </div>
+    <button class="download-btn" onclick="downloadCard()">📥 Download as PNG</button>
+
+    <script>
+        function downloadCard() {{
+            const card = document.getElementById('qr-card');
+            html2canvas(card, {{
+                scale: 2, // Higher resolution
+                useCORS: true,
+                backgroundColor: '#ffffff'
+            }}).then(canvas => {{
+                const link = document.createElement('a');
+                link.download = 'Resident_QR_{resident_name.replace(" ", "_")}.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            }});
+        }}
+    </script>
+</body>
+</html>
+"""
 
     from streamlit.components.v1 import html
-    html(card_html, height=720)
+    html(card_html, height=800, scrolling=True)
+
+    # ✅ External WhatsApp share button
+    st.markdown(
+        f"<div style='text-align:center; margin-top:10px;'>"
+        f"<a href='{whatsapp_link}' target='_blank' style='background:#25D366; color:white; padding:10px 20px; text-decoration:none; border-radius:8px; font-weight:bold;'>"
+        f"📲 Share via WhatsApp</a></div>",
+        unsafe_allow_html=True
+    )
 
 
 def show_residents():
@@ -264,7 +295,6 @@ def show_residents():
          "RN Members Only", "Volunteer Members Only", "Residents Only"],
     )
 
-    # 🔥 MULTI-BLOCK: collect ALL occupied plots per resident
     plot_dict = {}
     for p in plots:
         if p.get("occupied"):
@@ -272,7 +302,6 @@ def show_residents():
             if uid:
                 plot_dict.setdefault(str(uid).strip(), []).append(p)
 
-    # Pre-calculate all attendance stats in ONE query
     activity_counts = defaultdict(lambda: defaultdict(int))
     total_counts = defaultdict(int)
     try:
@@ -479,7 +508,7 @@ def show_residents():
         plot = plots_dict.get(pn)
         ptype = _ptype_for(pn, plot)
         if ptype == 'C':
-            area = 2.0  # Force Type C to export as 2.0
+            area = 2.0
         else:
             area = PLOT_TYPES.get(ptype, PLOT_TYPES['B'])['area']
         if plot and plot.get('occupied'):
@@ -541,7 +570,7 @@ def show_residents():
         c2.metric("Total Records", total_records)
         c3.metric("Participation Rate", f"{(unique_participants / active * 100):.1f}%" if active > 0 else "0%")
 
-    # ══════ QR CODE GENERATOR SECTION (MODERN, CARD-BASED) ══════
+    # ══════ QR CODE GENERATOR SECTION ══════
     st.divider()
     st.subheader("📱 Generate QR Code for Resident")
     st.caption("Generate a permanent QR code card for elderly residents to carry")
@@ -553,7 +582,6 @@ def show_residents():
         key="qr_mode_select",
     )
 
-    # ── QR CARD PREVIEW MODE ───────────────────────────────────────────────
     if qr_mode == "🔍 Search Specific Resident":
         qr_search = st.text_input("Search resident to generate QR code", placeholder="Type name or ID...", key="qr_search_individual")
         if qr_search:
@@ -601,12 +629,11 @@ def show_residents():
         else:
             st.info("No residents found matching the filter.")
 
-    # ── FACE ENROLLMENT SECTION ───────────────────────────────────────────────
+    # ── FACE ENROLLMENT SECTION ───────────────────────────────
     st.divider()
     st.subheader("📸 Face Enrollment for Group Check-In")
     st.caption("Enroll residents' faces for group photo check-in.")
 
-    # Search for resident to enroll
     search_face = st.text_input("Search resident by Name or ID", key="face_enroll_search")
     if search_face:
         s = search_face.lower()
@@ -616,7 +643,6 @@ def show_residents():
                 with st.container():
                     st.markdown(f"**{p['name']}** — ID: {p['id'][:12]}...")
 
-                    # Show enrollment status
                     if p.get('face_enrolled', False) and p.get('face_photo_url'):
                         st.success("✅ Face enrolled and photo saved")
                     elif p.get('face_enrolled', False) and not p.get('face_photo_url'):
@@ -643,11 +669,9 @@ def show_residents():
                                     from PIL import Image
                                     from datetime import datetime
 
-                                    # Load image and convert to RGB
                                     image = Image.open(io.BytesIO(face_photo.getvalue())).convert("RGB")
                                     image_np = np.array(image)
 
-                                    # Detect face
                                     face_locations = face_recognition.face_locations(image_np, model='hog')
                                     if not face_locations:
                                         face_locations = face_recognition.face_locations(image_np, number_of_times_to_upsample=2, model='hog')
@@ -658,14 +682,12 @@ def show_residents():
                                         st.error("❌ Multiple faces detected. Please upload a photo with only this resident.")
                                         st.stop()
 
-                                    # Generate encoding
                                     encodings = face_recognition.face_encodings(image_np, face_locations)
                                     if not encodings:
                                         st.error("❌ Could not generate a face encoding. Try a clearer, better-lit photo.")
                                         st.stop()
                                     encoding_str = json.dumps(encodings[0].tolist())
 
-                                    # Upload to Supabase Storage
                                     file_ext = face_photo.name.split('.')[-1]
                                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                                     unique_storage_path = f"resident_faces/{p['id']}_{timestamp}.{file_ext}"
@@ -675,7 +697,6 @@ def show_residents():
                                         file_options={"content-type": face_photo.type}
                                     )
 
-                                    # Generate URL and update database
                                     public_url = supabase.storage.from_('face_photos').get_public_url(unique_storage_path)
                                     supabase.table('participants').update({
                                         'face_encoding': encoding_str,
@@ -684,7 +705,6 @@ def show_residents():
                                         'face_updated_at': datetime.now().isoformat()
                                     }).eq('id', p['id']).execute()
 
-                                    # Reload face cache
                                     try:
                                         from services.face_service import get_face_service
                                         get_face_service().reload()
