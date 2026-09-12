@@ -6,7 +6,7 @@ def show_manage(selected_date):
     from config import supabase, DB_CONNECTED, refresh_data, load_activities
     from utils import mask_phone, clean_phone_number, log_action, find_participant_by_id
     from services import RegistrationService
-    from pages.residents import show_face_enrollment
+    from pages.face_enrollment import show_face_enrollment
 
     # ─── HELPER: Get/Set System Settings ──────────────────────
     def get_setting(key, default=None):
