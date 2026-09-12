@@ -27,7 +27,7 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
 
     function onScanSuccess(decodedText) {{
         console.log("QR scanned:", decodedText);
-        // 🔥 Redirect to self with QR in query param
+        // 🔥 Redirect to self with QR in query param (forces full reload)
         const url = new URL(window.location);
         url.searchParams.set('qr', decodedText);
         window.location.href = url.toString();
