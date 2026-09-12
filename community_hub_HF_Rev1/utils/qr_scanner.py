@@ -23,19 +23,14 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
 
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <script>
-    let lastScannedCode = null;
     let html5QrcodeScanner = null;
 
-    function onScanSuccess(decodedText, decodedResult) {{
-        if (decodedText !== lastScannedCode) {{
-            lastScannedCode = decodedText;
-            console.log("QR detected:", decodedText);
-
-            // ✅ FORCE FULL PAGE RELOAD WITH QR ID AS QUERY PARAM
-            const url = new URL(window.location);
-            url.searchParams.set('qr', decodedText);
-            window.location.href = url.toString();
-        }}
+    function onScanSuccess(decodedText) {{
+        console.log("QR scanned:", decodedText);
+        // 🔥 Redirect to self with QR in query param
+        const url = new URL(window.location);
+        url.searchParams.set('qr', decodedText);
+        window.location.href = url.toString();
     }}
 
     function onScanFailure() {{}}
