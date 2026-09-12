@@ -591,12 +591,12 @@ def show_volunteer_portal(token, activity_param=None):
             </div>
             """, unsafe_allow_html=True)
 
-        # ✅ Clear & Scan Next Person
-        if st.button("🔄 Clear & Scan Next Person", key="clear_qr_input", use_container_width=True):
-            if qr_key in st.session_state:
-                del st.session_state[qr_key]
-            st.session_state.qr_scan_counter += 1
-            st.rerun()
+        # # ✅ Clear & Scan Next Person
+        # if st.button("🔄 Clear & Scan Next Person", key="clear_qr_input", use_container_width=True):
+        #     if qr_key in st.session_state:
+        #         del st.session_state[qr_key]
+        #     st.session_state.qr_scan_counter += 1
+        #     st.rerun()
 
         st.divider()
         st.caption("💡 **Tip:** The camera scanner auto-fills the field above. Click 'Clear & Scan Next Person' when ready for the next resident.")
