@@ -184,7 +184,24 @@ def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
         else:
             st.error(f"Error: {e}")
             return False
-            
+    # 🔥 Handle QR scan from camera (URL redirect)
+query_params = st.experimental_get_query_params()
+qr_from_url = query_params.get("qr", [None])[0]
+if qr_from_url:
+    # Clean ID (handle pid=...)
+    extracted_pid = qr_from_url.strip()
+    if 'pid=' in qr_from_url:
+        try:
+            parsed = urllib.parse.urlparse(f"https://dummy?{qr_from_url}")
+            q = urllib.parse.parse_qs(parsed.query)
+            extracted_pid = q.get('pid', [extracted_pid])[0]
+        except:
+            pass
+    # Store and clear URL
+    st.session_state.qr_auto_scan = extracted_pid
+    st.experimental_set_query_params()  # Remove ?qr=...
+    st.rerun()  # Force re-run with qr_auto_scan set
+
 def show_volunteer_portal(token, activity_param=None):
     """UNIFIED VOLUNTEER PORTAL WITH REAL-TIME QR SCANNING"""
     from pages.volunteer_access import validate_volunteer_token
@@ -347,14 +364,13 @@ def show_volunteer_portal(token, activity_param=None):
                 if success:
                     st.balloons()
                     st.session_state.checkin_success = True
-
                     st.markdown("""
                     <div style="background: #d4edda; border: 2px solid #28a745; padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0;">
                         <h2 style="color: #155724; margin: 0;">✅ Check-in Successful!</h2>
-                        <p style="color: #155724; font-size: 18px; margin: 10px 0 0 0;">Ready for next resident in 3 seconds...</p>
+                        <p style="color: #155724; font-size: 18px; margin: 10px 0 0 0;">Auto-resetting for next resident...</p>
                     </div>
                     <script>
-                        setTimeout(() => {{ window.location.reload(); }}, 3000);
+                        setTimeout(() => window.location.reload(), 3000);
                     </script>
                     """, unsafe_allow_html=True)
                     st.stop()

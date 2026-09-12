@@ -26,13 +26,13 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
 
     function onScanSuccess(decodedText) {{
         console.log("QR scanned:", decodedText);
-        // 🔥 Send QR to Streamlit via postMessage
-        window.parent.postMessage({{ type: 'QR_SCAN', data: decodedText }}, '*');
+        // 🔥 Redirect to self with QR in URL (forces full reload)
+        const url = new URL(window.location);
+        url.searchParams.set('qr', decodedText);
+        window.location.href = url.toString();
     }}
 
-    function onScanFailure() {{
-        // Ignore failure, keep scanning
-    }}
+    function onScanFailure() {{}}
 
     html5QrcodeScanner = new Html5QrcodeScanner("reader", {{
         fps: 10,
@@ -42,11 +42,6 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
     }}, false);
 
     html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-
-    // Optional: Notify parent frame that scanner is ready
-    window.addEventListener('load', () => {{
-        window.parent.postMessage({{ type: 'QR_SCANNER_READY' }}, '*');
-    }});
     </script>
     """
 
