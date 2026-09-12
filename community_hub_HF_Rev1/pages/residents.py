@@ -58,13 +58,13 @@ def _display_qr_card(resident):
     wa_text = urllib.parse.quote(f"Hello {resident_name}, here is your QR code link for Woodlands Zone 6: {APP_URL}/resident_qr?phone={clean_phone}")
     whatsapp_link = f"https://wa.me/{wa_phone}?text={wa_text}" if wa_phone else "#"
 
-    # ✅ Professional Badge HTML/CSS (Same as resident_qr.py)
+    # ✅ Professional Badge HTML/CSS (Buttons stacked below)
     card_html = f"""
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
     <style>
         body {{
             margin: 0;
@@ -72,8 +72,10 @@ def _display_qr_card(resident):
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: transparent;
             display: flex;
+            flex-direction: column;
             justify-content: center;
             align-items: center;
+            min-height: 100vh;
         }}
         .badge {{
             width: 340px;
@@ -173,18 +175,19 @@ def _display_qr_card(resident):
             letter-spacing: 1px;
         }}
         .actions {{
-            margin-top: 15px;
+            margin-top: 20px;
             display: flex;
-            gap: 10px;
+            gap: 15px;
             justify-content: center;
+            width: 100%;
         }}
         .btn {{
             background: #4a6cf7;
             color: white;
             border: none;
-            padding: 10px 18px;
+            padding: 12px 24px;
             border-radius: 8px;
-            font-size: 14px;
+            font-size: 15px;
             cursor: pointer;
             font-weight: bold;
             transition: 0.2s;
@@ -218,7 +221,7 @@ def _display_qr_card(resident):
             <h1 class="resident-name">{resident_name}</h1>
             <p class="resident-block">Block: {resident_block}</p>
             <div class="qr-container">
-                <img src="{qr_image_src}" alt="QR Code">
+                <img src="{qr_image_src}" alt="QR Code" id="qr-img">
             </div>
             <p class="scan-hint">Scan at Kiosk</p>
             <div class="id-box">ID: {resident_id}</div>
@@ -234,15 +237,20 @@ def _display_qr_card(resident):
     <script>
         function downloadCard() {{
             const card = document.getElementById('badge');
-            html2canvas(card, {{
-                scale: 2,
-                useCORS: true,
+            htmlToImage.toPng(card, {{ 
+                quality: 1.0, 
+                pixelRatio: 2,
                 backgroundColor: '#ffffff'
-            }}).then(canvas => {{
+            }})
+            .then(function (dataUrl) {{
                 const link = document.createElement('a');
                 link.download = 'Resident_Badge_{resident_name.replace(" ", "_")}.png';
-                link.href = canvas.toDataURL('image/png');
+                link.href = dataUrl;
                 link.click();
+            }})
+            .catch(function (error) {{
+                console.error('Download error:', error);
+                alert('Could not download image. Please try again.');
             }});
         }}
     </script>
@@ -251,11 +259,11 @@ def _display_qr_card(resident):
 """
 
     from streamlit.components.v1 import html
-    html(card_html, height=680, scrolling=True)
+    html(card_html, height=780, scrolling=True)
 
     st.markdown(
         f"<div style='text-align:center; margin-top:10px;'>"
-        f"<a href='{whatsapp_link}' target='_blank' style='background:#25D366; color:white; padding:10px 20px; text-decoration:none; border-radius:8px; font-weight:bold; display:inline-block;'>"
+        f"<a href='{whatsapp_link}' target='_blank' style='background:#128C7E; color:white; padding:12px 24px; text-decoration:none; border-radius:8px; font-weight:bold; display:inline-block; font-size:16px;'>"
         f"📲 Share via WhatsApp</a></div>",
         unsafe_allow_html=True
     )

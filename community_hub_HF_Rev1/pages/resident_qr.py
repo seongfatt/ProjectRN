@@ -94,7 +94,8 @@ def display_resident_qr_card(resident):
 <html>
 <head>
     <meta charset="UTF-8">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- ✅ SWITCHED TO html-to-image FOR RELIABLE BASE64 CAPTURING -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
     <style>
         body {{
             margin: 0;
@@ -253,7 +254,7 @@ def display_resident_qr_card(resident):
             <h1 class="resident-name">{resident_name}</h1>
             <p class="resident-block">Block: {resident_block}</p>
             <div class="qr-container">
-                <img src="{qr_image_src}" alt="QR Code" id="qr-img" crossorigin="anonymous">
+                <img src="{qr_image_src}" alt="QR Code" id="qr-img">
             </div>
             <p class="scan-hint">Scan at Kiosk</p>
             <div class="id-box">ID: {resident_id}</div>
@@ -269,43 +270,23 @@ def display_resident_qr_card(resident):
     <script>
         function downloadCard() {{
             const card = document.getElementById('badge');
-            const qrImg = document.getElementById('qr-img');
             
-            // ✅ FIX: Preload the image to force the browser to fully decode it
-            const preloadImg = new Image();
-            preloadImg.crossOrigin = "anonymous";
-            preloadImg.src = qrImg.src;
-
-            preloadImg.onload = function() {{
-                // Once fully loaded, wait a moment for the DOM to render it
-                setTimeout(() => {{
-                    html2canvas(card, {{
-                        scale: 2,
-                        useCORS: true,
-                        backgroundColor: '#ffffff',
-                        allowTaint: true,
-                        onclone: function(clonedDoc) {{
-                            // Force the cloned image to have the loaded source
-                            const clonedQr = clonedDoc.getElementById('qr-img');
-                            if (clonedQr) {{
-                                clonedQr.src = preloadImg.src;
-                            }}
-                        }}
-                    }}).then(canvas => {{
-                        const link = document.createElement('a');
-                        link.download = 'Resident_Badge_{resident_name.replace(" ", "_")}.png';
-                        link.href = canvas.toDataURL('image/png');
-                        link.click();
-                    }}).catch(err => {{
-                        console.error('html2canvas error:', err);
-                        alert('Could not download image. Please try again.');
-                    }});
-                }}, 800); // 800ms delay to guarantee rendering
-            }};
-
-            preloadImg.onerror = function() {{
-                alert("Error loading QR code image. Please refresh the page and try again.");
-            }};
+            // ✅ html-to-image handles Base64 images perfectly without CORS errors
+            htmlToImage.toPng(card, {{ 
+                quality: 1.0, 
+                pixelRatio: 2,
+                backgroundColor: '#ffffff'
+            }})
+            .then(function (dataUrl) {{
+                const link = document.createElement('a');
+                link.download = 'Resident_Badge_{resident_name.replace(" ", "_")}.png';
+                link.href = dataUrl;
+                link.click();
+            }})
+            .catch(function (error) {{
+                console.error('Download error:', error);
+                alert('Could not download image. Please try again.');
+            }});
         }}
     </script>
 </body>
