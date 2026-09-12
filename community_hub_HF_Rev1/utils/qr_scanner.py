@@ -21,75 +21,32 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
         <p style="color: #666; margin-top: 15px;">📷 Point camera at QR code - Auto-detection enabled</p>
     </div>
 
-    <!-- Hidden trigger button (auto-clicked by JS after QR injection) -->
-    <button id="trigger_checkin" style="display:none;">Trigger</button>
-
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <script>
     let lastScannedCode = null;
     let html5QrcodeScanner = null;
 
     function onScanSuccess(decodedText, decodedResult) {{
-        // Prevent duplicate scans within 3 seconds
         if (decodedText !== lastScannedCode) {{
             lastScannedCode = decodedText;
-            console.log("QR Code detected:", decodedText);
-            
-            // --- STREAMLIT INTEGRATION ---
-            // Access the parent window (the main Streamlit app)
-            const parentDoc = window.parent.document;
-            // Find the specific text input by partial placeholder match
-            const targetInput = parentDoc.querySelector('input[placeholder*="Waiting for scan"]');
-            
-            if (targetInput) {{
-                // Use the native setter to bypass React's controlled input restrictions
-                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-                nativeInputValueSetter.call(targetInput, decodedText);
-                
-                // Dispatch events to trigger Streamlit/React update
-                targetInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                targetInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                
-                console.log("Successfully injected QR code into Streamlit input.");
-                
-                // 🔥 AUTO-TRIGGER: Click hidden button to force Streamlit rerun
-                const triggerBtn = parentDoc.getElementById('trigger_checkin');
-                if (triggerBtn) {{
-                    triggerBtn.click();
-                }}
-            }} else {{
-                console.log("Could not find Streamlit input with placeholder containing 'Waiting for scan'");
-            }}
-            // -----------------------------
+            console.log("QR detected:", decodedText);
 
-            // Pause scanning briefly to prevent rapid-fire duplicates
-            if (html5QrcodeScanner) {{
-                html5QrcodeScanner.pause();
-                setTimeout(() => {{
-                    html5QrcodeScanner.resume();
-                    // Reset after 3 seconds to allow scanning the same code again if needed
-                    setTimeout(() => {{ lastScannedCode = null; }}, 3000);
-                }}, 1000);
-            }}
+            // ✅ FORCE FULL PAGE RELOAD WITH QR ID AS QUERY PARAM
+            const url = new URL(window.location);
+            url.searchParams.set('qr', decodedText);
+            window.location.href = url.toString();
         }}
     }}
-    
-    function onScanFailure(error) {{
-        // Scan failed - ignore, keep scanning
-    }}
-    
-    // Initialize scanner
-    html5QrcodeScanner = new Html5QrcodeScanner(
-        "reader",
-        {{ 
-            fps: 10,
-            qrbox: {{ width: 250, height: 250 }},
-            aspectRatio: 1.0,
-            disableFlip: false
-        }},
-        /* verbose= */ false
-    );
-    
+
+    function onScanFailure() {{}}
+
+    html5QrcodeScanner = new Html5QrcodeScanner("reader", {{
+        fps: 10,
+        qrbox: {{ width: 250, height: 250 }},
+        aspectRatio: 1.0,
+        disableFlip: false
+    }}, false);
+
     html5QrcodeScanner.render(onScanSuccess, onScanFailure);
     </script>
     """
