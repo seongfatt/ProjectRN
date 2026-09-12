@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ✅ FIX 1: Wrapped CSS in <style> tags to prevent raw text from showing
+# ✅ Hide Streamlit UI elements + Sidebar via CSS
 hide_streamlit_style = """
 <style>
     #MainMenu {visibility: hidden;}
@@ -88,7 +88,7 @@ def display_resident_qr_card(resident):
     wa_text = urllib.parse.quote(f"Here is my QR code for Woodlands Zone 6: {APP_URL}/resident_qr?phone={clean_phone}")
     whatsapp_link = f"https://wa.me/{wa_phone}?text={wa_text}" if wa_phone else "#"
 
-    # ✅ Professional Badge HTML/CSS
+    # ✅ Professional Badge HTML/CSS (Buttons stacked below the badge)
     card_html = f"""
 <!DOCTYPE html>
 <html>
@@ -102,8 +102,10 @@ def display_resident_qr_card(resident):
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: transparent;
             display: flex;
+            flex-direction: column; /* ✅ FIX: Stack vertically */
             justify-content: center;
             align-items: center;
+            min-height: 100vh;
         }}
         .badge {{
             width: 340px;
@@ -203,18 +205,19 @@ def display_resident_qr_card(resident):
             letter-spacing: 1px;
         }}
         .actions {{
-            margin-top: 15px;
+            margin-top: 20px;
             display: flex;
-            gap: 10px;
+            gap: 15px;
             justify-content: center;
+            width: 100%;
         }}
         .btn {{
             background: #4a6cf7;
             color: white;
             border: none;
-            padding: 10px 18px;
+            padding: 12px 24px;
             border-radius: 8px;
-            font-size: 14px;
+            font-size: 15px;
             cursor: pointer;
             font-weight: bold;
             transition: 0.2s;
@@ -268,7 +271,7 @@ def display_resident_qr_card(resident):
             const card = document.getElementById('badge');
             const qrImg = document.getElementById('qr-img');
             
-            // ✅ FIX 3: Robust wait for image to load before capturing
+            // ✅ FIX: Robust wait for image to load before capturing
             function doCapture() {{
                 html2canvas(card, {{
                     scale: 2,
@@ -287,15 +290,12 @@ def display_resident_qr_card(resident):
             }}
 
             if (qrImg && qrImg.complete) {{
-                // Image is already loaded, add slight delay for rendering
                 setTimeout(doCapture, 500);
             }} else if (qrImg) {{
-                // Wait for the image to load
                 qrImg.onload = function() {{
                     setTimeout(doCapture, 500);
                 }};
             }} else {{
-                // Fallback
                 setTimeout(doCapture, 500);
             }}
         }}
@@ -305,9 +305,10 @@ def display_resident_qr_card(resident):
 """
 
     from streamlit.components.v1 import html
-    html(card_html, height=680, scrolling=True)
+    # ✅ Increased height to 780 to accommodate stacked buttons
+    html(card_html, height=780, scrolling=True)
 
-    # ✅ FIX 4: Darker green for WhatsApp button
+    # External WhatsApp button
     st.markdown(
         f"<div style='text-align:center; margin-top:10px;'>"
         f"<a href='{whatsapp_link}' target='_blank' style='background:#128C7E; color:white; padding:12px 24px; text-decoration:none; border-radius:8px; font-weight:bold; display:inline-block; font-size:16px;'>"
@@ -343,7 +344,7 @@ if phone_input:
             st.success("✅ Found your QR code!")
             display_resident_qr_card(resident)
 
-            # ✅ FIX 2: Removed white background, used transparent/dark theme friendly styling
+            # Personal link shown OUTSIDE the card
             full_link = f"{APP_URL}/resident_qr?phone={cleaned}"
             st.markdown(
                 f"<div style='padding:12px; border-radius:8px; margin-top:16px; text-align:center; font-size:14px; border:1px solid #444; background:transparent;'>"
