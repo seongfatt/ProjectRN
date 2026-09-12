@@ -317,7 +317,7 @@ def show_volunteer_portal(token, activity_param=None):
     st.subheader("📱 Step 3: Choose Check-In Method")
     method = st.radio("How would you like to check in residents?",
                      ["📸 Real-Time QR Scanner (Auto-Detect)",
-                    #   "📷 Snapshot QR Scanner",
+                      "📷 Snapshot QR Scanner",
                       "⌨️ Phone / Name Search",
                       "📝 Register New Resident"],
                      horizontal=False, key="portal_method")
