@@ -6,7 +6,6 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
     """
     Real-time QR code scanner with auto-detection using html5-qrcode library.
     Renders a live camera feed that automatically detects QR codes and injects the result into a Streamlit text input.
-    Now includes a hidden trigger button to force Streamlit reactivity on JS-injected values.
     """
     st.markdown("""
     <style>
@@ -20,10 +19,7 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
         <div id="reader"></div>
         <p style="color: #666; margin-top: 15px;">📷 Point camera at QR code - Auto-detection enabled</p>
     </div>
-
-    <!-- Hidden trigger button (auto-clicked by JS after QR injection) -->
-    <button id="trigger_checkin" style="display:none;">Trigger</button>
-
+    
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <script>
     let lastScannedCode = null;
@@ -38,7 +34,7 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
             // --- STREAMLIT INTEGRATION ---
             // Access the parent window (the main Streamlit app)
             const parentDoc = window.parent.document;
-            // Find the specific text input by partial placeholder match
+            // Find the specific text input by partial placeholder match (much more robust!)
             const targetInput = parentDoc.querySelector('input[placeholder*="Waiting for scan"]');
             
             if (targetInput) {{
@@ -51,12 +47,6 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
                 targetInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
                 
                 console.log("Successfully injected QR code into Streamlit input.");
-                
-                // 🔥 AUTO-TRIGGER: Click hidden button to force Streamlit rerun
-                const triggerBtn = parentDoc.getElementById('trigger_checkin');
-                if (triggerBtn) {{
-                    triggerBtn.click();
-                }}
             }} else {{
                 console.log("Could not find Streamlit input with placeholder containing 'Waiting for scan'");
             }}
