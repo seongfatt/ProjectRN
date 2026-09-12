@@ -44,7 +44,7 @@ def decode_qr_from_image(image):
                 return qr_data
         except Exception as e:
             print(f"⚠️ pyzbar error: {e}")
-    
+
     if CV2_AVAILABLE:
         try:
             img_array = np.array(image)
@@ -56,7 +56,7 @@ def decode_qr_from_image(image):
                 return data
         except Exception as e:
             print(f"⚠️ OpenCV QR error: {e}")
-    
+
     print("❌ All QR detection methods failed")
     return None
 
@@ -156,7 +156,7 @@ def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
         if s3: session_text.append("Session 3")
         if s4: session_text.append("Session 4")
         session_display = " & ".join(session_text) if session_text else "Attendance"
-        
+
         st.markdown(f"""
         <div style="background: #e8f5e9; color: #1e7e34; padding: 20px; border-radius: 8px; border-left: 5px solid #28a745; margin: 15px 0;">
             <div style="display: flex; align-items: center; gap: 12px;">
@@ -190,7 +190,7 @@ def show_volunteer_portal(token, activity_param=None):
     """UNIFIED VOLUNTEER PORTAL WITH REAL-TIME QR SCANNING"""
     from pages.volunteer_access import validate_volunteer_token
     is_valid, msg = validate_volunteer_token(token)
-    
+
     if not is_valid:
         st.error(f"❌ {msg}")
         st.markdown("""
@@ -203,7 +203,7 @@ def show_volunteer_portal(token, activity_param=None):
         st.stop()
 
     logo_src = _get_logo_base64()
-    
+
     st.markdown("""
     <style>
     .portal-header-card { background: #ffffff; color: #1a1a1a; border-radius: 20px; padding: 30px 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.12); max-width: 600px; margin: 0 auto 25px auto; text-align: center; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -275,9 +275,9 @@ def show_volunteer_portal(token, activity_param=None):
     default_index = act_names.index(activity_param) if activity_param and activity_param in act_names else 0
     selected_activity = st.selectbox("Choose Activity", act_names, index=default_index, key="portal_activity")
     selected_date = st.date_input("Date", value=datetime.now().date(), key="portal_date")
-    
+
     act_config = next((a for a in acts if a['name'] == selected_activity), None)
-    
+
     session_labels = []
     if act_config:
         for i in range(1, 5):
@@ -305,7 +305,7 @@ def show_volunteer_portal(token, activity_param=None):
             end = act_config.get(f'session_{i}_end_time', '')
             if lbl and start and end:
                 time_info.append(f"🕐 {lbl}: {start} - {end}")
-        
+
         if time_info:
             st.markdown('<div class="time-info-box">', unsafe_allow_html=True)
             st.markdown("📋 **Session Times:**")
@@ -315,11 +315,11 @@ def show_volunteer_portal(token, activity_param=None):
 
     st.divider()
     st.subheader("📱 Step 3: Choose Check-In Method")
-    method = st.radio("How would you like to check in residents?", 
-                     ["📸 Real-Time QR Scanner (Auto-Detect)", 
-                      "📷 Snapshot QR Scanner", 
-                      "⌨️ Phone / Name Search", 
-                      "📝 Register New Resident"], 
+    method = st.radio("How would you like to check in residents?",
+                     ["📸 Real-Time QR Scanner (Auto-Detect)",
+                      "📷 Snapshot QR Scanner",
+                      "⌨️ Phone / Name Search",
+                      "📝 Register New Resident"],
                      horizontal=False, key="portal_method")
 
     # ==========================================
@@ -342,11 +342,6 @@ def show_volunteer_portal(token, activity_param=None):
             clear_scanned_qr()
             st.rerun()
 
-        # 🔥 Initialize scan counter for dynamic key
-        if 'qr_scan_counter' not in st.session_state:
-            st.session_state.qr_scan_counter = 0
-
-        # Show camera scanner
         st.markdown("""
         <div class="qr-scanner-container">
             <h4 style="color: #667eea; margin-top: 0;">📸 Live Camera Scanner</h4>
@@ -362,7 +357,9 @@ def show_volunteer_portal(token, activity_param=None):
 
         st.info("💡 **Auto-Fill:** Scanned QR codes will appear below. You can also type manually.")
 
-        # 🔥 Use dynamic key to force reactivity on JS injection
+        # 🔥 Use dynamic key to force reactivity
+        if 'qr_scan_counter' not in st.session_state:
+            st.session_state.qr_scan_counter = 0
         qr_key = f"unified_qr_input_{st.session_state.qr_scan_counter}"
         qr_input = st.text_input(
             "QR Code ID (Auto-filled or Manual Entry)",
@@ -414,15 +411,15 @@ def show_volunteer_portal(token, activity_param=None):
                             st.balloons()
                             st.session_state.checkin_success = True
 
-                            # ✅ SAFE CLEAR & RESET
+                            # ✅ Clear input and rerun
                             if qr_key in st.session_state:
                                 del st.session_state[qr_key]
                             st.session_state.qr_scan_counter += 1
-                            
+
                             st.markdown("""
                             <div style="background: #d4edda; border: 2px solid #28a745; padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0;">
                                 <h2 style="color: #155724; margin: 0;">✅ Check-in Successful!</h2>
-                                <p style="color: #155724; font-size: 18px; margin: 10px 0 0 0;">Ready for next resident in 3 seconds...</p>
+                                <p style="color: #155724; font-size: 18px; margin: 10px 0 0 0;">Auto-resetting for next resident...</p>
                             </div>
                             <script>
                                 setTimeout(function() {
@@ -433,7 +430,7 @@ def show_volunteer_portal(token, activity_param=None):
                             st.stop()
 
                         else:
-                            if "already" in message.lower():
+                            if "already" in message.lower() or "fully checked in" in message.lower():
                                 st.markdown(f"""
                                 <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; margin: 10px 0;">
                                     <div style="display: flex; align-items: center; gap: 10px;">
@@ -441,7 +438,7 @@ def show_volunteer_portal(token, activity_param=None):
                                         <div>
                                             <h4 style="margin: 0 0 5px 0; color: #856404; font-size: 16px;">Already Checked In</h4>
                                             <p style="margin: 0; color: #1a1a1a; font-size: 14px;">
-                                                <strong>{resident_name}</strong> is already registered for <strong>{selected_activity}</strong> today.
+                                                <strong>{resident_name}</strong> is already checked in for <strong>{selected_activity}</strong> today.
                                             </p>
                                         </div>
                                     </div>
@@ -459,41 +456,31 @@ def show_volunteer_portal(token, activity_param=None):
                     st.error(f"Error: {e}")
                     st.rerun()
 
-        # ✅ Manual Clear Button (works reliably)
-        if st.button("🔄 Clear & Scan Next Person", type="secondary", use_container_width=True):
-            if 'unified_qr_input' in st.session_state:
-                del st.session_state.unified_qr_input
-            st.session_state.qr_scan_counter += 1
-            st.rerun()
-
-                # Manual check-in button
-        if qr_input and len(qr_input.strip()) > 5 and qr_input.strip() == st.session_state.last_processed_qr:
-            if st.button("✅ Check In", type="primary", use_container_width=True):
-                # Re-run check-in logic for manual input
+        # ✅ Manual Check-In Button
+        if qr_input and len(qr_input.strip()) > 5:
+            if st.button("✅ Check In", key="manual_checkin_button", use_container_width=True, type="primary"):
                 extracted_pid = qr_input.strip()
+                if 'pid=' in qr_input:
+                    try:
+                        parsed_url = urllib.parse.urlparse(qr_input)
+                        query_params = urllib.parse.parse_qs(parsed_url.query)
+                        extracted_pid = query_params.get('pid', [None])[0]
+                    except:
+                        pass
+
                 if extracted_pid and len(str(extracted_pid)) > 5:
                     try:
                         resident = supabase.table('participants').select("*").eq('id', extracted_pid).execute()
                         if resident.data:
-                            resident_name = resident.data[0]['name']
                             success, message, _ = AttendanceService.process_checkin(
                                 extracted_pid, selected_date, selected_activity, s1, s2, s3, s4
                             )
                             if success:
-                                st.balloons()
-                                st.session_state.checkin_success = True
-                                st.markdown("""
-                                <div style="background: #d4edda; border: 2px solid #28a745; padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0;">
-                                    <h2 style="color: #155724; margin: 0;">✅ Check-in Successful!</h2>
-                                    <p style="color: #155724; font-size: 18px; margin: 10px 0 0 0;">Auto-resetting for next resident...</p>
-                                </div>
-                                <script>
-                                    setTimeout(function() {
-                                        window.location.reload();
-                                    }, 3000);
-                                </script>
-                                """, unsafe_allow_html=True)
-                                st.stop()
+                                st.success(f"✅ {resident.data[0]['name']} checked in successfully.")
+                                st.session_state.qr_scan_counter += 1
+                                if qr_key in st.session_state:
+                                    del st.session_state[qr_key]
+                                st.rerun()
                             else:
                                 st.markdown(f"""
                                 <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; margin: 10px 0;">
@@ -502,21 +489,24 @@ def show_volunteer_portal(token, activity_param=None):
                                         <div>
                                             <h4 style="margin: 0 0 5px 0; color: #856404; font-size: 16px;">Already Checked In</h4>
                                             <p style="margin: 0; color: #1a1a1a; font-size: 14px;">
-                                                <strong>{resident_name}</strong> is already registered for <strong>{selected_activity}</strong> today.
+                                                <strong>{resident.data[0]['name']}</strong> is already registered for <strong>{selected_activity}</strong> today.
                                             </p>
                                         </div>
                                     </div>
                                 </div>
                                 """, unsafe_allow_html=True)
-                                if st.button("🔄 Clear & Scan Next Person", type="secondary", use_container_width=True):
-                                    if 'unified_qr_input' in st.session_state:
-                                        del st.session_state.unified_qr_input
-                                    st.session_state.qr_scan_counter += 1
-                                    st.rerun()
                         else:
                             st.error("❌ Resident not found in database.")
                     except Exception as e:
                         st.error(f"Error: {e}")
+                        st.rerun()
+
+        # ✅ Clear & Scan Next Person
+        if st.button("🔄 Clear & Scan Next Person", key="clear_qr_input", use_container_width=True):
+            if qr_key in st.session_state:
+                del st.session_state[qr_key]
+            st.session_state.qr_scan_counter += 1
+            st.rerun()
 
         st.divider()
         st.caption("💡 **Tip:** The camera scanner auto-fills the field above. Click 'Clear & Scan Next Person' when ready for the next resident.")
@@ -531,51 +521,52 @@ def show_volunteer_portal(token, activity_param=None):
             <p style="font-size: 15px; font-weight: 500;">Take a photo of the QR code to scan it.</p>
         </div>
         """, unsafe_allow_html=True)
-        
+
         if st.session_state.get('checkin_success', False):
             st.session_state.checkin_success = False
             clear_scanned_qr()
             st.rerun()
-        
+
         camera_image = st.camera_input(
-            "📸 Position the QR code in the frame and click capture", 
+            "📸 Position the QR code in the frame and click capture",
             key="qr_camera",
             disabled=False,
             label_visibility="visible"
         )
-        
+
         if camera_image is not None:
             try:
                 image = Image.open(camera_image)
                 st.image(image, caption="📸 Captured Image", width='stretch')
-                
+
                 with st.spinner("🔍 Scanning QR code..."):
                     qr_data = decode_qr_from_image(image)
-                
+
                 if qr_data:
                     st.markdown('<div class="status-success">✅ QR Code detected successfully!</div>', unsafe_allow_html=True)
                     with st.expander("📋 View QR Data"):
                         st.code(qr_data, language="text")
-                    
+
                     extracted_pid = qr_data
                     if 'pid=' in qr_data:
                         try:
                             parsed_url = urllib.parse.urlparse(qr_data)
                             query_params = urllib.parse.parse_qs(parsed_url.query)
                             extracted_pid = query_params.get('pid', [None])[0]
-                        except: pass
-                    
+                        except:
+                            pass
+
                     if extracted_pid and len(str(extracted_pid)) > 5:
                         try:
                             resident = supabase.table('participants').select("*").eq('id', extracted_pid).execute()
                             if resident.data:
                                 resident_name = resident.data[0]['name']
-                                resident_type = "🆕 New" if resident.data[0].get('is_new') else "⭐ Regular"
+                                resident_type = "⭐ Regular" if not resident.data[0].get('is_new') else "🆕 New"
                                 col1, col2 = st.columns([3, 1])
                                 with col1:
-                                    st.info(f"👤 **Resident:** {resident_name}\n\n📋 **Status:** {resident_type}")
+                                    st.info(f"👤 **Resident:** {resident_name}\n\n **Status:** {resident_type}")
                                 with col2:
-                                    if st.button("✅ Check In Now", type="primary", use_container_width=True, key="checkin_btn"):
+                                    if st.button("✅ Check In Now", key=f"checkin_btn_{random.randint(1000, 9999)}", use_container_width=True):
                                         with st.spinner("Processing check-in..."):
                                             success, message, _ = AttendanceService.process_checkin(extracted_pid, selected_date, selected_activity, s1, s2, s3, s4)
                                             if success:
@@ -590,10 +581,10 @@ def show_volunteer_portal(token, activity_param=None):
                     st.markdown('<div class="status-error">❌ No QR code detected. Please try again with a clear image.</div>', unsafe_allow_html=True)
                     with st.expander("💡 Tips for better scanning"):
                         st.markdown("""
-                        - **💡 Ensure good lighting** - Avoid shadows or glare on the QR code
-                        - **📱 Hold steady** - Keep the camera still when taking the photo
-                        - **📏 Proper distance** - QR code should fill about 30-50% of the frame
-                        - **🎯 Focus** - Tap the screen to focus on the QR code
+                        - **Ensure good lighting** - Avoid shadows or glare on the QR code
+                        - **Hold steady** - Keep the camera still when taking the photo
+                        - **Proper distance** - QR code should fill about 30-50% of the frame
+                        - **Focus** - Tap the screen to focus on the QR code
                         """)
             except Exception as e:
                 st.error(f"Error processing image: {e}")
@@ -604,27 +595,27 @@ def show_volunteer_portal(token, activity_param=None):
                 <span style="font-size: 14px;">📷 Ready for next scan. Take a photo to continue.</span>
             </div>
             """, unsafe_allow_html=True)
-        
+
         st.divider()
         st.markdown("<p style='color: #1a1a1a !important; font-weight: bold; margin-bottom: 5px;'>⌨️ Or enter manually:</p>", unsafe_allow_html=True)
-        
+
         if 'clear_manual_qr' not in st.session_state:
             st.session_state.clear_manual_qr = False
-            
+
         qr_input_value = ""
         if st.session_state.get('clear_manual_qr'):
             qr_input_value = ""
             st.session_state.clear_manual_qr = False
         else:
             qr_input_value = st.session_state.get('portal_qr_input_manual', '')
-            
+
         qr_input = st.text_input(
-            "Enter QR Code ID", 
-            placeholder="e.g., 2026080316562190", 
+            "Enter QR Code ID",
+            placeholder="e.g., 2026080316562190",
             value=qr_input_value,
             key="portal_qr_input_manual"
         )
-        
+
         if qr_input and len(qr_input.strip()) > 5:
             input_text = qr_input.strip()
             extracted_pid = input_text
@@ -633,7 +624,8 @@ def show_volunteer_portal(token, activity_param=None):
                     parsed_url = urllib.parse.urlparse(input_text)
                     query_params = urllib.parse.parse_qs(parsed_url.query)
                     extracted_pid = query_params.get('pid', [None])[0]
-                except: pass
+                except:
+                    pass
             if extracted_pid and len(str(extracted_pid)) > 5:
                 success = process_portal_checkin(extracted_pid, selected_date, selected_activity, s1, s2, s3, s4)
                 if success:
@@ -650,7 +642,7 @@ def show_volunteer_portal(token, activity_param=None):
             <p style="font-size: 15px; font-weight: 500;">Search by Phone, Name, or ID. Filter by activity to find the right person.</p>
         </div>
         """, unsafe_allow_html=True)
-        
+
         st.markdown("**📞 Quick Phone Check-In**")
         phone_input = st.text_input("Enter 8-digit mobile number", placeholder="e.g., 91234567", key="portal_phone")
         if phone_input and len(clean_phone_number(phone_input)) >= 8:
@@ -659,7 +651,7 @@ def show_volunteer_portal(token, activity_param=None):
             if resident:
                 status_text = '⭐ Regular' if not resident.get('is_new') else '🆕 New'
                 st.success(f"✅ **Resident Found:** {resident['name']} ({status_text})")
-                if st.button("✅ Check In (Phone)", type="primary", use_container_width=True, key="portal_checkin_phone"):
+                if st.button("✅ Check In (Phone)", type="primary", key="phone_checkin_button", use_container_width=True):
                     with st.spinner("Processing check-in..."):
                         success, message, _ = AttendanceService.process_checkin(resident['id'], selected_date, selected_activity, s1, s2, s3, s4)
                         if success:
@@ -669,21 +661,21 @@ def show_volunteer_portal(token, activity_param=None):
 
         st.divider()
         st.markdown("**🔍 Browse Residents**")
-        
+
         browse_mode = st.radio(
             "Select mode:",
             ["🔎 Search by Name or ID", "📋 Show All (All Active Residents)"],
             horizontal=True,
             key="portal_browse_mode"
         )
-        
+
         try:
             fresh_participants = supabase.table('participants').select("*").eq('active', True).execute().data
         except:
             fresh_participants = []
-        
+
         filtered_participants = []
-        
+
         if browse_mode == "🔎 Search by Name or ID":
             name_search = st.text_input("Type Name or ID...", placeholder="e.g., AHMAD, 2026", key="portal_name_search")
             if name_search:
@@ -697,20 +689,20 @@ def show_volunteer_portal(token, activity_param=None):
         else:
             st.caption(f"Showing ALL active residents in the system.")
             filtered_participants = fresh_participants
-        
+
         try:
             att_data = supabase.table('attendance').select('participant_id').eq('source', selected_activity).execute().data
             activity_attendees = {rec['participant_id'] for rec in att_data}
         except:
             activity_attendees = set()
-            
+
         sort_az = st.checkbox("📋 Sort A–Z (Alphabetical)", value=False, key="portal_sort_az")
-        
+
         if sort_az:
             filtered_participants.sort(key=lambda p: p['name'].lower())
         else:
             filtered_participants.sort(key=lambda p: p['id'] in activity_attendees, reverse=True)
-        
+
         if not filtered_participants:
             st.info("No residents found matching your search.")
         else:
@@ -739,25 +731,25 @@ def show_volunteer_portal(token, activity_param=None):
             <p style="font-size: 15px; font-weight: 500;">Register first-time participants and automatically check them in.</p>
         </div>
         """, unsafe_allow_html=True)
-        
+
         name = st.text_input("Full Name *", placeholder="e.g., AHMAD BIN ISMAIL", key="portal_reg_name")
         contact = st.text_input("Contact Number", placeholder="e.g., 91234567", key="portal_reg_contact")
         no_phone = st.checkbox("👴 I do not have a phone", key="portal_reg_no_phone")
         indemnity = st.checkbox("Indemnity Form Signed (Optional)", value=False, key="portal_reg_indemnity")
-        
+
         st.markdown("---")
         st.markdown("**👤 Member Type:**")
-        member_type = st.radio("Select member category:", ["Resident", "RN Member", "Volunteer Member", "Gardener"], horizontal=True, key="portal_reg_member_type", help="RN Member = Resident Network Committee | Volunteer Member = Activity Volunteer")
-        
+        member_type = st.radio("Select member category:", ["Resident", "RN Member", "Volunteer Member", "Gardener"], horizontal=True, key="portal_reg_member_type")
+
         block_consent = st.checkbox("🏢 I agree to share my block information (Optional)", key="portal_reg_block_consent")
         block_no = ""
-        if block_consent: 
+        if block_consent:
             block_no = st.text_input("Block No.", placeholder="e.g., 622, 624A", key="portal_reg_block_no").strip().upper()
-        
+
         if st.button("Register & Check In", type="primary", use_container_width=True, key="portal_reg_submit"):
-            if not name.strip(): 
+            if not name.strip():
                 st.error("❌ Name is required")
-            elif not no_phone and not contact.strip(): 
+            elif not no_phone and not contact.strip():
                 st.error("❌ Contact number is required")
             else:
                 final_contact = "NO_PHONE" if no_phone else contact.strip()
@@ -765,17 +757,17 @@ def show_volunteer_portal(token, activity_param=None):
                 try:
                     if clean_contact and clean_contact != "NO_PHONE":
                         res_phone = supabase.table('participants').select('name').eq('contact', clean_contact).eq('active', True).execute()
-                        if res_phone.data: 
+                        if res_phone.data:
                             st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**")
                             st.stop()
                     res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
-                    if res_name.data: 
+                    if res_name.data:
                         st.error(f"⛔ **Name already exists!**")
                         st.stop()
-                except Exception as e: 
+                except Exception as e:
                     st.error(f"Error checking for duplicates: {e}")
                     st.stop()
-                
+
                 try:
                     success, message, new_id = RegistrationService.register_resident(
                         name=name,
@@ -791,7 +783,7 @@ def show_volunteer_portal(token, activity_param=None):
                             st.success(f"✅ {name.strip().upper()} registered & checked in successfully!")
                             st.info(f"Resident ID: `{new_id}`")
                             st.rerun()
-                except Exception as e: 
+                except Exception as e:
                     st.error(f"Registration failed: {e}")
 
     # ==========================================
@@ -814,7 +806,7 @@ def show_volunteer_portal(token, activity_param=None):
             </div>
         </div>
         """, unsafe_allow_html=True)
-    except Exception as e: 
+    except Exception as e:
         st.error(f"Error loading stats: {e}")
-    
+
     st.caption("Woodlands Zone 6 Community Hub | Volunteer Portal | Token-based access")
