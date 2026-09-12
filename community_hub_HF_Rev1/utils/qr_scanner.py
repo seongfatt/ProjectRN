@@ -4,8 +4,8 @@ import streamlit as st
 
 def qr_code_scanner_auto_detect(key="qr_scanner"):
     """
-    Renders a live camera feed that automatically detects QR codes and sends the result to Streamlit
-    using postMessage(), which is more reliable than DOM injection in modern Streamlit apps.
+    Real-time QR code scanner with auto-detection using html5-qrcode library.
+    Renders a live camera feed that automatically detects QR codes and injects the result into a Streamlit text input.
     """
     st.markdown("""
     <style>
@@ -13,63 +13,77 @@ def qr_code_scanner_auto_detect(key="qr_scanner"):
     .scanner-container { text-align: center; padding: 20px; }
     </style>
     """, unsafe_allow_html=True)
-
+    
     scanner_html = f"""
     <div class="scanner-container">
         <div id="reader"></div>
         <p style="color: #666; margin-top: 15px;">📷 Point camera at QR code - Auto-detection enabled</p>
     </div>
-
+    
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <script>
+    let lastScannedCode = null;
     let html5QrcodeScanner = null;
 
-    function onScanSuccess(decodedText) {{
-        console.log("QR scanned:", decodedText);
-        // 🔥 Send QR to Streamlit via postMessage
-        window.parent.postMessage({{ type: 'QR_SCAN', data: decodedText }}, '*');
-        // Pause briefly to avoid rapid-fire scans
-        html5QrcodeScanner.pause();
-        setTimeout(() => {{
-            html5QrcodeScanner.resume();
-        }}, 1000);
-    }}
+    function onScanSuccess(decodedText, decodedResult) {{
+        // Prevent duplicate scans within 3 seconds
+        if (decodedText !== lastScannedCode) {{
+            lastScannedCode = decodedText;
+            console.log("QR Code detected:", decodedText);
+            
+            // --- STREAMLIT INTEGRATION ---
+            // Access the parent window (the main Streamlit app)
+            const parentDoc = window.parent.document;
+            // Find the specific text input by partial placeholder match (much more robust!)
+            const targetInput = parentDoc.querySelector('input[placeholder*="Waiting for scan"]');
+            
+            if (targetInput) {{
+                // Use the native setter to bypass React's controlled input restrictions
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                nativeInputValueSetter.call(targetInput, decodedText);
+                
+                // Dispatch events to trigger Streamlit/React update
+                targetInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                targetInput.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                
+                console.log("Successfully injected QR code into Streamlit input.");
+            }} else {{
+                console.log("Could not find Streamlit input with placeholder containing 'Waiting for scan'");
+            }}
+            // -----------------------------
 
-    function onScanFailure(error) {{
-        console.error("QR Scan Failed:", error);
-        // Fallback: show user-friendly message
-        const container = document.querySelector('.scanner-container');
-        if (container) {{
-            container.innerHTML += `<div style='color:#d32f2f; margin-top: 10px;'>⚠️ Camera access failed. Try 'Snapshot QR Scanner' instead.</div>`;
-        }}
-    }}
-
-    function startScanner() {{
-        try {{
-            html5QrcodeScanner = new Html5QrcodeScanner("reader", {{
-                fps: 10,
-                qrbox: {{ width: 250, height: 250 }},
-                aspectRatio: 1.0,
-                disableFlip: false
-            }}, false);
-
-            html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-        }} catch (err) {{
-            console.error("Scanner init failed:", err);
-            const container = document.querySelector('.scanner-container');
-            if (container) {{
-                container.innerHTML = `<div style='color:#d32f2f; margin-top: 10px;'>❌ QR scanner failed to start. Try refreshing the page.</div>`;
+            // Pause scanning briefly to prevent rapid-fire duplicates
+            if (html5QrcodeScanner) {{
+                html5QrcodeScanner.pause();
+                setTimeout(() => {{
+                    html5QrcodeScanner.resume();
+                    // Reset after 3 seconds to allow scanning the same code again if needed
+                    setTimeout(() => {{ lastScannedCode = null; }}, 3000);
+                }}, 1000);
             }}
         }}
     }}
-
-    // Try starting the scanner after a small delay
-    window.addEventListener('load', () => {{
-        setTimeout(startScanner, 500);
-    }});
+    
+    function onScanFailure(error) {{
+        // Scan failed - ignore, keep scanning
+    }}
+    
+    // Initialize scanner
+    html5QrcodeScanner = new Html5QrcodeScanner(
+        "reader",
+        {{ 
+            fps: 10,
+            qrbox: {{ width: 250, height: 250 }},
+            aspectRatio: 1.0,
+            disableFlip: false
+        }},
+        /* verbose= */ false
+    );
+    
+    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
     </script>
     """
-
+    
     # Render the HTML component
     components.html(scanner_html, height=500)
 
