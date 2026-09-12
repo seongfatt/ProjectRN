@@ -370,7 +370,7 @@ def show_floorplan_designer():
 
         with a3:
             st.write("")
-            if st.button("💾 Save Plot to Database", width='stretch'):
+            if st.button("💾 Save Plot to Database", use_container_width=True):
                 try:
                     supabase.table('box_map_plots').delete().eq('section_name', sec_name).eq('plot_id', selected_id).execute()
                     supabase.table('box_map_plots').insert({
@@ -393,7 +393,7 @@ def show_floorplan_designer():
 
         with a4:
             st.write("")
-            if st.button("🧹 Erase Selected Plot", width='stretch'):
+            if st.button("🧹 Erase Selected Plot", use_container_width=True):
                 for k, v in st.session_state.grid.items():
                     if v == selected_id:
                         st.session_state.grid[k] = 0
