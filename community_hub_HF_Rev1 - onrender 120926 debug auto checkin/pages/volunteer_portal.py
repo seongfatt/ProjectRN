@@ -342,25 +342,31 @@ def show_volunteer_portal(token, activity_param=None):
             clear_scanned_qr()
             st.rerun()
 
-        # 🔥 CRITICAL: Use a dynamic key to force reactivity on QR injection
-        # This ensures Streamlit re-runs when JS injects the value
-        qr_key = f"unified_qr_input_{st.session_state.get('qr_scan_counter', 0)}"
+        # Real-time QR scanner
+        st.markdown("""
+        <div class="qr-scanner-container">
+            <h4 style="color: #667eea; margin-top: 0;">📸 Live Camera Scanner</h4>
+            <p style="color: #666; font-size: 14px;">Point camera at QR code - auto-detection enabled</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        qr_code_scanner_auto_detect()
+
+        st.info("💡 **Auto-Fill:** Scanned QR codes will appear below. You can also type manually.")
+
+        # 🔥 SINGLE INPUT FIELD ONLY
         qr_input = st.text_input(
             "QR Code ID (Auto-filled or Manual Entry)",
             placeholder="Waiting for scan or type ID here...",
-            key=qr_key,
+            key="unified_qr_input",
             label_visibility="collapsed"
         )
 
-        # Track scan counter to refresh key on next scan
-        if 'qr_scan_counter' not in st.session_state:
-            st.session_state.qr_scan_counter = 0
-
-        # SAFE TRACKER to prevent infinite loops
+        # 🔥 SAFE TRACKER to prevent infinite loops
         if 'last_processed_qr' not in st.session_state:
             st.session_state.last_processed_qr = ""
 
-        # 🔥 AUTO CHECK-IN LOGIC — now reliably triggered on JS injection
+        # 🔥 AUTO CHECK-IN LOGIC - Only triggers if the QR code is NEW
         if qr_input and len(qr_input.strip()) > 5 and qr_input.strip() != st.session_state.last_processed_qr:
             extracted_pid = qr_input.strip()
 
@@ -374,16 +380,18 @@ def show_volunteer_portal(token, activity_param=None):
                     pass
 
             if extracted_pid and len(str(extracted_pid)) > 5:
+                # Mark as processed IMMEDIATELY to prevent infinite loop on rerun
                 st.session_state.last_processed_qr = extracted_pid
 
                 try:
+                    # 1. Find Resident
                     resident = supabase.table('participants').select("*").eq('id', extracted_pid).execute()
 
                     if resident.data:
                         resident_name = resident.data[0]['name']
                         resident_type = "🆕 New" if resident.data[0].get('is_new') else "⭐ Regular"
 
-                        # Show processing
+                        # 2. Show Processing State
                         st.markdown(f"""
                         <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; border-radius: 8px; margin: 10px 0;">
                             <h4 style="margin: 0 0 8px 0; color: #0d47a1; font-size: 18px;">🔄 Processing Check-In...</h4>
@@ -392,37 +400,36 @@ def show_volunteer_portal(token, activity_param=None):
                         </div>
                         """, unsafe_allow_html=True)
 
+                        # 3. AUTO EXECUTE CHECK-IN
                         success, message, _ = AttendanceService.process_checkin(
                             extracted_pid, selected_date, selected_activity, s1, s2, s3, s4
                         )
 
                         if success:
+                            # ✅ NEW CHECK-IN SUCCESS
                             st.balloons()
                             st.session_state.checkin_success = True
 
-                            # ✅ CLEAR INPUT & FORCE FULL RESET
-                            # Delete the current key so next scan uses new key
-                            if qr_key in st.session_state:
-                                del st.session_state[qr_key]
-                            st.session_state.qr_scan_counter += 1  # Increment to change key next time
-                            
-                            # Auto-refresh page to reset UI
+                            # Show success and auto-reset
                             st.markdown("""
                             <div style="background: #d4edda; border: 2px solid #28a745; padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0;">
                                 <h2 style="color: #155724; margin: 0;">✅ Check-in Successful!</h2>
                                 <p style="color: #155724; font-size: 18px; margin: 10px 0 0 0;">Ready for next resident in 3 seconds...</p>
                             </div>
                             <script>
+                                // Auto-refresh the page after 3 seconds
                                 setTimeout(function() {
                                     window.location.reload();
                                 }, 3000);
                             </script>
                             """, unsafe_allow_html=True)
-                            st.stop()  # Prevent further rendering
+
+                            # Stop to avoid showing other buttons
+                            st.stop()
 
                         else:
-                            # ℹ️ Already checked in
-                            if "already" in message.lower():
+                            # ℹ️ ALREADY CHECKED IN - Show friendly info
+                            if "already" in message.lower() or "fully checked in" in message.lower():
                                 st.markdown(f"""
                                 <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; margin: 10px 0;">
                                     <div style="display: flex; align-items: center; gap: 10px;">
@@ -430,12 +437,20 @@ def show_volunteer_portal(token, activity_param=None):
                                         <div>
                                             <h4 style="margin: 0 0 5px 0; color: #856404; font-size: 16px;">Already Checked In</h4>
                                             <p style="margin: 0; color: #1a1a1a; font-size: 14px;">
-                                                <strong>{resident_name}</strong> is already registered for <strong>{selected_activity}</strong> today.
+                                                <strong>{resident_name}</strong> is already checked in for <strong>{selected_activity}</strong> today.
                                             </p>
                                         </div>
                                     </div>
                                 </div>
                                 """, unsafe_allow_html=True)
+
+                                # Optional: Add a manual "Acknowledge" button to clear the field
+                                if st.button("✅ Acknowledge", use_container_width=True, key="ack_already_checked"):
+                                    st.session_state.last_processed_qr = ""
+                                    if 'unified_qr_input' in st.session_state:
+                                        del st.session_state.unified_qr_input
+                                    st.rerun()
+
                             else:
                                 st.error(message)
                             st.rerun()
