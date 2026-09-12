@@ -1,0 +1,13 @@
+# .gitignore — Add these lines
+.env
+*.pyc
+__pycache__/
+.venv/
+venv/
+*.log
+.DS_Store
+*.db
+*.sqlite
+*.sqlite3
+.huggingface/
+.streamlit/secrets.toml

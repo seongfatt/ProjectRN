@@ -13,22 +13,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Hide sidebar for resident QR page (public-facing)
-st.markdown(
-    """
-    <style>
-    [data-testid="stSidebar"] {
-        display: none;
-    }
-    /* Optional: also hide the hamburger menu on mobile */
-    [data-testid="stToolbar"] > div:first-child {
-        display: none;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 # 🔧 Inject meta viewport tag via custom HTML
 st.markdown("""
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
@@ -174,51 +158,11 @@ def display_resident_qr_card(resident):
 # ───────────────────────────────────────────────
 # MAIN LOGIC
 # ───────────────────────────────────────────────
-# ───────────────────────────────────────────────
-# MAIN LOGIC: Support BOTH /resident_qr?phone=XXX AND /resident_qr/XXX
-# ───────────────────────────────────────────────
-st.markdown("📱 Your QR Code", unsafe_allow_html=True)
-st.markdown("Enter your 8-digit mobile number below — or open this link with `?phone=YOUR_NUMBER` or `/YOUR_NUMBER`.", unsafe_allow_html=True)
+st.markdown("<hr>", unsafe_allow_html=True)
 
-# Extract phone from:
-#   - Query param: ?phone=91234567
-#   - Path segment: /resident_qr/91234567
-query_params = st.experimental_get_query_params()
-path = st.experimental_get_query_params().get("path", [""])[0].strip()  # Not reliable; use URL directly
-
-# Better: inspect full URL via JS (but Streamlit doesn’t expose it cleanly)
-# So we use a workaround: if no query param, try to parse from page URL via JS injection
-# Instead, we’ll rely on the *admin-generated* links using `/resident_qr/<phone>` format,
-# and let the frontend handle it — but backend must support it.
-
-# For now, support both:
-phone_input = ""
-default_phone = ""
-
-# Try query param first
-if "phone" in query_params:
-    default_phone = query_params["phone"][0].strip()
-elif st.session_state.get("url_path_phone"):  # set by JS below (optional)
-    default_phone = st.session_state.url_path_phone
-
-# Fallback: try to extract from raw URL via JS (inject once on load)
-st.markdown("""
-<script>
-// Extract phone from path: /resident_qr/91234567
-const url = new URL(window.location.href);
-const pathSegments = url.pathname.split('/').filter(p => p);
-if (pathSegments.length === 2 && pathSegments[0] === 'resident_qr') {
-    const maybePhone = pathSegments[1];
-    if (/^\d{8}$/.test(maybePhone)) {
-        // Set in session state via streamlit.js
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/_stcore/set_session_state', true);
-        xhr.setRequestHeader('Content-Type', 'application/json');
-        xhr.send(JSON.stringify({url_path_phone: maybePhone}));
-    }
-}
-</script>
-""", unsafe_allow_html=True)
+# ✅ Use st.query_params (new, safe, future-proof)
+query_params = st.query_params
+default_phone = query_params.get("phone", [""])[0].strip()
 
 phone_input = st.text_input(
     "Enter your 8-digit mobile number",
