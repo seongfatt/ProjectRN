@@ -439,6 +439,28 @@ def show_volunteer_portal(token, activity_param=None):
 
         st.info("💡 **Auto-Fill:** Scanned QR codes will appear below. You can also type manually.")
 
+        # 🔥 Listen for QR_SCAN message and inject into input field
+        st.markdown("""
+        <script>
+        window.addEventListener("message", (event) => {
+            if (event.data.type === "QR_SCAN") {
+                const qrCode = event.data.data;
+                const input = document.querySelector('input[placeholder*="Waiting for scan"]');
+                if (input) {
+                    // Use native setter to bypass React restrictions
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                    nativeInputValueSetter.call(input, qrCode);
+                    input.dispatchEvent(new Event('input', { bubbles: true }));
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                    console.log("Injected QR into input:", qrCode);
+                } else {
+                    console.warn("No input field found with placeholder 'Waiting for scan'");
+                }
+            }
+        });
+        </script>
+        """, unsafe_allow_html=True)
+
         # 🔥 Use dynamic key to force reactivity
         if 'qr_scan_counter' not in st.session_state:
             st.session_state.qr_scan_counter = 0
@@ -657,21 +679,43 @@ def show_volunteer_portal(token, activity_param=None):
                             if resident.data:
                                 resident_name = resident.data[0]['name']
                                 resident_type = "⭐ Regular" if not resident.data[0].get('is_new') else "🆕 New"
-                                col1, col2 = st.columns([3, 1])
-                                with col1:
-                                    st.info(f"👤 **Resident:** {resident_name}\n\n **Status:** {resident_type}")
-                                with col2:
-                                    if st.button("✅ Check In Now", key=f"checkin_btn_{random.randint(1000, 9999)}", use_container_width=True):
-                                        with st.spinner("Processing check-in..."):
-                                            success, message, _ = AttendanceService.process_checkin(extracted_pid, selected_date, selected_activity, s1, s2, s3, s4)
-                                            if success:
-                                                st.rerun()
+
+                                # ✅ AUTO-CHECK-IN IMMEDIATELY (no button needed)
+                                success, message, _ = AttendanceService.process_checkin(
+                                    extracted_pid, selected_date, selected_activity, s1, s2, s3, s4
+                                )
+
+                                if success:
+                                    st.balloons()
+                                    st.session_state.checkin_success = True
+                                    st.markdown("""
+                                    <div style="background: #d4edda; border: 2px solid #28a745; padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0;">
+                                        <h2 style="color: #155724; margin: 0;">✅ Check-in Successful!</h2>
+                                        <p style="color: #155724; font-size: 18px; margin: 10px 0 0 0;">Ready for next resident...</p>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                    st.rerun()  # Reset for next scan
+                                else:
+                                    st.markdown(f"""
+                                    <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                                        <div style="display: flex; align-items: center; gap: 10px;">
+                                            <span style="font-size: 24px;">ℹ️</span>
+                                            <div>
+                                                <h4 style="margin: 0 0 5px 0; color: #856404; font-size: 16px;">Already Checked In</h4>
+                                                <p style="margin: 0; color: #1a1a1a; font-size: 14px;">
+                                                    <strong>{resident_name}</strong> is already registered for <strong>{selected_activity}</strong> today.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                    st.rerun()
                             else:
-                                st.markdown('<div class="status-error">❌ Resident not found in database. Please check the QR code.</div>', unsafe_allow_html=True)
+                                st.error("❌ Resident not found in database.")
                         except Exception as e:
-                            st.error(f"Error finding resident: {e}")
+                            st.error(f"Error: {e}")
                     else:
-                        st.markdown('<div class="status-error">❌ Invalid QR code format. Could not extract resident ID.</div>', unsafe_allow_html=True)
+                        st.error("❌ Invalid QR code format — could not extract resident ID.")
                 else:
                     st.markdown('<div class="status-error">❌ No QR code detected. Please try again with a clear image.</div>', unsafe_allow_html=True)
                     with st.expander("💡 Tips for better scanning"):
