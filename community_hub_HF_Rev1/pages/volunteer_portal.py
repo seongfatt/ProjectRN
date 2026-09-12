@@ -317,15 +317,14 @@ def show_volunteer_portal(token, activity_param=None):
     st.subheader("📱 Step 3: Choose Check-In Method")
     method = st.radio("How would you like to check in residents?",
                      ["📸 Real-Time QR Scanner (Auto-Detect)",
-                      "📷 Snapshot QR Scanner",
+                    #   "📷 Snapshot QR Scanner",
                       "⌨️ Phone / Name Search",
                       "📝 Register New Resident"],
                      horizontal=False, key="portal_method")
 
     # ✅ Auto-check-in from URL scan
-    query_params = st.experimental_get_query_params()
-    qr_from_url = query_params.get("qr", [None])[0]
-    if qr_from_url:
+    qr_from_url = st.query_params.get("qr")
+    if qr_from_url is not None:
         # Clean ID (handle pid=...)
         extracted_pid = qr_from_url.strip()
         if 'pid=' in qr_from_url:
@@ -335,9 +334,10 @@ def show_volunteer_portal(token, activity_param=None):
                 extracted_pid = q.get('pid', [extracted_pid])[0]
             except:
                 pass
+
         # Store and clear URL
         st.session_state.qr_auto_scan = extracted_pid
-        st.experimental_set_query_params()  # Remove ?qr=...
+        st.query_params.clear()
         st.rerun()  # Force re-run with qr_auto_scan set
 
     # ✅ Auto-check-in from QR scan
