@@ -3,16 +3,27 @@ import urllib.parse
 import base64
 import os
 from datetime import datetime
-import requests
-
-# Import your utilities
 from config import supabase, APP_URL
-from utils import clean_phone_number
+from utils import clean_phone_number, mask_phone
+
+# 🔒 Hide sidebar + header for resident-facing page
+st.set_page_config(
+    page_title="Your QR Code",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+# Hide Streamlit UI elements via CSS
+hide_streamlit_style = """
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 
-# ─── UTILITY FUNCTIONS ────────────────────────────────────────────────────────
 def _get_logo_base64(logo_path="logo.png"):
-    """Convert local logo to base64 for HTML rendering."""
+    """Convert local logo to base64 so it renders inside HTML component."""
     try:
         if os.path.exists(logo_path):
             with open(logo_path, "rb") as f:
@@ -23,9 +34,9 @@ def _get_logo_base64(logo_path="logo.png"):
             return f"data:image/{ext};base64,{base64.b64encode(data).decode()}"
     except Exception:
         pass
+    # Fallback: minimal SVG logo
     return (
-        "data:image/svg+xml;base64,"
-        "PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+"
+        "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+"
         "PHJlY3Qgd2lkdGg9IjYwIiBoZWlnaHQ9IjYwIiBmaWxsPSIjNjY3ZWVhIiByeD0iMTAiLz48dGV4dCB4PSI1MCUiIHk9"
         "IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiIGZvbnQt"
         "ZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZm9udC13ZWlnaHQ9ImJvbGQiPldaNjwvdGV4dD48L3N2Zz4="
@@ -33,7 +44,7 @@ def _get_logo_base64(logo_path="logo.png"):
 
 
 def find_resident_by_phone(phone):
-    """Find active resident by phone number."""
+    """Find active resident by phone number"""
     cleaned_phone = clean_phone_number(phone)
     if not cleaned_phone or len(cleaned_phone) < 8:
         return None, "❌ Invalid phone number — please enter 8 digits."
@@ -48,7 +59,7 @@ def find_resident_by_phone(phone):
 
 
 def display_resident_qr_card(resident):
-    """Display QR card with resident info and download button."""
+    """Render QR card with white background, no download button in image, and shareable link"""
     resident_id = str(resident['id']).strip()
     resident_name = resident['name'].strip()
     resident_block = resident.get('block_no', 'N/A').strip()
@@ -56,8 +67,8 @@ def display_resident_qr_card(resident):
     qr_data = resident_id
     qr_api_url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={urllib.parse.quote(qr_data)}"
 
-    # Try to fetch QR code from API
     try:
+        import requests
         response = requests.get(qr_api_url)
         if response.status_code == 200:
             qr_base64 = base64.b64encode(response.content).decode()
@@ -67,250 +78,193 @@ def display_resident_qr_card(resident):
     except Exception:
         qr_image_src = qr_api_url
 
-    # Render card with QR code
+    # ✅ Clean white-background card (print-friendly, no buttons in PNG)
     card_html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-        <style>
-            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            body {{
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background: #1e293b;
-                color: #f1f5f9;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                padding: 20px;
-            }}
-            .card {{
-                background: #1e293b;
-                color: #f1f5f9;
-                border-radius: 20px;
-                padding: 30px 24px;
-                box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-                max-width: 400px;
-                width: 100%;
-                text-align: center;
-            }}
-            .header {{
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 15px;
-                margin-bottom: 20px;
-            }}
-            .logo {{
-                width: 60px;
-                height: 60px;
-                object-fit: contain;
-                background: #0f172a;
-                border-radius: 12px;
-                padding: 5px;
-            }}
-            .title-group {{
-                text-align: left;
-            }}
-            .title-group h2 {{
-                color: #60a5fa;
-                margin: 0;
-                font-size: 20px;
-                font-weight: 700;
-                line-height: 1.2;
-            }}
-            .title-group p {{
-                color: #94a3b8;
-                margin: 2px 0 0 0;
-                font-size: 12px;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-            }}
-            .divider {{
-                border: 0;
-                border-top: 1px solid #334155;
-                margin: 20px 0;
-            }}
-            .resident-name {{
-                margin: 12px 0;
-                font-size: 28px;
-                font-weight: bold;
-                color: #f1f5f9;
-                word-break: break-word;
-            }}
-            .resident-block {{
-                font-size: 18px;
-                color: #cbd5e1;
-                margin: 6px 0;
-                font-weight: 500;
-            }}
-            .qr-wrap {{
-                margin: 14px 0;
-            }}
-            .qr-wrap img {{
-                width: 210px;
-                height: 210px;
-                border: 2px dashed #60a5fa;
-                border-radius: 10px;
-                padding: 10px;
-                background: #0f172a;
-                box-shadow: inset 0 0 0 2px #1e293b;
-            }}
-            .qr-hint {{
-                font-size: 12px;
-                color: #94a3b8;
-                margin: 8px 0;
-            }}
-            .id-box {{
-                background: #0f172a;
-                padding: 14px;
-                border-radius: 10px;
-                margin-top: 16px;
-            }}
-            .id-box p {{
-                font-size: 22px;
-                font-weight: bold;
-                color: #f1f5f9;
-                font-family: 'Courier New', monospace;
-                margin: 0;
-                letter-spacing: 1px;
-            }}
-            .footer-text {{
-                font-weight: 600;
-                color: #60a5fa;
-                font-size: 16px;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-                margin-top: 14px;
-            }}
-            .download-btn {{
-                margin: 20px 0;
-                padding: 12px 24px;
-                background: #3b82f6;
-                color: white;
-                border: none;
-                border-radius: 8px;
-                cursor: pointer;
-                font-weight: 600;
-                font-size: 16px;
-                width: 100%;
-                max-width: 400px;
-                transition: background 0.2s;
-            }}
-            .download-btn:hover {{
-                background: #2563eb;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="card" id="residentCard">
-            <div class="header">
-                <img src="{logo_src}" class="logo" alt="Logo">
-                <div class="title-group">
-                    <h2>WOODLANDS ZONE 6</h2>
-                    <p>Community Hub</p>
-                </div>
-            </div>
-            <hr class="divider">
-            <h1 class="resident-name">{resident_name}</h1>
-            <p class="resident-block">Block: {resident_block}</p>
-            <hr class="divider">
-            <div class="qr-wrap">
-                <img src="{qr_image_src}" alt="QR Code">
-            </div>
-            <p class="qr-hint">📷 Scan at Kiosk</p>
-            <div class="id-box">
-                <p>ID: {resident_id}</p>
-            </div>
-            <p class="footer-text">Community Activities</p>
-            <button class="download-btn" onclick="downloadCard()">📥 Download Card as PNG</button>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {{
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #ffffff;
+            color: #000000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            max-width: 400px;
+            width: 100%;
+        }}
+        .header {{
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 20px;
+            width: 100%;
+        }}
+        .logo {{
+            width: 60px;
+            height: 60px;
+            object-fit: contain;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 5px;
+        }}
+        .title-group {{
+            text-align: left;
+        }}
+        .title-group h2 {{
+            color: #4a6cf7;
+            margin: 0;
+            font-size: 22px;
+            font-weight: 700;
+            line-height: 1.2;
+        }}
+        .title-group p {{
+            color: #666;
+            margin: 2px 0 0 0;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }}
+        .divider {{
+            border: 0;
+            border-top: 1px solid #eee;
+            margin: 20px 0;
+            width: 100%;
+        }}
+        .resident-name {{
+            margin: 10px 0;
+            font-size: 28px;
+            font-weight: bold;
+            color: #000;
+            word-break: break-word;
+        }}
+        .resident-block {{
+            font-size: 18px;
+            color: #555;
+            margin: 5px 0;
+            font-weight: 500;
+        }}
+        .qr-wrap {{
+            margin: 15px 0;
+            display: flex;
+            justify-content: center;
+        }}
+        .qr-wrap img {{
+            width: 220px;
+            height: 220px;
+            border: 2px dashed #4a6cf7;
+            border-radius: 8px;
+            padding: 8px;
+            background: #fff;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        }}
+        .qr-hint {{
+            font-size: 12px;
+            color: #666;
+            margin: 8px 0 0 0;
+            text-align: center;
+        }}
+        .id-box {{
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 15px;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+        }}
+        .id-box p {{
+            font-size: 20px;
+            font-weight: bold;
+            color: #000;
+            margin: 0;
+            letter-spacing: 1px;
+        }}
+        .footer-link {{
+            margin-top: 20px;
+            padding: 10px;
+            background: #f0f4ff;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #2c3e50;
+            text-align: center;
+            word-break: break-all;
+            border: 1px dashed #4a6cf7;
+        }}
+        .footer-text {{
+            font-weight: 600;
+            color: #4a6cf7;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 20px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <img src="{logo_src}" class="logo" alt="Logo">
+        <div class="title-group">
+            <h2>WOODLANDS ZONE 6</h2>
+            <p>Community Hub</p>
         </div>
+    </div>
+    <hr class="divider">
+    <h1 class="resident-name">{resident_name}</h1>
+    <p class="resident-block">Block: {resident_block}</p>
+    <hr class="divider">
+    <div class="qr-wrap">
+        <img src="{qr_image_src}" alt="QR Code">
+    </div>
+    <p class="qr-hint">Scan at Kiosk</p>
+    <div class="id-box">
+        <p>ID: {resident_id}</p>
+    </div>
+    <div class="footer-link">
+        🔗 Shareable Link:<br>
+        {APP_URL}/resident_qr?phone={urllib.parse.quote(clean_phone_number(resident.get('contact', '')))}
+    </div>
+    <p class="footer-text">COMMUNITY ACTIVITIES</p>
+</body>
+</html>
+"""
 
-        <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
-        <script>
-            function downloadCard() {{
-                const card = document.getElementById('residentCard');
-                html2canvas(card, {{
-                    backgroundColor: '#1e293b',
-                    scale: 2,
-                    useCORS: true,
-                    allowTaint: false
-                }}).then(canvas => {{
-                    const link = document.createElement('a');
-                    link.download = 'Resident_Card_{resident_id}.png';
-                    link.href = canvas.toDataURL('image/png');
-                    link.click();
-                }});
-            }}
-        </script>
-    </body>
-    </html>
-    """
     from streamlit.components.v1 import html
     html(card_html, height=720)
 
+    # ✅ Optional: Add *external* download button (outside card, for browser only — NOT in PNG)
+    st.download_button(
+        label="📥 Download Card as PNG",
+        data=card_html.encode("utf-8"),
+        file_name=f"Resident_Card_{resident_name.replace(' ', '_')}.png",
+        mime="image/png",
+        key="download_qr_card",
+    )
+    st.caption("💡 Tip: Save this card to your phone or print it for kiosk check-in.")
 
-# ─── PAGE CONFIGURATION ───────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="Your QR Code",
-    layout="wide",
-    initial_sidebar_state="collapsed"
-)
 
-# ─── HIDE STREAMLIT UI ────────────────────────────────────────────────────────
-st.markdown("""
-    <style>
-    [data-testid="stSidebar"] { display: none; }
-    [data-testid="stToolbar"] { display: none; }
-    [data-testid="stHeader"] { background: #1e293b; }
-    [data-testid="stAppViewContainer"] { background: #0f172a; }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+# ───────────────────────────────────────────────
+# MAIN LOGIC
+# ───────────────────────────────────────────────
+st.markdown("<h2 style='text-align:center;'>📱 Your QR Code</h2>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center; color:#666;'>Enter your 8-digit mobile number to view your personal QR code.</p>", unsafe_allow_html=True)
 
-# ─── HEADER ──────────────────────────────────────────────────────────────────
-st.markdown("""
-    <div style="text-align:center;margin-bottom:20px;">
-        <h1 style="color:#60a5fa;">📱 Your QR Code</h1>
-        <p style="color:#94a3b8;">Enter your 8-digit mobile number to view your personal QR code.</p>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+# Extract phone from URL query param (e.g., ?phone=97907043)
+query_params = st.experimental_get_query_params()
+default_phone = query_params.get("phone", [""])[0].strip()
 
-# ─── AUTO PHONE DETECTION FROM PATH ───────────────────────────────────────────
-# Try to extract phone from path like /resident_qr/91234567
-# Streamlit doesn't expose full path, so we use JS to extract and set session state
-st.markdown("""
-    <script>
-    const path = window.location.pathname;
-    const segments = path.split('/').filter(s => s);
-    if (segments.length === 2 && segments[0] === 'resident_qr') {
-        const maybePhone = segments[1];
-        if (/^\\d{{8}}$/.test(maybePhone)) {
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', '/_stcore/set_session_state', true);
-            xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.send(JSON.stringify({ url_path_phone: maybePhone }));
-        }
-    }
-    </script>
-    """,
-    unsafe_allow_html=True
-)
-
-# ─── PHONE INPUT ──────────────────────────────────────────────────────────────
-phone = st.query_params.get("phone", [None])[0] or st.session_state.get("url_path_phone")
 phone_input = st.text_input(
     "Enter your 8-digit mobile number",
-    value=phone or "",
+    value=default_phone,
     placeholder="e.g., 91234567",
     key="resident_phone_input",
     label_visibility="collapsed"
 )
 
-# ─── LOGIC: FIND RESIDENT & SHOW QR CARD ───────────────────────────────────────
 if phone_input:
     cleaned = clean_phone_number(phone_input)
     if len(cleaned) >= 8:
@@ -322,30 +276,24 @@ if phone_input:
             st.success("✅ Found your QR code!")
             display_resident_qr_card(resident)
 
-            # Show shareable clean link for admins
+            # 🔗 Show shareable link (for reference, not in PNG)
             full_link = f"{APP_URL}/resident_qr?phone={cleaned}"
-            st.markdown(f"""
-                <div style="background:#1e293b; padding:16px; border-radius:10px; margin:20px 0; text-align:center; border-left:3px solid #60a5fa;">
-                    <strong>🔗 Shareable Link:</strong><br>
-                    <code style="font-size:14px; background:#0f172a; padding:6px 12px; border-radius:4px; color:#60a5fa;">
-                        {full_link}
-                    </code><br>
-                    <small style="color:#94a3b8;">✅ Admins can send this link directly to residents.</small>
-                </div>
-                """,
+            st.markdown(
+                f"<div style='background:#f8f9fa; padding:12px; border-radius:8px; margin-top:16px; text-align:center; font-size:14px;'>"
+                f"🔗 <strong>Shareable Link</strong><br>"
+                f"<code style='font-size:13px; background:#eef2f7; padding:4px 8px; border-radius:4px;'>{full_link}</code>"
+                f"</div>",
                 unsafe_allow_html=True
             )
+
         else:
             st.info("📱 Phone number not registered. Please contact the admin.")
     else:
         st.warning("⚠️ Please enter a valid 8-digit mobile number.")
 else:
-    st.info("👉 Enter your phone number above — or open this page with `/resident_qr/91234567` or `?phone=91234567` in the URL.")
+    st.info("👉 Enter your phone number above — or open this link with `?phone=YOUR_NUMBER` in the URL.")
 
-# ─── FOOTER ──────────────────────────────────────────────────────────────────
-st.markdown("<hr>", unsafe_allow_html=True)
-st.markdown("""
-    <p style="text-align:center; font-size:12px; color:#64748b;">🔒 This link is personal and secure. Do not share publicly.</p>
-    """,
+st.markdown(
+    "<hr><p style='text-align:center; font-size:12px; color:#999;'>This link is personal and secure. Do not share publicly.</p>",
     unsafe_allow_html=True
 )
