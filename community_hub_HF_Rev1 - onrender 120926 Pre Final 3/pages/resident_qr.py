@@ -88,7 +88,7 @@ def display_resident_qr_card(resident):
     wa_text = urllib.parse.quote(f"Here is my QR code for Woodlands Zone 6: {APP_URL}/resident_qr?phone={clean_phone}")
     whatsapp_link = f"https://wa.me/{wa_phone}?text={wa_text}" if wa_phone else "#"
 
-    # ✅ Professional Badge HTML/CSS
+    # ✅ Professional Badge HTML/CSS (Buttons stacked below the badge)
     card_html = f"""
 <!DOCTYPE html>
 <html>
@@ -102,7 +102,7 @@ def display_resident_qr_card(resident):
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: transparent;
             display: flex;
-            flex-direction: column;
+            flex-direction: column; /* ✅ FIX: Stack vertically */
             justify-content: center;
             align-items: center;
             min-height: 100vh;
@@ -253,7 +253,7 @@ def display_resident_qr_card(resident):
             <h1 class="resident-name">{resident_name}</h1>
             <p class="resident-block">Block: {resident_block}</p>
             <div class="qr-container">
-                <img src="{qr_image_src}" alt="QR Code" id="qr-img" crossorigin="anonymous">
+                <img src="{qr_image_src}" alt="QR Code" id="qr-img">
             </div>
             <p class="scan-hint">Scan at Kiosk</p>
             <div class="id-box">ID: {resident_id}</div>
@@ -271,41 +271,33 @@ def display_resident_qr_card(resident):
             const card = document.getElementById('badge');
             const qrImg = document.getElementById('qr-img');
             
-            // ✅ FIX: Preload the image to force the browser to fully decode it
-            const preloadImg = new Image();
-            preloadImg.crossOrigin = "anonymous";
-            preloadImg.src = qrImg.src;
+            // ✅ FIX: Robust wait for image to load before capturing
+            function doCapture() {{
+                html2canvas(card, {{
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    allowTaint: false
+                }}).then(canvas => {{
+                    const link = document.createElement('a');
+                    link.download = 'Resident_Badge_{resident_name.replace(" ", "_")}.png';
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                }}).catch(err => {{
+                    console.error('html2canvas error:', err);
+                    alert('Could not download image. Please try again.');
+                }});
+            }}
 
-            preloadImg.onload = function() {{
-                // Once fully loaded, wait a moment for the DOM to render it
-                setTimeout(() => {{
-                    html2canvas(card, {{
-                        scale: 2,
-                        useCORS: true,
-                        backgroundColor: '#ffffff',
-                        allowTaint: true,
-                        onclone: function(clonedDoc) {{
-                            // Force the cloned image to have the loaded source
-                            const clonedQr = clonedDoc.getElementById('qr-img');
-                            if (clonedQr) {{
-                                clonedQr.src = preloadImg.src;
-                            }}
-                        }}
-                    }}).then(canvas => {{
-                        const link = document.createElement('a');
-                        link.download = 'Resident_Badge_{resident_name.replace(" ", "_")}.png';
-                        link.href = canvas.toDataURL('image/png');
-                        link.click();
-                    }}).catch(err => {{
-                        console.error('html2canvas error:', err);
-                        alert('Could not download image. Please try again.');
-                    }});
-                }}, 800); // 800ms delay to guarantee rendering
-            }};
-
-            preloadImg.onerror = function() {{
-                alert("Error loading QR code image. Please refresh the page and try again.");
-            }};
+            if (qrImg && qrImg.complete) {{
+                setTimeout(doCapture, 500);
+            }} else if (qrImg) {{
+                qrImg.onload = function() {{
+                    setTimeout(doCapture, 500);
+                }};
+            }} else {{
+                setTimeout(doCapture, 500);
+            }}
         }}
     </script>
 </body>
@@ -313,6 +305,7 @@ def display_resident_qr_card(resident):
 """
 
     from streamlit.components.v1 import html
+    # ✅ Increased height to 780 to accommodate stacked buttons
     html(card_html, height=780, scrolling=True)
 
     # External WhatsApp button
