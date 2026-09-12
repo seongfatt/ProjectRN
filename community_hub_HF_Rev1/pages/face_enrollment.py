@@ -2,15 +2,28 @@ import streamlit as st
 from config import supabase
 import io
 import json
-import face_recognition
 import numpy as np
 from PIL import Image
 from datetime import datetime
+
+# 🔥 SAFE IMPORT: face_recognition is optional — app works without it
+try:
+    import face_recognition
+    FACE_REC_AVAILABLE = True
+except ImportError:
+    FACE_REC_AVAILABLE = False
+    face_recognition = None
 
 def show_face_enrollment():
     st.subheader("📸 Face Enrollment for Group Check-In")
     st.caption("Enroll residents' faces for group photo check-in.")
 
+    if not FACE_REC_AVAILABLE:
+        st.error("⚠️ Face recognition library (`face_recognition`) is not installed on this server.")
+        st.info("Please ensure `dlib-bin==19.24.2` and `face-recognition==1.3.0` are in your `requirements.txt` and rebuild your deployment.")
+        return
+
+    # --- rest of your existing enrollment code follows here ---
     search_face = st.text_input("Search resident by Name or ID", key="face_enroll_search")
     if search_face:
         s = search_face.lower()
