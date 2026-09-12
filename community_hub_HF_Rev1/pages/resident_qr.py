@@ -13,13 +13,15 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# ✅ Hide Streamlit UI elements + Sidebar via CSS
+# ✅ FIX 1: Wrapped CSS in <style> tags to prevent raw text from showing
 hide_streamlit_style = """
+<style>
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
-    [data-testid="stSidebar"] {display: none;}
-    [data-testid="collapsedControl"] {display: none;}
+    [data-testid="stSidebar"] {display: none !important;}
+    [data-testid="collapsedControl"] {display: none !important;}
+</style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
@@ -266,34 +268,36 @@ def display_resident_qr_card(resident):
             const card = document.getElementById('badge');
             const qrImg = document.getElementById('qr-img');
             
-            // ✅ FIX: Wait for the QR image to fully load before capturing
-            if (qrImg && !qrImg.complete) {{
+            // ✅ FIX 3: Robust wait for image to load before capturing
+            function doCapture() {{
+                html2canvas(card, {{
+                    scale: 2,
+                    useCORS: true,
+                    backgroundColor: '#ffffff',
+                    allowTaint: false
+                }}).then(canvas => {{
+                    const link = document.createElement('a');
+                    link.download = 'Resident_Badge_{resident_name.replace(" ", "_")}.png';
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                }}).catch(err => {{
+                    console.error('html2canvas error:', err);
+                    alert('Could not download image. Please try again.');
+                }});
+            }}
+
+            if (qrImg && qrImg.complete) {{
+                // Image is already loaded, add slight delay for rendering
+                setTimeout(doCapture, 500);
+            }} else if (qrImg) {{
+                // Wait for the image to load
                 qrImg.onload = function() {{
-                    captureCard(card);
+                    setTimeout(doCapture, 500);
                 }};
             }} else {{
-                // Slight delay to ensure rendering
-                setTimeout(() => {{
-                    captureCard(card);
-                }}, 300);
+                // Fallback
+                setTimeout(doCapture, 500);
             }}
-        }}
-
-        function captureCard(card) {{
-            html2canvas(card, {{
-                scale: 2,
-                useCORS: true,
-                backgroundColor: '#ffffff',
-                allowTaint: false
-            }}).then(canvas => {{
-                const link = document.createElement('a');
-                link.download = 'Resident_Badge_{resident_name.replace(" ", "_")}.png';
-                link.href = canvas.toDataURL('image/png');
-                link.click();
-            }}).catch(err => {{
-                console.error('html2canvas error:', err);
-                alert('Could not download image. Please try again.');
-            }});
         }}
     </script>
 </body>
@@ -303,10 +307,10 @@ def display_resident_qr_card(resident):
     from streamlit.components.v1 import html
     html(card_html, height=680, scrolling=True)
 
-    # External WhatsApp button
+    # ✅ FIX 4: Darker green for WhatsApp button
     st.markdown(
         f"<div style='text-align:center; margin-top:10px;'>"
-        f"<a href='{whatsapp_link}' target='_blank' style='background:#25D366; color:white; padding:10px 20px; text-decoration:none; border-radius:8px; font-weight:bold; display:inline-block;'>"
+        f"<a href='{whatsapp_link}' target='_blank' style='background:#128C7E; color:white; padding:12px 24px; text-decoration:none; border-radius:8px; font-weight:bold; display:inline-block; font-size:16px;'>"
         f"📲 Share via WhatsApp</a></div>",
         unsafe_allow_html=True
     )
@@ -317,7 +321,6 @@ def display_resident_qr_card(resident):
 st.markdown("<h2 style='text-align:center;'>📱 Your QR Code</h2>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center; color:#666;'>Enter your 8-digit mobile number to view your personal QR code.</p>", unsafe_allow_html=True)
 
-# ✅ Use st.query_params (modern replacement for experimental)
 query_params = st.query_params
 default_phone = query_params.get("phone", "").strip()
 
@@ -340,11 +343,11 @@ if phone_input:
             st.success("✅ Found your QR code!")
             display_resident_qr_card(resident)
 
-            # ✅ FIX: Removed white background, used transparent/dark theme friendly styling
+            # ✅ FIX 2: Removed white background, used transparent/dark theme friendly styling
             full_link = f"{APP_URL}/resident_qr?phone={cleaned}"
             st.markdown(
-                f"<div style='padding:12px; border-radius:8px; margin-top:16px; text-align:center; font-size:14px; border:1px solid #444;'>"
-                f"🔗 <strong>Your Personal Link</strong><br>"
+                f"<div style='padding:12px; border-radius:8px; margin-top:16px; text-align:center; font-size:14px; border:1px solid #444; background:transparent;'>"
+                f"🔗 <strong style='color: #ffffff;'>Your Personal Link</strong><br>"
                 f"<code style='font-size:13px; background:transparent; padding:4px 8px; color:#4a6cf7;'>{full_link}</code>"
                 f"</div>",
                 unsafe_allow_html=True
