@@ -153,6 +153,7 @@ def show_residents():
     df = pd.DataFrame(display_data)
     st.dataframe(df, use_container_width=True, hide_index=True)
     st.divider()
+
     if st.session_state.get("user_role") == "admin":
         csv = df.to_csv(index=False).encode("utf-8")
         st.download_button(
@@ -206,8 +207,8 @@ def show_residents():
     layout_type_totals = {}
     for i in ent_layout:
         layout_type_totals[i.get('plot_type', 'B')] = layout_type_totals.get(i.get('plot_type', 'B'), 0) + 1
-        # 🔥 Update column count to 3 since Type D is removed
-    tc = st.columns(3) 
+
+    tc = st.columns(3)
     for i, (tk, ti) in enumerate(PLOT_TYPES.items()):
         with tc[i]:
             to = len([p for p in block_plots if p.get('plot_type', _ptype_for(p['plot_number'], p)) == tk and p.get('occupied')])
@@ -217,7 +218,7 @@ def show_residents():
                 f'<div style="background:{ti["colour"]};color:white;padding:10px;border-radius:8px;text-align:center;">'
                 f'<div style="font-size:14px;font-weight:bold;">Type {tk}</div>'
                 f'<div style="font-size:20px;margin:3px 0;">{to}/{block_total}</div>'
-                f'<div>{ti["area"]} m\u00B2 ({ti["boxes"]} boxes)</div>'  # <-- Added boxes here
+                f'<div>{ti["area"]} m\u00B2 ({ti["boxes"]} boxes)</div>'
                 f'<div>({pc:.1f}%)</div></div>',
                 unsafe_allow_html=True,
             )
@@ -333,12 +334,14 @@ def show_residents():
     st.divider()
     st.subheader("📱 Generate QR Code for Resident")
     st.caption("Generate a permanent QR code card for elderly residents to carry")
+
     qr_mode = st.radio(
         "Select Mode:",
         ["🔍 Search Specific Resident", "📋 Show All Residents for QR Generation"],
         horizontal=True,
         key="qr_mode_select",
     )
+
     if qr_mode == "🔍 Search Specific Resident":
         qr_search = st.text_input("Search resident to generate QR code", placeholder="Type name or ID...", key="qr_search_individual")
         if qr_search:
@@ -384,6 +387,31 @@ def show_residents():
                         st.divider()
         else:
             st.info("No residents found matching the filter.")
+
+    # ── QR LINK GENERATOR FOR ADMIN ─────────────────────────
+    if st.session_state.get("user_role") == "admin":
+        st.divider()
+        st.subheader("🔗 Generate QR Links for Residents")
+        if st.button("📧 Generate All QR Links"):
+            active_residents = [p for p in participants if p.get("active", True)]
+            links = []
+            for p in active_residents:
+                contact = p.get("contact")
+                if contact:
+                    cleaned = clean_phone_number(contact)
+                    if len(cleaned) >= 8:
+                        link = f"{APP_URL}/resident_qr?phone={cleaned}"
+                        links.append(f"{p['name']},{cleaned},{link}")
+
+            if links:
+                st.download_button(
+                    "📥 Download QR Links (CSV)",
+                    data="\n".join(["Name,Phone,Link"] + links),
+                    file_name="resident_qr_links.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("No residents found with valid phone numbers.")
 
 
 def _display_qr_code(p):
@@ -438,7 +466,7 @@ body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background
 <body>
 <div class="card" id="residentCard">
   <div class="header">
-    <img src="{logo_src}" class="logo" alt="Logo" onerror="this.style.display='none'">
+    <img src="{logo_src}" class="logo" alt="Logo">
     <div class="title-group"><h2>WOODLANDS ZONE 6</h2><p>Community Hub</p></div>
   </div>
   <hr class="divider">
@@ -464,6 +492,7 @@ function downloadCard() {{
 </script>
 </body>
 </html>"""
+
     col1, col2, col3 = st.columns([1, 3, 1])
     with col2:
         components.html(card_html, height=750, scrolling=False)
@@ -506,7 +535,7 @@ def show_face_enrollment():
             for p in matches[:5]:
                 with st.container():
                     st.markdown(f"**{p['name']}** — ID: {p['id'][:12]}...")
-                    
+
                     # Show enrollment status
                     if p.get('face_enrolled', False) and p.get('face_photo_url'):
                         st.success("✅ Face enrolled and photo saved")
@@ -537,23 +566,13 @@ def show_face_enrollment():
                                     from PIL import Image
                                     from datetime import datetime
 
-                                    # ✅ FIX: Use face_recognition (dlib) for BOTH detection AND encoding.
-                                    # The recognition side (services/face_service.py) compares with
-                                    # face_recognition.face_distance() — encodings MUST come from the
-                                    # same library. DeepFace/Facenet embeddings are a different vector
-                                    # space and will always score as "Unknown" at check-in.
-                                    # (DeepFace is no longer used anywhere -> no OpenCV XML issue either.)
-
-                                    # 1. Load image and normalise to 3-channel RGB
-                                    #    (PNG uploads can be RGBA, grayscale can be 1-channel —
-                                    #     both break face_recognition)
+                                    # Load image and convert to RGB
                                     image = Image.open(io.BytesIO(face_photo.getvalue())).convert("RGB")
                                     image_np = np.array(image)
 
-                                    # 2. Detect the face
+                                    # Detect face
                                     face_locations = face_recognition.face_locations(image_np, model='hog')
                                     if len(face_locations) == 0:
-                                        # Retry once with upsampling — helps with smaller/lower-res faces
                                         face_locations = face_recognition.face_locations(image_np, number_of_times_to_upsample=2, model='hog')
                                     if len(face_locations) == 0:
                                         st.error("❌ No face detected. Please ensure the face is clearly visible and forward-facing.")
@@ -562,7 +581,7 @@ def show_face_enrollment():
                                         st.error("❌ Multiple faces detected. Please upload a photo with only this resident.")
                                         st.stop()
 
-                                    # 3. Generate the 128-d dlib encoding (SAME model used at check-in)
+                                    # Generate encoding
                                     encodings = face_recognition.face_encodings(image_np, face_locations)
                                     if not encodings:
                                         st.error("❌ Could not generate a face encoding. Try a clearer, better-lit photo.")
@@ -570,7 +589,7 @@ def show_face_enrollment():
 
                                     encoding_str = json.dumps(encodings[0].tolist())
 
-                                    # 4. Upload to Supabase Storage
+                                    # Upload to Supabase Storage
                                     file_ext = face_photo.name.split('.')[-1]
                                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                                     unique_storage_path = f"resident_faces/{p['id']}_{timestamp}.{file_ext}"
@@ -581,7 +600,7 @@ def show_face_enrollment():
                                         file_options={"content-type": face_photo.type}
                                     )
                                     
-                                    # 5. Generate URL and update database
+                                    # Generate URL and update database
                                     public_url = supabase.storage.from_('face_photos').get_public_url(unique_storage_path)
                                     
                                     supabase.table('participants').update({
@@ -591,13 +610,12 @@ def show_face_enrollment():
                                         'face_updated_at': datetime.now().isoformat()
                                     }).eq('id', p['id']).execute()
                                     
-                                    # ✅ FIX: Refresh the in-memory face cache immediately,
-                                    # otherwise check-in won't see this face until app restart
+                                    # Reload face cache immediately
                                     try:
                                         from services.face_service import get_face_service
                                         get_face_service().reload()
                                     except Exception:
-                                        pass  # cache will rebuild on next app start
+                                        pass
 
                                     st.success(f"✅ Face enrolled and photo saved successfully for {p['name']}!")
                                     st.info("💡 The new face is active immediately — no restart needed.")
