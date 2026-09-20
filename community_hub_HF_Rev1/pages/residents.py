@@ -579,10 +579,32 @@ def show_residents():
     st.subheader("📱 Generate QR Code for Resident")
     st.caption("Generate a permanent QR code badge for elderly residents to carry")
 
-    # ✅ Group Share Link Section
+        # ✅ Group Share Link Section
     st.info("📢 **Group Share Link**\n\nCopy this link and send it to your WhatsApp group. Residents can click it, enter their phone number, and get their own QR code.")
     group_link = f"{APP_URL}/resident_qr"
     st.code(group_link, language="text")
+
+    # 🆕 QR code for the group share link
+    group_qr_url = (
+        f"https://api.qrserver.com/v1/create-qr-code/"
+        f"?size=350x350&data={urllib.parse.quote(group_link)}"
+    )
+    qc1, qc2 = st.columns([1, 2])
+    with qc1:
+        st.image(group_qr_url, width=260, caption="📱 Scan to open")
+    with qc2:
+        st.markdown("""
+        #### 📲 For Elderly Residents
+
+        1. Open your phone **camera**
+        2. Point it at the QR code 📷
+        3. Tap the link that pops up
+        4. Enter your **8-digit phone number**
+        5. Show the QR code at the kiosk ✅
+
+        💡 **Tip:** You can also **print** this QR code and paste it at the community hub entrance.
+        """)
+
     st.markdown("---")
 
     qr_mode = st.radio(
