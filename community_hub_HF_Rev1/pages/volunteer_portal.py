@@ -417,14 +417,12 @@ def show_volunteer_portal(token, activity_param=None):
                         )
                         
                         if success:
-                            # ✅ FIX 3: NO BALLOONS, CLEAR INPUT
                             st.session_state.checkin_success = True
                             if qr_key in st.session_state:
                                 del st.session_state[qr_key]
                             st.session_state.qr_scan_counter += 1
-                            
-                            st.success(f"✅ Check-in Successful for {resident_name}!")
-                            st.info("Auto-resetting for next resident...")
+                            st.session_state.last_processed_qr = ""
+                            st.success(f"✅ Check-in successful for {resident_name}!")
                             st.rerun()
                         else:
                             if "already" in message.lower() or "fully checked in" in message.lower():
@@ -584,16 +582,23 @@ def show_volunteer_portal(token, activity_param=None):
                     if success:
                         success2, msg2, _ = AttendanceService.process_checkin(new_id, selected_date, selected_activity, s1, s2, s3, s4)
                         if success2:
-                            # ✅ FIX 2 & 3: SUCCESS MESSAGE, NO BALLOONS, CLEAR INPUTS
                             st.success(f"✅ {name.strip().upper()} registered & checked in successfully!")
                             st.info(f"Resident ID: `{new_id}`")
                             
-                            # Clear all registration inputs
-                            keys_to_clear = [name_key, contact_key, no_phone_key, indemnity_key, member_type_key, block_consent_key, block_no_key]
+                            # ✅ Clear all registration input fields
+                            keys_to_clear = [
+                                "portal_reg_name",
+                                "portal_reg_contact",
+                                "portal_reg_no_phone",
+                                "portal_reg_indemnity",
+                                "portal_reg_member_type",
+                                "portal_reg_block_consent",
+                                "portal_reg_block_no",
+                            ]
                             for k in keys_to_clear:
                                 if k in st.session_state:
                                     del st.session_state[k]
-                                    
+                            
                             st.rerun()
                 except Exception as e:
                     st.error(f"Registration failed: {e}")
