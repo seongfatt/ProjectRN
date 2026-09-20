@@ -2,20 +2,14 @@ import streamlit as st
 import urllib.parse
 import base64
 import os
-from datetime import datetime, timedelta, timezone
-from config import supabase, APP_URL, load_activities
-from utils import clean_phone_number, mask_phone, validate_checkin_time
-
-# Try to import AttendanceService for robust check-in logic
-try:
-    from services import AttendanceService
-except ImportError:
-    AttendanceService = None
+from datetime import datetime
+from config import supabase, APP_URL
+from utils import clean_phone_number, mask_phone
 
 # 🔒 Hide sidebar + header for resident-facing page
 st.set_page_config(
     page_title="Your QR Code",
-    page_icon="logo.png",
+    page_icon="logo.png",  # <--- This changes the browser tab icon!
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -31,7 +25,6 @@ hide_streamlit_style = """
 </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
 
 def _get_logo_base64(logo_path="logo.png"):
     try:
@@ -51,12 +44,10 @@ def _get_logo_base64(logo_path="logo.png"):
         "ZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIxNCIgZm9udC13ZWlnaHQ9ImJvbGQiPldaNjwvdGV4dD48L3N2Zz4="
     )
 
-
 def _safe_str(value, default="N/A"):
     if value is None:
         return default
     return str(value).strip()
-
 
 def find_resident_by_phone(phone):
     cleaned_phone = clean_phone_number(phone)
@@ -70,23 +61,6 @@ def find_resident_by_phone(phone):
             return None, "❌ No resident found with this phone number."
     except Exception as e:
         return None, f"⚠️ Database error: {str(e)}"
-
-
-def get_active_sessions_for_now(activity_config):
-    """Auto-detect which sessions are currently active based on SGT time."""
-    now_sgt = datetime.now(timezone(timedelta(hours=8)))
-    current_time_str = now_sgt.strftime("%H:%M")
-    
-    sessions = [False, False, False, False]
-    for i in range(1, 5):
-        start = activity_config.get(f'session_{i}_start_time')
-        end = activity_config.get(f'session_{i}_end_time')
-        if start and end:
-            # Simple string comparison works perfectly for "HH:MM" format
-            if start <= current_time_str <= end:
-                sessions[i-1] = True
-    return sessions
-
 
 def display_resident_qr_card(resident):
     resident_id = _safe_str(resident.get('id'), "UNKNOWN")
@@ -121,27 +95,148 @@ def display_resident_qr_card(resident):
 <html>
 <head>
     <meta charset="UTF-8">
+    <!-- ✅ SWITCHED TO html-to-image FOR RELIABLE BASE64 CAPTURING -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
     <style>
-        body {{ margin: 0; padding: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: transparent; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 100vh; }}
-        .badge {{ width: 340px; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.3); border: 1px solid #e0e0e0; text-align: center; color: #1a1a1a; }}
-        .badge-header {{ background: linear-gradient(135deg, #4a6cf7, #3b5bdb); color: white; padding: 20px 15px; display: flex; flex-direction: column; align-items: center; gap: 8px; }}
-        .badge-header img {{ width: 50px; height: 50px; object-fit: contain; background: white; border-radius: 50%; padding: 5px; }}
-        .badge-header h2 {{ margin: 0; font-size: 18px; font-weight: 700; letter-spacing: 1px; }}
-        .badge-header p {{ margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; opacity: 0.8; }}
-        .badge-body {{ padding: 20px; }}
-        .resident-name {{ font-size: 24px; font-weight: bold; margin: 0 0 5px 0; color: #1a1a1a; word-break: break-word; }}
-        .resident-block {{ font-size: 16px; color: #666; margin: 0 0 15px 0; font-weight: 500; }}
-        .qr-container {{ display: inline-block; padding: 10px; border: 2px dashed #4a6cf7; border-radius: 12px; background: #fff; margin-bottom: 10px; }}
-        .qr-container img {{ width: 180px; height: 180px; display: block; }}
-        .scan-hint {{ font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 15px 0; }}
-        .id-box {{ background: #f8f9fa; padding: 10px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 16px; font-weight: bold; color: #333; letter-spacing: 1px; border: 1px solid #eee; }}
-        .badge-footer {{ background: #f8f9fa; padding: 12px; border-top: 1px solid #eee; font-size: 11px; color: #4a6cf7; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }}
-        .actions {{ margin-top: 20px; display: flex; gap: 15px; justify-content: center; width: 100%; }}
-        .btn {{ background: #4a6cf7; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 15px; cursor: pointer; font-weight: bold; transition: 0.2s; }}
-        .btn:hover {{ background: #3b5bdb; }}
-        .btn-outline {{ background: transparent; color: #4a6cf7; border: 2px solid #4a6cf7; }}
-        .btn-outline:hover {{ background: #f0f4ff; }}
+        body {{
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: transparent;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }}
+        .badge {{
+            width: 340px;
+            background: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            border: 1px solid #e0e0e0;
+            text-align: center;
+            color: #1a1a1a;
+        }}
+        .badge-header {{
+            background: linear-gradient(135deg, #4a6cf7, #3b5bdb);
+            color: white;
+            padding: 20px 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }}
+        .badge-header img {{
+            width: 50px;
+            height: 50px;
+            object-fit: contain;
+            background: white;
+            border-radius: 50%;
+            padding: 5px;
+        }}
+        .badge-header h2 {{
+            margin: 0;
+            font-size: 18px;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }}
+        .badge-header p {{
+            margin: 0;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            opacity: 0.8;
+        }}
+        .badge-body {{
+            padding: 20px;
+        }}
+        .resident-name {{
+            font-size: 24px;
+            font-weight: bold;
+            margin: 0 0 5px 0;
+            color: #1a1a1a;
+            word-break: break-word;
+        }}
+        .resident-block {{
+            font-size: 16px;
+            color: #666;
+            margin: 0 0 15px 0;
+            font-weight: 500;
+        }}
+        .qr-container {{
+            display: inline-block;
+            padding: 10px;
+            border: 2px dashed #4a6cf7;
+            border-radius: 12px;
+            background: #fff;
+            margin-bottom: 10px;
+        }}
+        .qr-container img {{
+            width: 180px;
+            height: 180px;
+            display: block;
+        }}
+        .scan-hint {{
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 0 0 15px 0;
+        }}
+        .id-box {{
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            font-weight: bold;
+            color: #333;
+            letter-spacing: 1px;
+            border: 1px solid #eee;
+        }}
+        .badge-footer {{
+            background: #f8f9fa;
+            padding: 12px;
+            border-top: 1px solid #eee;
+            font-size: 11px;
+            color: #4a6cf7;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }}
+        .actions {{
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            width: 100%;
+        }}
+        .btn {{
+            background: #4a6cf7;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 15px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }}
+        .btn:hover {{
+            background: #3b5bdb;
+        }}
+        .btn-outline {{
+            background: transparent;
+            color: #4a6cf7;
+            border: 2px solid #4a6cf7;
+        }}
+        .btn-outline:hover {{
+            background: #f0f4ff;
+        }}
+        
+        /* Print Styles */
         @media print {{
             body {{ margin: 0; padding: 0; background: white; }}
             .badge {{ box-shadow: none; border: 1px solid #ccc; width: 100%; max-width: 350px; margin: 0 auto; }}
@@ -176,7 +271,13 @@ def display_resident_qr_card(resident):
     <script>
         function downloadCard() {{
             const card = document.getElementById('badge');
-            htmlToImage.toPng(card, {{ quality: 1.0, pixelRatio: 2, backgroundColor: '#ffffff' }})
+            
+            // ✅ html-to-image handles Base64 images perfectly without CORS errors
+            htmlToImage.toPng(card, {{ 
+                quality: 1.0, 
+                pixelRatio: 2,
+                backgroundColor: '#ffffff'
+            }})
             .then(function (dataUrl) {{
                 const link = document.createElement('a');
                 link.download = 'Resident_Badge_{resident_name.replace(" ", "_")}.png';
@@ -204,102 +305,12 @@ def display_resident_qr_card(resident):
         unsafe_allow_html=True
     )
 
-
-def display_self_checkin_section(resident):
-    """Displays the elderly-friendly self check-in section."""
-    st.divider()
-    st.subheader("📅 Today's Check-In")
-    st.caption("Tap the button below to check in for today's activities.")
-    
-    resident_id = resident.get('id')
-    today_sgt = datetime.now(timezone(timedelta(hours=8)))
-    today_str = today_sgt.strftime("%Y-%m-%d")
-    
-    # Fetch today's attendance for this resident to disable buttons if already checked in
-    try:
-        today_att = supabase.table('attendance').select('source').eq('participant_id', resident_id).eq('date', today_str).execute().data
-        checked_in_activities = {rec['source'] for rec in (today_att or [])}
-    except Exception:
-        checked_in_activities = set()
-
-    acts = load_activities()
-    if not acts:
-        st.info("No activities are currently configured in the system.")
-        return
-
-    for act in acts:
-        act_name = act['name']
-        
-        # Auto-detect active sessions based on current time
-        sessions = get_active_sessions_for_now(act)
-        any_active = any(sessions)
-        
-        st.markdown(f"### {act_name}")
-        
-        if act_name in checked_in_activities:
-            st.markdown(
-                f"<div style='background:#d4edda; color:#155724; padding:15px; border-radius:8px; border-left:5px solid #28a745; margin-bottom:15px; font-weight:bold;'>"
-                f"✅ You are already checked in for today!</div>", 
-                unsafe_allow_html=True
-            )
-        elif any_active:
-            session_names = []
-            for i, is_active in enumerate(sessions):
-                if is_active:
-                    lbl = act.get(f'session_{i+1}_label') or f"Session {i+1}"
-                    session_names.append(lbl)
-            
-            session_text = " & ".join(session_names) if session_names else "the current session"
-            
-            if st.button(f"✅ Tap to Check In for {act_name}", key=f"checkin_{act_name}_{resident_id}", use_container_width=True, type="primary"):
-                with st.spinner("Checking you in..."):
-                    if AttendanceService:
-                        success, msg, _ = AttendanceService.process_checkin(resident_id, today_str, act_name, *sessions)
-                    else:
-                        # Fallback inline check-in if AttendanceService is not available
-                        try:
-                            supabase.table('attendance').insert({
-                                "participant_id": resident_id,
-                                "name": resident.get('name'),
-                                "date": today_str,
-                                "session_1": sessions[0], "session_2": sessions[1], 
-                                "session_3": sessions[2], "session_4": sessions[3],
-                                "timestamp": today_sgt.isoformat(),
-                                "self_checkin": True,
-                                "source": act_name,
-                                "activities": [act_name]
-                            }).execute()
-                            success, msg = True, "Checked in successfully."
-                        except Exception as e:
-                            if 'duplicate' in str(e).lower():
-                                success, msg = False, "Already checked in."
-                            else:
-                                success, msg = False, str(e)
-
-                    if success:
-                        st.success(f"✅ Successfully Checked In for {act_name}!")
-                        st.info("Thank you! Have a great time.")
-                        st.rerun() # Rerun to update the "already checked in" status
-                    else:
-                        if "already" in msg.lower():
-                            st.info(f"ℹ️ You are already checked in for {act_name} today.")
-                        else:
-                            st.error(f"❌ {msg}")
-        else:
-            st.markdown(
-                f"<div style='background:#f8f9fa; color:#666; padding:15px; border-radius:8px; border-left:5px solid #ccc; margin-bottom:15px;'>"
-                f"⏳ <i>Check-in for {act_name} is not currently open.</i></div>", 
-                unsafe_allow_html=True
-            )
-
-
 # ───────────────────────────────────────────────
 # MAIN LOGIC
 # ───────────────────────────────────────────────
 st.markdown("<h2 style='text-align:center;'>📱 Your QR Code</h2>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center; color:#666;'>Enter your 8-digit mobile number to view your personal QR code.</p>", unsafe_allow_html=True)
 
-# ✅ Updated to modern st.query_params (replaces deprecated st.experimental_get_query_params)
 query_params = st.query_params
 default_phone = query_params.get("phone", "").strip()
 
@@ -321,9 +332,6 @@ if phone_input:
         elif resident:
             st.success("✅ Found your QR code!")
             display_resident_qr_card(resident)
-            
-            # 🆕 NEW: Elderly-friendly self check-in section
-            display_self_checkin_section(resident)
 
             # Personal link shown OUTSIDE the card
             full_link = f"{APP_URL}/resident_qr?phone={cleaned}"
