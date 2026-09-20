@@ -2,6 +2,7 @@ def show_manage(selected_date):
     import streamlit as st
     import pandas as pd
     import random
+    import json
     from datetime import datetime
     from config import supabase, DB_CONNECTED, refresh_data, load_activities
     from utils import mask_phone, clean_phone_number, log_action, find_participant_by_id
@@ -26,6 +27,30 @@ def show_manage(selected_date):
             return True
         except:
             return False
+
+    # ─── HELPER: Parse available_days JSONB safely ────────────
+    def _parse_available_days(raw):
+        """Return list of ints (1=Mon … 7=Sun) from JSONB or string."""
+        if raw is None:
+            return []
+        if isinstance(raw, list):
+            return [int(x) for x in raw if isinstance(x, (int, float)) or (isinstance(x, str) and x.isdigit())]
+        if isinstance(raw, str):
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    return [int(x) for x in parsed if isinstance(x, (int, float)) or (isinstance(x, str) and x.isdigit())]
+            except Exception:
+                pass
+        return []
+
+    DAY_SHORT = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri", 6: "Sat", 7: "Sun"}
+    AVAIL_MODES = ["always", "days", "hidden"]
+    AVAIL_LABELS = {
+        "always": "🕒 Always Available",
+        "days":   "📅 Specific Days",
+        "hidden": "⏸️ Paused (hidden from residents)",
+    }
 
     st.header("Management")
     if not DB_CONNECTED:
@@ -58,12 +83,11 @@ def show_manage(selected_date):
                 block_no = ""
                 if block_consent:
                     block_no = st.text_input("Block No.", placeholder="e.g., 622, 624A", key="new_p_block_no").strip().upper()
-                
+
                 if st.button("Register", type="primary", use_container_width=True, key="new_p_submit"):
                     if not name.strip():
                         st.error("Name is required")
                     else:
-                        # ✅ Use RegistrationService
                         success, message, new_id = RegistrationService.register_resident(
                             name=name,
                             contact=contact,
@@ -77,7 +101,6 @@ def show_manage(selected_date):
                             st.success(f"✅ Added {name} as **{member_type}**!")
                             st.session_state.participants = load_participants()
                             refresh_data()
-                            # Clear form fields
                             st.session_state["new_p_name"] = ""
                             st.session_state["new_p_contact"] = ""
                             st.session_state["new_p_block_no"] = ""
@@ -87,7 +110,7 @@ def show_manage(selected_date):
                             st.rerun()
                         else:
                             st.error(message)
-            
+
             with st.expander("Indemnity Status"):
                 unsigned = [p for p in st.session_state.participants if not p.get('indemnity') and p.get('active', True)]
                 for p in unsigned:
@@ -98,13 +121,10 @@ def show_manage(selected_date):
                         st.session_state.participants = load_participants()
                         refresh_data()
                         st.rerun()
-            
-            # pages/manage.py — Fix nested expander
 
             with st.expander("🗑️ Remove Participant"):
                 st.warning("Removing a participant will deactivate them.")
-                
-                # Show all active residents (NO nested expander)
+
                 active_list_all = [p for p in st.session_state.participants if p.get('active', True)]
                 if active_list_all:
                     st.caption(f"Total Active Residents: {len(active_list_all)}")
@@ -123,10 +143,9 @@ def show_manage(selected_date):
                                 st.error(f"Error removing: {e}")
                 else:
                     st.info("No active residents found.")
-                
+
                 st.divider()
                 remove_search = st.text_input("Search to remove by Name or ID", placeholder="Type name or last 4 digits...", key="remove_search")
-                # ... rest of the code
                 st.session_state.participants = load_participants()
                 active_list = [p for p in st.session_state.participants if p.get('active', True)]
                 if remove_search:
@@ -140,7 +159,7 @@ def show_manage(selected_date):
                             with st.container():
                                 c1, c2, c3 = st.columns([3, 2, 1])
                                 c1.write(f"**{p['name']}**")
-                                c2.write(f" {mask_phone(p.get('contact', 'N/A'))}")
+                                c2.write(f"📞 {mask_phone(p.get('contact', 'N/A'))}")
                                 if c3.button("Remove", key=f"remove_{p['id']}", type="secondary"):
                                     try:
                                         supabase.table('participants').update({'active': False}).eq('id', p['id']).execute()
@@ -152,7 +171,7 @@ def show_manage(selected_date):
                                         st.error(f"Error removing: {e}")
                     else:
                         st.caption("No participants found matching that name.")
-            
+
             with st.expander("✏️ Update Resident Contact Info"):
                 st.caption("Use this to add a phone number, block info, or change member type.")
                 update_search = st.text_input("Search resident by Name or ID", key="update_search_contact")
@@ -166,7 +185,7 @@ def show_manage(selected_date):
                             current_contact = p.get('contact', 'N/A')
                             current_block = p.get('block_no', 'Not provided')
                             current_type = p.get('member_type', 'Resident')
-                            c2.write(f"Phone: {current_contact if current_contact != 'NO_PHONE' else ' No Phone'} | Block: {current_block} | Type: {current_type}")
+                            c2.write(f"Phone: {current_contact if current_contact != 'NO_PHONE' else '📵 No Phone'} | Block: {current_block} | Type: {current_type}")
                             with c3:
                                 if st.button("Edit", key=f"edit_btn_{p['id']}"):
                                     st.session_state[f"edit_mode_{p['id']}"] = True
@@ -212,12 +231,11 @@ def show_manage(selected_date):
                                         if st.form_submit_button("Cancel"):
                                             st.session_state[f"edit_mode_{p['id']}"] = False
                                             st.rerun()
-            
+
             # ─── ✅ FACE ENROLLMENT ───
-            # This appears at the bottom of the Participants tab
             st.markdown("---")
             show_face_enrollment()
-            
+
         else:
             st.info("🔒 Participant management is restricted to System Admins.")
 
@@ -235,12 +253,26 @@ def show_manage(selected_date):
                 act_id = a['id']
                 saved_labels = [(a.get(f'session_{i}_label') or '').strip() for i in range(1, MAX_SESSIONS + 1)]
                 saved_count = max([i + 1 for i, l in enumerate(saved_labels) if l] or [1])
-                c1, c2, c3, c4 = st.columns([3, 3, 1, 1])
+                saved_mode = (a.get('availability_mode') or 'always').lower()
+                saved_days = _parse_available_days(a.get('available_days'))
+
+                # ── Status badge for the list row ──
+                if not a.get('active'):
+                    avail_badge = "⚪ INACTIVE"
+                elif saved_mode == 'hidden':
+                    avail_badge = "⏸️ PAUSED"
+                elif saved_mode == 'days':
+                    day_str = "/".join(DAY_SHORT[d] for d in sorted(saved_days) if d in DAY_SHORT) or "—"
+                    avail_badge = f"📅 {day_str}"
+                else:
+                    avail_badge = "🕒 Always"
+
+                time_badge = "⏰ Time-Gated" if a.get('enable_time_validation') else "🕐 All-Day"
+
+                c1, c2, c3, c4 = st.columns([3, 3, 2, 1])
                 c1.write(f"**{a['name']}**")
                 c2.write(" | ".join([l for l in saved_labels if l]))
-                c3.caption("⏰ Time-Gated" if a.get('enable_time_validation') else "🕒 All-Day")
-                if not a.get('active'):
-                    c3.caption("⚪ INACTIVE")
+                c3.caption(f"{avail_badge} · {time_badge}")
                 with c4:
                     if st.session_state.user_role == 'admin':
                         if not a.get('active'):
@@ -257,10 +289,11 @@ def show_manage(selected_date):
                             st.session_state[f"edit_act_{act_id}"] = True
                             st.session_state[f"num_sess_{act_id}"] = saved_count
                             st.rerun()
-                
+
                 if st.session_state.get(f"edit_act_{act_id}"):
                     st.session_state.setdefault(f"num_sess_{act_id}", saved_count)
                     st.subheader(f"Edit: {a['name']}")
+
                     bc1, bc2, bc3 = st.columns([1, 1, 2])
                     with bc1:
                         if st.button("➕ Add Session", key=f"add_sess_{act_id}"):
@@ -274,6 +307,32 @@ def show_manage(selected_date):
                                 st.rerun()
                     with bc3:
                         st.caption(f"Editing **{st.session_state[f'num_sess_{act_id}']}** session(s) — max {MAX_SESSIONS}.")
+
+                    # ── 🆕 AVAILABILITY MODE ──
+                    st.markdown("**📆 Availability for Residents**")
+                    default_mode_idx = AVAIL_MODES.index(saved_mode) if saved_mode in AVAIL_MODES else 0
+                    availability_mode = st.radio(
+                        "Availability Mode",
+                        AVAIL_MODES,
+                        format_func=lambda x: AVAIL_LABELS[x],
+                        index=default_mode_idx,
+                        horizontal=True,
+                        key=f"edit_avail_mode_{act_id}"
+                    )
+
+                    selected_days = []
+                    if availability_mode == "days":
+                        st.caption("Pick which days this activity runs:")
+                        day_cols = st.columns(7)
+                        for i, dname in DAY_SHORT.items():
+                            with day_cols[i - 1]:
+                                if st.checkbox(dname, value=(i in saved_days), key=f"edit_day_{i}_{act_id}"):
+                                    selected_days.append(i)
+                    elif availability_mode == "hidden":
+                        st.info("⏸️ Residents will not see this activity. Volunteers can still check in through the portal.")
+
+                    st.markdown("---")
+
                     enable_time_val = st.checkbox(
                         "✅ Enable Check-In Time Window",
                         value=bool(a.get('enable_time_validation', False)),
@@ -300,6 +359,7 @@ def show_manage(selected_date):
                             try: ev_t = datetime.strptime(ev, "%H:%M").time() if ev else datetime.strptime("20:15", "%H:%M").time()
                             except: ev_t = datetime.strptime("20:15", "%H:%M").time()
                             edit_vals[f'end_{i}'] = st.time_input("Closes", value=ev_t, step=60, key=f"edit_s{i}_end_{act_id}", disabled=not enable_time_val)
+
                     st.markdown("---")
                     with st.form(f"edit_act_form_{act_id}"):
                         edit_name = st.text_input("Activity Name", value=a['name'], key=f"edit_name_{act_id}")
@@ -309,6 +369,8 @@ def show_manage(selected_date):
                                 update_data = {
                                     "name": edit_name.upper(),
                                     "enable_time_validation": enable_time_val,
+                                    "availability_mode": availability_mode,
+                                    "available_days": selected_days if availability_mode == "days" else [],
                                 }
                                 for i in range(1, MAX_SESSIONS + 1):
                                     if i <= num:
@@ -328,10 +390,11 @@ def show_manage(selected_date):
                             if st.form_submit_button("Cancel"):
                                 st.session_state[f"edit_act_{act_id}"] = False
                                 st.rerun()
-        
+
         if st.session_state.user_role == 'admin':
             with st.expander("➕ Add New Activity"):
                 st.session_state.setdefault("num_sess_add", 1)
+
                 ac1, ac2 = st.columns(2)
                 with ac1:
                     if st.button("➕ Add Session", key="add_sess_new"):
@@ -344,6 +407,30 @@ def show_manage(selected_date):
                             st.session_state.num_sess_add -= 1
                             st.rerun()
                 st.caption(f"This activity will have **{st.session_state.num_sess_add}** session(s).")
+
+                # ── 🆕 AVAILABILITY MODE ──
+                st.markdown("**📆 Availability for Residents**")
+                add_availability_mode = st.radio(
+                    "Availability Mode",
+                    AVAIL_MODES,
+                    format_func=lambda x: AVAIL_LABELS[x],
+                    index=0,
+                    horizontal=True,
+                    key="add_avail_mode"
+                )
+                add_selected_days = []
+                if add_availability_mode == "days":
+                    st.caption("Pick which days this activity runs:")
+                    add_day_cols = st.columns(7)
+                    for i, dname in DAY_SHORT.items():
+                        with add_day_cols[i - 1]:
+                            if st.checkbox(dname, value=False, key=f"add_day_{i}"):
+                                add_selected_days.append(i)
+                elif add_availability_mode == "hidden":
+                    st.info("⏸️ Residents will not see this activity.")
+
+                st.markdown("---")
+
                 enable_time = st.checkbox("Enable Check-In Time Window", value=False, key="add_enable_time")
                 add_vals = {}
                 for i in range(1, st.session_state.num_sess_add + 1):
@@ -355,14 +442,18 @@ def show_manage(selected_date):
                         add_vals[f'start_{i}'] = st.time_input("Opens", value=datetime.strptime("19:45", "%H:%M").time(), step=60, key=f"add_s{i}_start", disabled=not enable_time)
                     with tc2:
                         add_vals[f'end_{i}'] = st.time_input("Closes", value=datetime.strptime("20:15", "%H:%M").time(), step=60, key=f"add_s{i}_end", disabled=not enable_time)
+
                 st.markdown("---")
                 with st.form("add_act"):
                     act_name = st.text_input("Activity Name")
                     if st.form_submit_button("Add Activity"):
                         if act_name:
                             data = {
-                                "name": act_name.upper(), "active": True,
+                                "name": act_name.upper(),
+                                "active": True,
                                 "enable_time_validation": enable_time,
+                                "availability_mode": add_availability_mode,
+                                "available_days": add_selected_days if add_availability_mode == "days" else [],
                             }
                             for i in range(1, MAX_SESSIONS + 1):
                                 if i <= st.session_state.num_sess_add:
@@ -460,10 +551,9 @@ def show_manage(selected_date):
                             st.error(f"Error logging expense: {e}")
                     else:
                         st.error("Please provide both a description and a valid amount.")
-        
+
         st.divider()
-        
-        # ── B. Payment Dashboard ──
+
         st.caption("Search, filter, and manage payment status for all occupied garden plots.")
         plots = st.session_state.plots
         block_opts = sorted({(p.get('block_name') or '').strip() for p in plots if p.get('occupied') and (p.get('block_name') or '').strip()})
@@ -486,7 +576,6 @@ def show_manage(selected_date):
                     "Owner Name": owner_name,
                     "Contact": owner_contact,
                     "Paid": plot.get('paid', False),
-                    "Block": (plot.get('block_name') or '').strip(),
                     "user_id": owner_id
                 })
             total_occupied = len(dashboard_data)
