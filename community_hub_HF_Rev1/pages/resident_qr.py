@@ -2,11 +2,13 @@ import streamlit as st
 import urllib.parse
 import base64
 import os
+import re
+import json
 import time
 from datetime import datetime, timezone, timedelta
 from config import supabase, APP_URL, load_activities
 from utils import clean_phone_number, mask_phone
-from services import AttendanceService
+from services import AttendanceService, RegistrationService
 
 # 🔒 Hide sidebar + header for resident-facing page
 st.set_page_config(
@@ -62,120 +64,213 @@ def find_resident_by_phone(phone):
         if result.data:
             return result.data[0], None
         else:
-            return None, "❌ No resident found with this phone number."
+            return None, None  # ← NOT an error — signal for self-registration
     except Exception as e:
         return None, f"⚠️ Database error: {str(e)}"
 
 
 # ═══════════════════════════════════════════════════════════════
-#  SELF CHECK-IN SECTION
+#  SELF CHECK-IN + AVAILABILITY FILTERING
 # ═══════════════════════════════════════════════════════════════
 
 SGT = timezone(timedelta(hours=8))
 
 
 def _now_sgt():
-    """Server-side Singapore time. Never trust client clock."""
     return datetime.now(SGT)
 
 
-def _get_live_activities_now():
-    """
-    Return list of activities that are 'live' right now.
+def _fmt_time_12h(t):
+    s = t.strftime("%I:%M %p")
+    if s.startswith("0"):
+        s = s[1:]
+    return s
 
-    Two modes:
-      • Time-gated  (enable_time_validation = True AND times saved)
-        → only live if current SGT time is inside a session window
-      • All-day     (enable_time_validation = False OR times missing)
-        → always live
 
-    Handles load_activities() returning either a list or a dict.
-    """
+def _validate_sg_phone(p):
+    """Return (is_valid, error_msg) for a Singapore phone number."""
+    if not p or not p.isdigit() or len(p) != 8:
+        return False, "Phone must be exactly 8 digits."
+    if p[0] not in ('6', '8', '9'):
+        return False, "Singapore numbers start with 6, 8, or 9."
+    return True, None
+
+
+def _parse_single_time(s):
+    s = s.strip().upper()
+    m = re.match(r'(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?', s)
+    if not m:
+        return None
+    hour = int(m.group(1))
+    minute = int(m.group(2)) if m.group(2) else 0
+    meridiem = m.group(3)
+    if meridiem == 'AM':
+        if hour == 12:
+            hour = 0
+    elif meridiem == 'PM':
+        if hour != 12:
+            hour += 12
+    if hour > 23 or minute > 59:
+        return None
+    return datetime.strptime(f"{hour:02d}:{minute:02d}", "%H:%M").time()
+
+
+def _parse_time_from_label(label):
+    if not label:
+        return None, None
+    text = label.upper().replace("–", "-").replace("—", "-").replace("~", "-")
+    text = re.sub(r'\s+TO\s+', '-', text)
+    text = re.sub(r'\s+', ' ', text)
+    tok = r'(?:\d{1,2}:\d{2}\s*(?:AM|PM)?|\d{1,2}\s*(?:AM|PM))'
+    m = re.search(rf'({tok})\s*-\s*({tok})', text)
+    if not m:
+        return None, None
+    start_raw = m.group(1).strip()
+    end_raw = m.group(2).strip()
+    start_t = _parse_single_time(start_raw)
+    end_t = _parse_single_time(end_raw)
+    if start_t and end_t:
+        start_has_mer = ('AM' in start_raw or 'PM' in start_raw)
+        end_has_mer = ('AM' in end_raw or 'PM' in end_raw)
+        if not start_has_mer and end_has_mer:
+            if 'PM' in end_raw and start_t.hour < 12:
+                start_t = start_t.replace(hour=start_t.hour + 12)
+    return start_t, end_t
+
+
+def _session_times(act, i):
+    start_str = act.get(f'session_{i}_start_time')
+    end_str = act.get(f'session_{i}_end_time')
+    if start_str and end_str:
+        try:
+            s = datetime.strptime(str(start_str)[:5], "%H:%M").time()
+            e = datetime.strptime(str(end_str)[:5], "%H:%M").time()
+            return s, e, 'db'
+        except Exception:
+            pass
+    lbl = (act.get(f'session_{i}_label') or '').strip()
+    s, e = _parse_time_from_label(lbl)
+    if s and e:
+        return s, e, 'label'
+    return None, None, None
+
+
+def _in_window(now_t, start_t, end_t):
+    if start_t <= end_t:
+        return start_t <= now_t <= end_t
+    return now_t >= start_t or now_t <= end_t
+
+
+def _parse_available_days(raw):
+    """Return list of ints (1=Mon … 7=Sun)."""
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [int(x) for x in raw if isinstance(x, (int, float)) or (isinstance(x, str) and x.isdigit())]
+    if isinstance(raw, str):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return [int(x) for x in parsed if isinstance(x, (int, float)) or (isinstance(x, str) and x.isdigit())]
+        except Exception:
+            pass
+    return []
+
+
+def _activity_available_today(act, weekday_1_to_7):
+    """Check availability_mode + available_days."""
+    mode = (act.get('availability_mode') or 'always').lower()
+    if mode == 'hidden':
+        return False
+    if mode == 'days':
+        days = _parse_available_days(act.get('available_days'))
+        if weekday_1_to_7 not in days:
+            return False
+    return True
+
+
+def _get_activities_state():
+    """Return (live, upcoming) after applying availability filters."""
     now_sgt = _now_sgt()
-    now_time = now_sgt.time()
+    now_t = now_sgt.time()
+    weekday = now_sgt.isoweekday()  # 1=Mon … 7=Sun
 
     try:
         acts = load_activities() or []
     except Exception as e:
         print(f"⚠️ load_activities() failed: {e}")
-        return []
+        return [], []
 
-    # Defensive: accept dict or list
     if isinstance(acts, dict):
         acts = list(acts.values())
 
     live = []
+    upcoming = []
+
     for act in acts:
-        # Skip inactive activities
         if act.get('active') is False:
             continue
+        # 🆕 availability filter
+        if not _activity_available_today(act, weekday):
+            continue
 
-        enable_time = bool(act.get('enable_time_validation', False))
-        flags = [False, False, False, False]
-        active_idx = None
-        active_label = active_start = active_end = None
-        is_all_day = False
+        live_idx = None
+        live_lbl = live_start = live_end = None
+        live_is_all_day = False
+
+        next_idx = None
+        next_lbl = next_start = None
 
         for i in range(1, 5):
             lbl = (act.get(f'session_{i}_label') or '').strip()
             if not lbl:
                 continue
-
-            start_str = act.get(f'session_{i}_start_time')
-            end_str = act.get(f'session_{i}_end_time')
-
-            # ── ALL-DAY session (no time validation OR missing times) ──
-            if not enable_time or not start_str or not end_str:
-                flags[i - 1] = True
-                is_all_day = True
-                if active_idx is None:
-                    active_idx = i
-                    active_label = lbl
-                    active_start = "All day"
-                    active_end = ""
+            s_t, e_t, src = _session_times(act, i)
+            if not s_t or not e_t:
+                if live_idx is None:
+                    live_idx = i
+                    live_lbl = lbl
+                    live_start = live_end = None
+                    live_is_all_day = True
                 continue
+            if _in_window(now_t, s_t, e_t):
+                if live_idx is None:
+                    live_idx = i
+                    live_lbl = lbl
+                    live_start = s_t
+                    live_end = e_t
+                    live_is_all_day = False
+            elif s_t > now_t:
+                if next_idx is None or s_t < next_start:
+                    next_idx = i
+                    next_lbl = lbl
+                    next_start = s_t
 
-            # ── TIME-GATED session ──
-            try:
-                start_t = datetime.strptime(str(start_str)[:5], "%H:%M").time()
-                end_t = datetime.strptime(str(end_str)[:5], "%H:%M").time()
-            except Exception:
-                # Malformed time → treat as all-day (fail-open)
-                flags[i - 1] = True
-                is_all_day = True
-                if active_idx is None:
-                    active_idx = i
-                    active_label = lbl
-                    active_start = "All day"
-                    active_end = ""
-                continue
-
-            if start_t <= now_time <= end_t:
-                flags[i - 1] = True
-                if active_idx is None:
-                    active_idx = i
-                    active_label = lbl
-                    active_start = str(start_str)[:5]
-                    active_end = str(end_str)[:5]
-
-        if active_idx:
+        if live_idx:
+            flags = [False, False, False, False]
+            flags[live_idx - 1] = True
             live.append({
                 'name': act['name'],
-                'session_index': active_idx,
-                'session_label': active_label,
-                'start': active_start,
-                'end': active_end,
+                'session_index': live_idx,
+                'session_label': live_lbl,
+                'start': live_start,
+                'end': live_end,
                 'flags': flags,
-                'is_all_day': is_all_day,
+                'is_all_day': live_is_all_day,
+            })
+        elif next_idx:
+            upcoming.append({
+                'name': act['name'],
+                'session_label': next_lbl,
+                'start': next_start,
             })
 
-    print(f"🔍 [_get_live_activities_now] now={now_sgt.strftime('%Y-%m-%d %H:%M')} SGT | "
-          f"loaded={len(acts)} activity(ies) | live={len(live)}")
-    return live
+    print(f"🔍 [_get_activities_state] now={now_sgt.strftime('%Y-%m-%d %H:%M')} "
+          f"({now_sgt.strftime('%a')}) SGT | live={len(live)} | upcoming={len(upcoming)}")
+    return live, upcoming
 
 
 def _already_checked_in(resident_id, activity_name, date_obj, flags):
-    """Return (is_fully_checked_in, existing_record_or_None)."""
     try:
         res = (
             supabase.table('attendance').select("*")
@@ -198,7 +293,6 @@ def _already_checked_in(resident_id, activity_name, date_obj, flags):
 
 
 def _attempt_self_checkin(resident, activity_name, date_obj, flags):
-    """Call AttendanceService then flag self_checkin=True."""
     try:
         success, message, _ = AttendanceService.process_checkin(
             resident['id'], date_obj, activity_name,
@@ -218,8 +312,6 @@ def _attempt_self_checkin(resident, activity_name, date_obj, flags):
 
 
 def render_self_checkin_section(resident):
-    """Big elderly-friendly check-in area, rendered ABOVE the QR badge."""
-
     st.markdown("""
     <style>
     div[data-testid="stButton"] > button[kind="primary"] {
@@ -243,12 +335,19 @@ def render_self_checkin_section(resident):
     </style>
     """, unsafe_allow_html=True)
 
-    live = _get_live_activities_now()
+    live, upcoming = _get_activities_state()
     today = _now_sgt().date()
 
-    # ── No live activity ───────────────────────────────────────
     if not live:
-        st.markdown("""
+        next_line = ""
+        if upcoming:
+            u = upcoming[0]
+            next_line = (
+                f"<div style='font-size:16px; color:#555; margin-top:10px;'>"
+                f"⏭️ Next: <b>{u['name']}</b> at {_fmt_time_12h(u['start'])}"
+                f"</div>"
+            )
+        st.markdown(f"""
         <div style="background:#f5f5f5; border-left:6px solid #9e9e9e;
                     border-radius:12px; padding:22px; margin:10px 0 22px 0;
                     text-align:center; color:#424242;">
@@ -259,20 +358,20 @@ def render_self_checkin_section(resident):
             <div style="font-size:16px; color:#616161; margin-top:8px;">
                 Please show your QR code to the volunteer below.
             </div>
+            {next_line}
         </div>
         """, unsafe_allow_html=True)
         return
 
-    # ── One block per live activity ────────────────────────────
     for activity in live:
         already, record = _already_checked_in(
             resident['id'], activity['name'], today, activity['flags']
         )
 
-        if activity.get('is_all_day') or activity['start'] == "All day":
+        if activity.get('is_all_day'):
             time_str = "All day"
         else:
-            time_str = f"{activity['start']} – {activity['end']}"
+            time_str = f"{_fmt_time_12h(activity['start'])} – {_fmt_time_12h(activity['end'])}"
 
         if already:
             ts_display = "today"
@@ -367,6 +466,156 @@ def render_self_checkin_section(resident):
             "─── YOUR QR CODE (for volunteer scan) ───</div>",
             unsafe_allow_html=True,
         )
+
+
+# ═══════════════════════════════════════════════════════════════
+#  SELF-REGISTRATION (NEW)
+# ═══════════════════════════════════════════════════════════════
+
+def _render_self_registration_form(phone_clean):
+    """Friendly self-registration form for unknown phone numbers."""
+    st.markdown("""
+    <style>
+    div[data-testid="stButton"] > button[kind="primary"] {
+        min-height: 72px !important;
+        font-size: 22px !important;
+        font-weight: 800 !important;
+        border-radius: 14px !important;
+        letter-spacing: 1.5px !important;
+        background: #28a745 !important;
+        border: none !important;
+    }
+    div[data-testid="stButton"] > button[kind="primary"]:hover {
+        background: #218838 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div style="background:linear-gradient(135deg,#e3f2fd,#bbdefb);
+                border-left:6px solid #2196f3; border-radius:14px;
+                padding:24px; margin:10px 0 20px 0; text-align:center;">
+        <div style="font-size:42px; line-height:1;">👋</div>
+        <div style="font-size:24px; font-weight:800; color:#0d47a1; margin-top:10px;">
+            We don't know you yet
+        </div>
+        <div style="font-size:16px; color:#1565c0; margin-top:8px;">
+            📞 Phone: <b>{phone_clean}</b>
+        </div>
+        <div style="font-size:15px; color:#1976d2; margin-top:12px;">
+            New here? Register in 10 seconds 👇
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Versioned keys → clean form after successful registration
+    if "self_reg_version" not in st.session_state:
+        st.session_state.self_reg_version = 0
+    v = st.session_state.self_reg_version
+
+    name_key = f"self_reg_name_{v}"
+    block_key = f"self_reg_block_{v}"
+    block_consent_key = f"self_reg_block_consent_{v}"
+    indemnity_key = f"self_reg_indemnity_{v}"
+    submit_key = f"self_reg_submit_{v}"
+
+    name = st.text_input(
+        "Your Full Name *",
+        placeholder="e.g., AHMAD BIN ISMAIL",
+        key=name_key
+    )
+
+    block_consent = st.checkbox(
+        "🏢 I agree to share my block information (Optional)",
+        key=block_consent_key
+    )
+    block_no = ""
+    if block_consent:
+        block_no = st.text_input(
+            "Block No.",
+            placeholder="e.g., 622, 624A",
+            key=block_key
+        ).strip().upper()
+
+    indemnity = st.checkbox(
+        "📝 I have signed the indemnity form (Optional)",
+        value=False,
+        key=indemnity_key
+    )
+
+    if st.button("✅  REGISTER ME", type="primary",
+                 use_container_width=True, key=submit_key):
+
+        # Validate
+        if not name.strip():
+            st.error("❌ Please enter your full name.")
+            return
+
+        # Duplicate name check
+        try:
+            existing = (
+                supabase.table('participants')
+                .select('name')
+                .eq('name', name.strip().upper())
+                .eq('active', True)
+                .execute()
+            )
+            if existing.data:
+                st.error(
+                    f"⛔ A resident named **{name.strip().upper()}** is already "
+                    f"registered. Please check your phone number or contact the admin."
+                )
+                return
+        except Exception as e:
+            st.error(f"⚠️ Could not verify name: {e}")
+            return
+
+        # Register
+        try:
+            success, message, new_id = RegistrationService.register_resident(
+                name=name.strip().upper(),
+                contact=phone_clean,
+                no_phone=False,
+                indemnity=indemnity,
+                member_type="Resident",
+                block_no=block_no if block_consent else ""
+            )
+
+            if not success:
+                st.error(f"❌ Registration failed: {message}")
+                return
+
+            # Tag as self-registered (best effort)
+            try:
+                supabase.table('participants').update({
+                    'self_registered': True
+                }).eq('id', new_id).execute()
+            except Exception:
+                pass
+
+            # Store flash message + bump version + rerun
+            st.session_state['self_reg_flash'] = {
+                'name': name.strip().upper(),
+                'phone': phone_clean,
+            }
+            st.session_state.self_reg_version += 1
+            try:
+                from config import refresh_data
+                refresh_data()
+            except Exception:
+                pass
+            st.rerun()
+
+        except Exception as e:
+            st.error(f"❌ Registration error: {e}")
+
+    st.markdown(
+        "<div style='text-align:center; font-size:13px; color:#777; "
+        "margin-top:18px;'>"
+        "❓ Already registered? Double-check your phone number."
+        "</div>",
+        unsafe_allow_html=True
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -527,6 +776,23 @@ def display_resident_qr_card(resident):
 st.markdown("<h2 style='text-align:center;'>📱 Your QR Code</h2>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center; color:#666;'>Enter your 8-digit mobile number to view your personal QR code.</p>", unsafe_allow_html=True)
 
+# 🆕 Welcome banner for freshly self-registered users
+if st.session_state.get('self_reg_flash'):
+    flash = st.session_state.pop('self_reg_flash')
+    st.markdown(f"""
+    <div style="background:linear-gradient(135deg,#d4edda,#a5d6a7);
+                border-left:6px solid #28a745; border-radius:14px;
+                padding:22px; margin:10px 0 20px 0; text-align:center;">
+        <div style="font-size:44px; line-height:1;">🎉</div>
+        <div style="font-size:24px; font-weight:800; color:#1b5e20; margin-top:10px;">
+            Welcome, {flash['name']}!
+        </div>
+        <div style="font-size:15px; color:#2e7d32; margin-top:8px;">
+            You're now registered. Your QR code is ready below 👇
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
 query_params = st.query_params
 default_phone = query_params.get("phone", "").strip()
 
@@ -541,8 +807,12 @@ phone_input = st.text_input(
 if phone_input:
     cleaned = clean_phone_number(phone_input)
     if len(cleaned) >= 8:
+        # Soft SG-number check for lookup (warn only)
+        is_sg, sg_msg = _validate_sg_phone(cleaned)
+
         with st.spinner("🔍 Looking up your record..."):
             resident, error = find_resident_by_phone(cleaned)
+
         if error:
             st.error(f"❌ {error}")
         elif resident:
@@ -559,7 +829,11 @@ if phone_input:
                 unsafe_allow_html=True
             )
         else:
-            st.info("📱 Phone number not registered. Please contact the admin.")
+            # 🆕 Phone not found → offer self-registration
+            if not is_sg:
+                st.warning(f"⚠️ {sg_msg} Please check and try again.")
+            else:
+                _render_self_registration_form(cleaned)
     else:
         st.warning("⚠️ Please enter a valid 8-digit mobile number.")
 else:
