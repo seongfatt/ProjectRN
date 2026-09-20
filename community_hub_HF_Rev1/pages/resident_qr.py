@@ -11,12 +11,11 @@ from services import AttendanceService
 # 🔒 Hide sidebar + header for resident-facing page
 st.set_page_config(
     page_title="Your QR Code",
-    page_icon="logo.png",  # <--- This changes the browser tab icon!
+    page_icon="logo.png",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# ✅ Hide Streamlit UI elements + Sidebar via CSS
 hide_streamlit_style = """
 <style>
     #MainMenu {visibility: hidden;}
@@ -69,7 +68,7 @@ def find_resident_by_phone(phone):
 
 
 # ═══════════════════════════════════════════════════════════════
-#  SELF CHECK-IN SECTION  (added — Option A: above QR badge)
+#  SELF CHECK-IN SECTION
 # ═══════════════════════════════════════════════════════════════
 
 SGT = timezone(timedelta(hours=8))
@@ -82,32 +81,73 @@ def _now_sgt():
 
 def _get_live_activities_now():
     """
-    Return list of activities whose session window contains 'now'.
-    Each item: {name, session_index, session_label, start, end, flags[4]}
+    Return list of activities that are 'live' right now.
+
+    Two modes:
+      • Time-gated  (enable_time_validation = True AND times saved)
+        → only live if current SGT time is inside a session window
+      • All-day     (enable_time_validation = False OR times missing)
+        → always live
+
+    Handles load_activities() returning either a list or a dict.
     """
-    now_time = _now_sgt().time()
+    now_sgt = _now_sgt()
+    now_time = now_sgt.time()
 
     try:
         acts = load_activities() or []
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ load_activities() failed: {e}")
         return []
+
+    # Defensive: accept dict or list
+    if isinstance(acts, dict):
+        acts = list(acts.values())
 
     live = []
     for act in acts:
+        # Skip inactive activities
+        if act.get('active') is False:
+            continue
+
+        enable_time = bool(act.get('enable_time_validation', False))
         flags = [False, False, False, False]
         active_idx = None
         active_label = active_start = active_end = None
+        is_all_day = False
 
         for i in range(1, 5):
             lbl = (act.get(f'session_{i}_label') or '').strip()
+            if not lbl:
+                continue
+
             start_str = act.get(f'session_{i}_start_time')
             end_str = act.get(f'session_{i}_end_time')
-            if not lbl or not start_str or not end_str:
+
+            # ── ALL-DAY session (no time validation OR missing times) ──
+            if not enable_time or not start_str or not end_str:
+                flags[i - 1] = True
+                is_all_day = True
+                if active_idx is None:
+                    active_idx = i
+                    active_label = lbl
+                    active_start = "All day"
+                    active_end = ""
                 continue
+
+            # ── TIME-GATED session ──
             try:
                 start_t = datetime.strptime(str(start_str)[:5], "%H:%M").time()
                 end_t = datetime.strptime(str(end_str)[:5], "%H:%M").time()
             except Exception:
+                # Malformed time → treat as all-day (fail-open)
+                flags[i - 1] = True
+                is_all_day = True
+                if active_idx is None:
+                    active_idx = i
+                    active_label = lbl
+                    active_start = "All day"
+                    active_end = ""
                 continue
 
             if start_t <= now_time <= end_t:
@@ -126,7 +166,11 @@ def _get_live_activities_now():
                 'start': active_start,
                 'end': active_end,
                 'flags': flags,
+                'is_all_day': is_all_day,
             })
+
+    print(f"🔍 [_get_live_activities_now] now={now_sgt.strftime('%Y-%m-%d %H:%M')} SGT | "
+          f"loaded={len(acts)} activity(ies) | live={len(live)}")
     return live
 
 
@@ -167,7 +211,7 @@ def _attempt_self_checkin(resident, activity_name, date_obj, flags):
                     .eq('date', date_obj.strftime('%Y-%m-%d')) \
                     .eq('source', activity_name).execute()
             except Exception:
-                pass  # flag update is best-effort; don't fail the check-in
+                pass
         return success, message
     except Exception as e:
         return False, str(e)
@@ -176,7 +220,6 @@ def _attempt_self_checkin(resident, activity_name, date_obj, flags):
 def render_self_checkin_section(resident):
     """Big elderly-friendly check-in area, rendered ABOVE the QR badge."""
 
-    # Big button CSS — applies to primary buttons on this page only
     st.markdown("""
     <style>
     div[data-testid="stButton"] > button[kind="primary"] {
@@ -203,7 +246,7 @@ def render_self_checkin_section(resident):
     live = _get_live_activities_now()
     today = _now_sgt().date()
 
-    # ── State 3: No live activity ──────────────────────────────
+    # ── No live activity ───────────────────────────────────────
     if not live:
         st.markdown("""
         <div style="background:#f5f5f5; border-left:6px solid #9e9e9e;
@@ -220,15 +263,18 @@ def render_self_checkin_section(resident):
         """, unsafe_allow_html=True)
         return
 
-    # ── State 1 / 2: One block per live activity ───────────────
+    # ── One block per live activity ────────────────────────────
     for activity in live:
         already, record = _already_checked_in(
             resident['id'], activity['name'], today, activity['flags']
         )
-        time_str = f"{activity['start']} – {activity['end']}"
+
+        if activity.get('is_all_day') or activity['start'] == "All day":
+            time_str = "All day"
+        else:
+            time_str = f"{activity['start']} – {activity['end']}"
 
         if already:
-            # Timestamp (SGT)
             ts_display = "today"
             try:
                 if record and record.get('timestamp'):
@@ -269,7 +315,6 @@ def render_self_checkin_section(resident):
             )
 
         else:
-            # Live + not yet checked in
             st.markdown(f"""
             <div style="background:linear-gradient(135deg,#e8f5e9,#c8e6c9);
                         border-left:6px solid #28a745; border-radius:14px;
@@ -348,161 +393,72 @@ def display_resident_qr_card(resident):
     except Exception:
         qr_image_src = qr_api_url
 
-    # 🔗 Build WhatsApp link
     phone = resident.get("contact")
     clean_phone = clean_phone_number(phone) if phone else ""
     wa_phone = f"65{clean_phone}" if clean_phone and len(clean_phone) == 8 else clean_phone
     wa_text = urllib.parse.quote(f"Here is my QR code for Woodlands Zone 6: {APP_URL}/resident_qr?phone={clean_phone}")
     whatsapp_link = f"https://wa.me/{wa_phone}?text={wa_text}" if wa_phone else "#"
 
-    # ✅ Professional Badge HTML/CSS
     card_html = f"""
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <!-- ✅ SWITCHED TO html-to-image FOR RELIABLE BASE64 CAPTURING -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js"></script>
     <style>
         body {{
-            margin: 0;
-            padding: 20px;
+            margin: 0; padding: 20px;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: transparent;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
             min-height: 100vh;
         }}
         .badge {{
-            width: 340px;
-            background: #ffffff;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            border: 1px solid #e0e0e0;
-            text-align: center;
-            color: #1a1a1a;
+            width: 340px; background: #ffffff; border-radius: 16px;
+            overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            border: 1px solid #e0e0e0; text-align: center; color: #1a1a1a;
         }}
         .badge-header {{
             background: linear-gradient(135deg, #4a6cf7, #3b5bdb);
-            color: white;
-            padding: 20px 15px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
+            color: white; padding: 20px 15px;
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
         }}
         .badge-header img {{
-            width: 50px;
-            height: 50px;
-            object-fit: contain;
-            background: white;
-            border-radius: 50%;
-            padding: 5px;
+            width: 50px; height: 50px; object-fit: contain;
+            background: white; border-radius: 50%; padding: 5px;
         }}
-        .badge-header h2 {{
-            margin: 0;
-            font-size: 18px;
-            font-weight: 700;
-            letter-spacing: 1px;
-        }}
-        .badge-header p {{
-            margin: 0;
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            opacity: 0.8;
-        }}
-        .badge-body {{
-            padding: 20px;
-        }}
-        .resident-name {{
-            font-size: 24px;
-            font-weight: bold;
-            margin: 0 0 5px 0;
-            color: #1a1a1a;
-            word-break: break-word;
-        }}
-        .resident-block {{
-            font-size: 16px;
-            color: #666;
-            margin: 0 0 15px 0;
-            font-weight: 500;
-        }}
+        .badge-header h2 {{ margin: 0; font-size: 18px; font-weight: 700; letter-spacing: 1px; }}
+        .badge-header p {{ margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; opacity: 0.8; }}
+        .badge-body {{ padding: 20px; }}
+        .resident-name {{ font-size: 24px; font-weight: bold; margin: 0 0 5px 0; color: #1a1a1a; word-break: break-word; }}
+        .resident-block {{ font-size: 16px; color: #666; margin: 0 0 15px 0; font-weight: 500; }}
         .qr-container {{
-            display: inline-block;
-            padding: 10px;
-            border: 2px dashed #4a6cf7;
-            border-radius: 12px;
-            background: #fff;
-            margin-bottom: 10px;
+            display: inline-block; padding: 10px;
+            border: 2px dashed #4a6cf7; border-radius: 12px;
+            background: #fff; margin-bottom: 10px;
         }}
-        .qr-container img {{
-            width: 180px;
-            height: 180px;
-            display: block;
-        }}
-        .scan-hint {{
-            font-size: 11px;
-            color: #888;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin: 0 0 15px 0;
-        }}
+        .qr-container img {{ width: 180px; height: 180px; display: block; }}
+        .scan-hint {{ font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin: 0 0 15px 0; }}
         .id-box {{
-            background: #f8f9fa;
-            padding: 10px;
-            border-radius: 8px;
-            font-family: 'Courier New', monospace;
-            font-size: 16px;
-            font-weight: bold;
-            color: #333;
-            letter-spacing: 1px;
-            border: 1px solid #eee;
+            background: #f8f9fa; padding: 10px; border-radius: 8px;
+            font-family: 'Courier New', monospace; font-size: 16px;
+            font-weight: bold; color: #333; letter-spacing: 1px; border: 1px solid #eee;
         }}
         .badge-footer {{
-            background: #f8f9fa;
-            padding: 12px;
-            border-top: 1px solid #eee;
-            font-size: 11px;
-            color: #4a6cf7;
-            font-weight: bold;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            background: #f8f9fa; padding: 12px; border-top: 1px solid #eee;
+            font-size: 11px; color: #4a6cf7; font-weight: bold;
+            text-transform: uppercase; letter-spacing: 1px;
         }}
-        .actions {{
-            margin-top: 20px;
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            width: 100%;
-        }}
+        .actions {{ margin-top: 20px; display: flex; gap: 15px; justify-content: center; width: 100%; }}
         .btn {{
-            background: #4a6cf7;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 15px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: 0.2s;
+            background: #4a6cf7; color: white; border: none;
+            padding: 12px 24px; border-radius: 8px;
+            font-size: 15px; cursor: pointer; font-weight: bold; transition: 0.2s;
         }}
-        .btn:hover {{
-            background: #3b5bdb;
-        }}
-        .btn-outline {{
-            background: transparent;
-            color: #4a6cf7;
-            border: 2px solid #4a6cf7;
-        }}
-        .btn-outline:hover {{
-            background: #f0f4ff;
-        }}
-
-        /* Print Styles */
+        .btn:hover {{ background: #3b5bdb; }}
+        .btn-outline {{ background: transparent; color: #4a6cf7; border: 2px solid #4a6cf7; }}
+        .btn-outline:hover {{ background: #f0f4ff; }}
         @media print {{
             body {{ margin: 0; padding: 0; background: white; }}
             .badge {{ box-shadow: none; border: 1px solid #ccc; width: 100%; max-width: 350px; margin: 0 auto; }}
@@ -537,13 +493,7 @@ def display_resident_qr_card(resident):
     <script>
         function downloadCard() {{
             const card = document.getElementById('badge');
-
-            // ✅ html-to-image handles Base64 images perfectly without CORS errors
-            htmlToImage.toPng(card, {{
-                quality: 1.0,
-                pixelRatio: 2,
-                backgroundColor: '#ffffff'
-            }})
+            htmlToImage.toPng(card, {{ quality: 1.0, pixelRatio: 2, backgroundColor: '#ffffff' }})
             .then(function (dataUrl) {{
                 const link = document.createElement('a');
                 link.download = 'Resident_Badge_{resident_name.replace(" ", "_")}.png';
@@ -563,7 +513,6 @@ def display_resident_qr_card(resident):
     from streamlit.components.v1 import html
     html(card_html, height=780, scrolling=True)
 
-    # External WhatsApp button
     st.markdown(
         f"<div style='text-align:center; margin-top:10px;'>"
         f"<a href='{whatsapp_link}' target='_blank' style='background:#128C7E; color:white; padding:12px 24px; text-decoration:none; border-radius:8px; font-weight:bold; display:inline-block; font-size:16px;'>"
@@ -598,14 +547,9 @@ if phone_input:
             st.error(f"❌ {error}")
         elif resident:
             st.success("✅ Found your QR code!")
-
-            # 🆕 Self check-in section (Option A: ABOVE QR badge)
             render_self_checkin_section(resident)
-
-            # Existing QR badge (unchanged)
             display_resident_qr_card(resident)
 
-            # Personal link shown OUTSIDE the card
             full_link = f"{APP_URL}/resident_qr?phone={cleaned}"
             st.markdown(
                 f"<div style='padding:12px; border-radius:8px; margin-top:16px; text-align:center; font-size:14px; border:1px solid #444; background:transparent;'>"
