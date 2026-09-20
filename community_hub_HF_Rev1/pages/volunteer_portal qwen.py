@@ -55,7 +55,7 @@ def decode_qr_from_image(image):
                 print(f"✅ QR decoded with OpenCV: {data}")
                 return data
         except Exception as e:
-            print(f"⚠️ OpenCV QR error: {e}")
+            print(f"️ OpenCV QR error: {e}")
 
     print("❌ All QR detection methods failed")
     return None
@@ -170,7 +170,7 @@ def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
             <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 14px; color: #2e7d32;">
                 <span>🕐 {datetime.now().strftime('%I:%M %p')}</span>
                 <span>📅 {datetime.strptime(formatted_date, '%Y-%m-%d').strftime('%d %b %Y')}</span>
-                <span>🎯 {activity}</span>
+                <span> {activity}</span>
                 <span>✅ {session_display}</span>
             </div>
         </div>
@@ -188,7 +188,7 @@ def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
 
 def show_volunteer_portal(token, activity_param=None):
     """UNIFIED VOLUNTEER PORTAL WITH REAL-TIME QR SCANNING"""
-
+    
     # ✅ FIX 1: ROBUST TOKEN VALIDATION (Fixes intermittent expiry)
     # We bypass the imported function to ensure strict UTC-to-UTC comparison
     is_valid = False
@@ -202,11 +202,11 @@ def show_volunteer_portal(token, activity_param=None):
             # Ensure consistent UTC parsing
             if expires_str.endswith('Z'):
                 expires_str = expires_str[:-1] + '+00:00'
-
+            
             expires_utc = datetime.fromisoformat(expires_str)
             if expires_utc.tzinfo is None:
                 expires_utc = expires_utc.replace(tzinfo=timezone.utc)
-
+            
             # Compare strictly in UTC to avoid timezone drift
             now_utc = datetime.now(timezone.utc)
             is_valid = now_utc < expires_utc
@@ -309,7 +309,7 @@ def show_volunteer_portal(token, activity_param=None):
 
     st.subheader("⏰ Step 2: Select Session")
     if len(session_labels) == 1:
-        st.info(f"ℹ️ This activity has only one session: {session_labels[0]}")
+        st.info(f"️ This activity has only one session: {session_labels[0]}")
         flags = [True]
     else:
         session_option = st.radio("Which session(s)?", ["All Sessions"] + session_labels, horizontal=True, key="portal_session")
@@ -334,7 +334,7 @@ def show_volunteer_portal(token, activity_param=None):
             st.markdown('</div>', unsafe_allow_html=True)
 
     st.divider()
-    st.subheader("🎯 Step 3: Choose Check-In Method")
+    st.subheader(" Step 3: Choose Check-In Method")
     method = st.radio("How would you like to check in residents?",
                      ["📸 Real-Time QR Scanner (Auto-Detect)",
                       "⌨️ Phone / Name Search",
@@ -347,11 +347,11 @@ def show_volunteer_portal(token, activity_param=None):
     if method == "📸 Real-Time QR Scanner (Auto-Detect)":
         st.markdown("""
         <div class="method-card">
-            <h3>📸 Real-Time QR Scanner</h3>
+            <h3> Real-Time QR Scanner</h3>
             <p style="font-size: 15px; font-weight: 500;">Point camera at QR code - automatic detection!</p>
         </div>
         """, unsafe_allow_html=True)
-
+        
         if st.session_state.get('checkin_success', False):
             st.session_state.checkin_success = False
             clear_scanned_qr()
@@ -363,18 +363,18 @@ def show_volunteer_portal(token, activity_param=None):
             <p style="color: #666; font-size: 14px;">Point camera at QR code - auto-detection enabled</p>
         </div>
         """, unsafe_allow_html=True)
-
+        
         try:
             qr_code_scanner_auto_detect()
         except Exception as e:
             st.error(f"⚠️ Camera scanner failed: {e}")
 
         st.info("💡 **Auto-Fill:** Scanned QR codes will appear below. You can also type manually.")
-
+        
         if 'qr_scan_counter' not in st.session_state:
             st.session_state.qr_scan_counter = 0
         qr_key = f"unified_qr_input_{st.session_state.qr_scan_counter}"
-
+        
         qr_input = st.text_input(
             "QR Code ID (Auto-filled or Manual Entry)",
             placeholder="Waiting for scan or type ID here...",
@@ -395,15 +395,15 @@ def show_volunteer_portal(token, activity_param=None):
                     extracted_pid = query_params.get('pid', [None])[0]
                 except:
                     pass
-
+            
             if extracted_pid and len(str(extracted_pid)) > 5:
                 st.session_state.last_processed_qr = extracted_pid
                 try:
                     resident = supabase.table('participants').select("*").eq('id', extracted_pid).execute()
                     if resident.data:
                         resident_name = resident.data[0]['name']
-                        resident_type = "🆕 New" if resident.data[0].get('is_new') else "⭐ Regular"
-
+                        resident_type = " New" if resident.data[0].get('is_new') else "⭐ Regular"
+                        
                         st.markdown(f"""
                         <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; border-radius: 8px; margin: 10px 0;">
                             <h4 style="margin: 0 0 8px 0; color: #0d47a1; font-size: 18px;">🔄 Processing Check-In...</h4>
@@ -411,11 +411,11 @@ def show_volunteer_portal(token, activity_param=None):
                             <p style="margin: 0; color: #555; font-size: 14px;">Status: {resident_type}</p>
                         </div>
                         """, unsafe_allow_html=True)
-
+                        
                         success, message, _ = AttendanceService.process_checkin(
                             extracted_pid, selected_date, selected_activity, s1, s2, s3, s4
                         )
-
+                        
                         if success:
                             st.session_state.checkin_success = True
                             if qr_key in st.session_state:
@@ -455,13 +455,13 @@ def show_volunteer_portal(token, activity_param=None):
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("**📱 Quick Phone Check-In**")
+        st.markdown("** Quick Phone Check-In**")
         phone_input = st.text_input("Enter 8-digit mobile number", placeholder="e.g., 91234567", key="portal_phone")
         if phone_input and len(clean_phone_number(phone_input)) >= 8:
             clean_phone = clean_phone_number(phone_input)
             resident = find_participant_by_phone(clean_phone)
             if resident:
-                status_text = '⭐ Regular' if not resident.get('is_new') else '🆕 New'
+                status_text = '⭐ Regular' if not resident.get('is_new') else ' New'
                 st.success(f"✅ **Resident Found:** {resident['name']} ({status_text})")
                 if st.button("✅ Check In (Phone)", type="primary", key="phone_checkin_button", use_container_width=True):
                     with st.spinner("Processing check-in..."):
@@ -525,176 +525,83 @@ def show_volunteer_portal(token, activity_param=None):
         </div>
         """, unsafe_allow_html=True)
 
-        # ---------- persistent state ----------
-        if "reg_form_version" not in st.session_state:
-            st.session_state.reg_form_version = 0
-        if "reg_success_info" not in st.session_state:
-            st.session_state.reg_success_info = None
+        # Define keys for easy clearing later
+        name_key = "portal_reg_name"
+        contact_key = "portal_reg_contact"
+        no_phone_key = "portal_reg_no_phone"
+        indemnity_key = "portal_reg_indemnity"
+        member_type_key = "portal_reg_member_type"
+        block_consent_key = "portal_reg_block_consent"
+        block_no_key = "portal_reg_block_no"
 
-        # ---------- success banner (rendered AFTER the rerun) ----------
-        if st.session_state.reg_success_info:
-            info = st.session_state.reg_success_info
-            if info["checked_in"]:
-                checkin_line = (
-                    f"✅ Checked in for <b>{info['activity']}</b> "
-                    f"on {info['date']}"
-                )
-            else:
-                checkin_line = (
-                    f"⚠️ Registration saved, but check-in failed: "
-                    f"{info['checkin_msg']}"
-                )
-
-            st.markdown(f"""
-            <div style="background:#e8f5e9; border-left:5px solid #28a745; border-radius:8px;
-                        padding:18px 20px; margin:10px 0 18px 0;">
-                <div style="font-size:22px; font-weight:800; color:#1e7e34;">
-                    ✅ Registration Successful
-                </div>
-                <div style="font-size:18px; font-weight:700; color:#1a1a1a; margin-top:6px;">
-                    {info['name']}
-                </div>
-                <div style="font-size:14px; color:#2e7d32; margin-top:6px;">
-                    {checkin_line}
-                </div>
-                <div style="font-size:13px; color:#555; margin-top:8px;">
-                    Resident ID: <code>{info['id']}</code>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            if st.button("➕ Register Another Resident",
-                         key="reg_dismiss_success",
-                         use_container_width=True):
-                st.session_state.reg_success_info = None
-                st.rerun()
-            st.divider()
-
-        # ---------- versioned keys → guarantees a clean form after success ----------
-        v = st.session_state.reg_form_version
-        name_key          = f"portal_reg_name_{v}"
-        contact_key       = f"portal_reg_contact_{v}"
-        no_phone_key      = f"portal_reg_no_phone_{v}"
-        indemnity_key     = f"portal_reg_indemnity_{v}"
-        member_type_key   = f"portal_reg_member_type_{v}"
-        block_consent_key = f"portal_reg_block_consent_{v}"
-        block_no_key      = f"portal_reg_block_no_{v}"
-        submit_key        = f"portal_reg_submit_{v}"
-
-        name = st.text_input("Full Name *",
-                             placeholder="e.g., AHMAD BIN ISMAIL",
-                             key=name_key)
-        contact = st.text_input("Contact Number",
-                                placeholder="e.g., 91234567",
-                                key=contact_key)
+        name = st.text_input("Full Name *", placeholder="e.g., AHMAD BIN ISMAIL", key=name_key)
+        contact = st.text_input("Contact Number", placeholder="e.g., 91234567", key=contact_key)
         no_phone = st.checkbox("👴 I do not have a phone", key=no_phone_key)
-        indemnity = st.checkbox("Indemnity Form Signed (Optional)",
-                                value=False, key=indemnity_key)
+        indemnity = st.checkbox("Indemnity Form Signed (Optional)", value=False, key=indemnity_key)
 
         st.markdown("---")
         st.markdown("**👤 Member Type:**")
-        member_type = st.radio(
-            "Select member category:",
-            ["Resident", "RN Member", "Volunteer Member", "Gardener"],
-            horizontal=True, key=member_type_key
-        )
+        member_type = st.radio("Select member category:", ["Resident", "RN Member", "Volunteer Member", "Gardener"], horizontal=True, key=member_type_key)
 
-        block_consent = st.checkbox(
-            "🏢 I agree to share my block information (Optional)",
-            key=block_consent_key
-        )
+        block_consent = st.checkbox("🏢 I agree to share my block information (Optional)", key=block_consent_key)
         block_no = ""
         if block_consent:
-            block_no = st.text_input("Block No.",
-                                     placeholder="e.g., 622, 624A",
-                                     key=block_no_key).strip().upper()
+            block_no = st.text_input("Block No.", placeholder="e.g., 622, 624A", key=block_no_key).strip().upper()
 
-        if st.button("Register & Check In", type="primary",
-                     use_container_width=True, key=submit_key):
-
+        if st.button("Register & Check In", type="primary", use_container_width=True, key="portal_reg_submit"):
             if not name.strip():
                 st.error("❌ Name is required")
             elif not no_phone and not contact.strip():
                 st.error("❌ Contact number is required")
             else:
                 final_contact = "NO_PHONE" if no_phone else contact.strip()
-                clean_contact = (
-                    clean_phone_number(final_contact)
-                    if final_contact != "NO_PHONE" else None
-                )
-
-                # ---- duplicate check (no st.stop() so the form stays intact) ----
-                duplicate_error = None
+                clean_contact = clean_phone_number(final_contact) if final_contact != "NO_PHONE" else None
                 try:
                     if clean_contact and clean_contact != "NO_PHONE":
-                        res_phone = (
-                            supabase.table('participants')
-                            .select('name')
-                            .eq('contact', clean_contact)
-                            .eq('active', True)
-                            .execute()
-                        )
+                        res_phone = supabase.table('participants').select('name').eq('contact', clean_contact).eq('active', True).execute()
                         if res_phone.data:
-                            duplicate_error = (
-                                f"⛔ **Phone number already exists!** "
-                                f"Resident: **{res_phone.data[0]['name']}**"
-                            )
-                    if not duplicate_error:
-                        res_name = (
-                            supabase.table('participants')
-                            .select('name', 'contact')
-                            .eq('name', name.strip().upper())
-                            .eq('active', True)
-                            .execute()
-                        )
-                        if res_name.data:
-                            duplicate_error = "⛔ **Name already exists!**"
+                            st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**")
+                            st.stop()
+                    res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
+                    if res_name.data:
+                        st.error(f" **Name already exists!**")
+                        st.stop()
                 except Exception as e:
-                    duplicate_error = f"Error checking for duplicates: {e}"
+                    st.error(f"Error checking for duplicates: {e}")
+                    st.stop()
 
-                if duplicate_error:
-                    st.error(duplicate_error)
-                else:
-                    registered = False
-                    try:
-                        success, message, new_id = RegistrationService.register_resident(
-                            name=name,
-                            contact=contact,
-                            no_phone=no_phone,
-                            indemnity=indemnity,
-                            member_type=member_type,
-                            block_no=block_no
-                        )
-                        if success:
-                            registered = True
-                            success2, msg2, _ = AttendanceService.process_checkin(
-                                new_id, selected_date, selected_activity,
-                                s1, s2, s3, s4
-                            )
-                            # stash the banner for the NEXT run
-                            st.session_state.reg_success_info = {
-                                "name": name.strip().upper(),
-                                "id": new_id,
-                                "activity": selected_activity,
-                                "date": selected_date.strftime("%d %b %Y"),
-                                "checked_in": bool(success2),
-                                "checkin_msg": msg2 or "",
-                            }
-                        else:
-                            st.error(f"❌ Registration failed: {message}")
-                    except Exception as e:
-                        st.error(f"Registration failed: {e}")
-
-                    # rerun OUTSIDE the try/except
-                    if registered:
-                        # clean up old versioned keys so session_state doesn't grow
-                        for k in list(st.session_state.keys()):
-                            if k.startswith("portal_reg_") and k.endswith(f"_{v}"):
-                                del st.session_state[k]
-
-                        st.session_state.reg_form_version += 1   # ← new empty widgets
-                        refresh_data()
-                        st.rerun()
+                try:
+                    success, message, new_id = RegistrationService.register_resident(
+                        name=name,
+                        contact=contact,
+                        no_phone=no_phone,
+                        indemnity=indemnity,
+                        member_type=member_type,
+                        block_no=block_no
+                    )
+                    if success:
+                        success2, msg2, _ = AttendanceService.process_checkin(new_id, selected_date, selected_activity, s1, s2, s3, s4)
+                        if success2:
+                            st.success(f"✅ {name.strip().upper()} registered & checked in successfully!")
+                            st.info(f"Resident ID: `{new_id}`")
+                            
+                            # ✅ Clear all registration input fields
+                            keys_to_clear = [
+                                "portal_reg_name",
+                                "portal_reg_contact",
+                                "portal_reg_no_phone",
+                                "portal_reg_indemnity",
+                                "portal_reg_member_type",
+                                "portal_reg_block_consent",
+                                "portal_reg_block_no",
+                            ]
+                            for k in keys_to_clear:
+                                if k in st.session_state:
+                                    del st.session_state[k]
+                            
+                            st.rerun()
+                except Exception as e:
+                    st.error(f"Registration failed: {e}")
 
     # ==========================================
     # STATISTICS
