@@ -450,7 +450,6 @@ def render_self_checkin_section(resident):
 
                 if success:
                     st.success(f"✅ You're checked in for {activity['name']}!")
-                    st.balloons()
                     time.sleep(1.2)
                     st.rerun()
                 elif 'already' in (message or '').lower():
