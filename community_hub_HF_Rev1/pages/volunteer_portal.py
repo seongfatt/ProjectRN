@@ -665,7 +665,7 @@ def show_volunteer_portal(token, activity_param=None):
                 except Exception as e:
                     st.error(f"Registration failed: {e}")
 
-        # ==========================================
+    # ==========================================
     # 🆕 METHOD 5: SHOW QR TO SENIOR
     # ==========================================
     elif method == "📱 Show QR to Senior":
@@ -680,32 +680,32 @@ def show_volunteer_portal(token, activity_param=None):
 
         resident_url = f"{APP_URL}/resident_qr"
 
-        # Generate QR via free API
+        # Generate QR via free API (same as admin page)
         qr_api_url = (
             f"https://api.qrserver.com/v1/create-qr-code/"
             f"?size=600x600&margin=10&ecc=M"
             f"&data={urllib.parse.quote(resident_url)}"
         )
 
-        # White card title
+        # Big white card with QR centered
         st.markdown("""
-        <div style="background:#ffffff; border-radius:20px; padding:25px 25px 10px 25px;
-                    margin:10px auto 0 auto; max-width:460px;
+        <div style="background:#ffffff; border-radius:20px; padding:25px;
+                    margin:10px auto 10px auto; max-width:460px;
                     box-shadow:0 10px 40px rgba(0,0,0,0.2);
                     text-align:center;">
             <div style="font-size:22px; font-weight:800; color:#1a1a1a;
                         margin-bottom:15px;">
                 👴 Show this to the senior's phone
             </div>
+        """, unsafe_allow_html=True)
+
+        st.image(qr_api_url, use_container_width=True)
+
+        st.markdown("""
         </div>
         """, unsafe_allow_html=True)
 
-        # Centered QR image
-        c_left, c_mid, c_right = st.columns([1, 3, 1])
-        with c_mid:
-            st.image(qr_api_url, width=420)   # ← FIXED: width= instead of use_container_width=
-
-        # Senior instructions
+        # Senior instructions — big and clear
         st.markdown("""
         <div style="background:#e3f2fd; border-left:6px solid #2196f3;
                     border-radius:12px; padding:20px; margin:15px 0;
@@ -726,9 +726,11 @@ def show_volunteer_portal(token, activity_param=None):
 
         st.divider()
 
+        # Copyable direct link
         st.markdown("**🔗 Direct Link** (paste into chat if senior can't scan):")
         st.code(resident_url, language="text")
 
+        # WhatsApp share button
         wa_msg = urllib.parse.quote(
             f"Hi! Get your personal QR code for Woodlands Zone 6 "
             f"Community Hub here: {resident_url}"
