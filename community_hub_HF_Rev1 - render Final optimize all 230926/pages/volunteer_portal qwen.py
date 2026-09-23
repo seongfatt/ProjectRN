@@ -127,7 +127,7 @@ def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
             supabase.table('attendance').update(updates).eq('id', record['id']).execute()
 
             sync_session_attendance_async(pid, resident['name'], activity, formatted_date,
-                                          st.session_state.get('user_role', 'volunteer'))
+                                         st.session_state.get('user_role', 'volunteer'))
             st.success(f"✅ Updated {resident['name']} with additional session(s)!")
             return True
 
@@ -170,7 +170,7 @@ def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
             <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 14px; color: #2e7d32;">
                 <span>🕐 {datetime.now().strftime('%I:%M %p')}</span>
                 <span>📅 {datetime.strptime(formatted_date, '%Y-%m-%d').strftime('%d %b %Y')}</span>
-                <span>📋 {activity}</span>
+                <span>🎯 {activity}</span>
                 <span>✅ {session_display}</span>
             </div>
         </div>
@@ -188,8 +188,37 @@ def process_portal_checkin(pid, date, activity, s1, s2, s3=False, s4=False):
 
 def show_volunteer_portal(token, activity_param=None):
     """UNIFIED VOLUNTEER PORTAL WITH REAL-TIME QR SCANNING"""
-    from pages.volunteer_access import validate_volunteer_token
-    is_valid, msg = validate_volunteer_token(token)
+
+    # ✅ FIX 1: ROBUST TOKEN VALIDATION (Fixes intermittent expiry)
+    # We bypass the imported function to ensure strict UTC-to-UTC comparison
+    is_valid = False
+    msg = "Unknown error"
+    expires_sgt = None
+
+    try:
+        token_data = supabase.table('volunteer_tokens').select("*").eq('token', token).single().execute().data
+        if token_data:
+            expires_str = token_data['expires_at']
+            # Ensure consistent UTC parsing
+            if expires_str.endswith('Z'):
+                expires_str = expires_str[:-1] + '+00:00'
+
+            expires_utc = datetime.fromisoformat(expires_str)
+            if expires_utc.tzinfo is None:
+                expires_utc = expires_utc.replace(tzinfo=timezone.utc)
+
+            # Compare strictly in UTC to avoid timezone drift
+            now_utc = datetime.now(timezone.utc)
+            is_valid = now_utc < expires_utc
+            msg = "Token is valid." if is_valid else "Token has expired."
+
+            # For display only (convert to SGT)
+            sgt_timezone = timezone(timedelta(hours=8))
+            expires_sgt = expires_utc.astimezone(sgt_timezone)
+        else:
+            msg = "Token not found in database."
+    except Exception as e:
+        msg = f"Validation error: {str(e)}"
 
     if not is_valid:
         st.error(f"❌ {msg}")
@@ -249,21 +278,12 @@ def show_volunteer_portal(token, activity_param=None):
     </div>
     """, unsafe_allow_html=True)
 
-    try:
-        token_data = supabase.table('volunteer_tokens').select("*").eq('token', token).single().execute().data
-        expires_str = token_data['expires_at']
-        if expires_str.endswith('Z'): expires_str = expires_str.replace('Z', '+00:00')
-        expires = datetime.fromisoformat(expires_str)
-        if expires.tzinfo is None: expires = expires.replace(tzinfo=timezone.utc)
-        sgt_timezone = timezone(timedelta(hours=8))
-        expires_sgt = expires.astimezone(sgt_timezone)
+    if expires_sgt:
         st.markdown(f"""
         <div style="background: #fff3cd; padding: 12px; border-radius: 8px; text-align: center; margin-bottom: 20px; color: #1a1a1a;">
             <strong>🔑 Access Valid Until:</strong> {expires_sgt.strftime('%d %b %Y, %I:%M %p')} (SG Time)
         </div>
         """, unsafe_allow_html=True)
-    except Exception as e:
-        st.error(f"Error displaying expiry: {e}")
 
     if not DB_CONNECTED:
         st.error("Database not connected")
@@ -314,12 +334,11 @@ def show_volunteer_portal(token, activity_param=None):
             st.markdown('</div>', unsafe_allow_html=True)
 
     st.divider()
-    st.subheader("📱 Step 3: Choose Check-In Method")
+    st.subheader("🎯 Step 3: Choose Check-In Method")
     method = st.radio("How would you like to check in residents?",
-                     ["⌨️ Phone / Name Search",
-                      "📝 Register New Resident",
-                      "📱 Show QR to Senior",
-                      "📸 Real-Time QR Scanner (Auto-Detect)"],
+                     ["📸 Real-Time QR Scanner (Auto-Detect)",
+                      "⌨️ Phone / Name Search",
+                      "📝 Register New Resident"],
                      horizontal=False, key="portal_method")
 
     # ==========================================
@@ -330,10 +349,6 @@ def show_volunteer_portal(token, activity_param=None):
         <div class="method-card">
             <h3>📸 Real-Time QR Scanner</h3>
             <p style="font-size: 15px; font-weight: 500;">Point camera at QR code - automatic detection!</p>
-            <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin: 15px 0; color: #1a1a1a;">
-                <strong>📱 How it works:</strong> Allow camera access and point at the QR code.<br>
-                <span style="font-size: 14px; color: #666;">✅ Auto-detects and checks in instantly!</span>
-            </div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -353,14 +368,13 @@ def show_volunteer_portal(token, activity_param=None):
             qr_code_scanner_auto_detect()
         except Exception as e:
             st.error(f"⚠️ Camera scanner failed: {e}")
-            st.caption("💡 Try refreshing the page or use 'Snapshot QR Scanner' instead.")
 
         st.info("💡 **Auto-Fill:** Scanned QR codes will appear below. You can also type manually.")
 
-        # 🔥 Use dynamic key to force reactivity
         if 'qr_scan_counter' not in st.session_state:
             st.session_state.qr_scan_counter = 0
         qr_key = f"unified_qr_input_{st.session_state.qr_scan_counter}"
+
         qr_input = st.text_input(
             "QR Code ID (Auto-filled or Manual Entry)",
             placeholder="Waiting for scan or type ID here...",
@@ -368,15 +382,12 @@ def show_volunteer_portal(token, activity_param=None):
             label_visibility="collapsed"
         )
 
-        # Track last processed to avoid infinite loops
         if 'last_processed_qr' not in st.session_state:
             st.session_state.last_processed_qr = ""
 
         # ✅ AUTO CHECK-IN LOGIC
         if qr_input and len(qr_input.strip()) > 5 and qr_input.strip() != st.session_state.last_processed_qr:
             extracted_pid = qr_input.strip()
-
-            # Handle URL format
             if 'pid=' in qr_input:
                 try:
                     parsed_url = urllib.parse.urlparse(qr_input)
@@ -387,10 +398,8 @@ def show_volunteer_portal(token, activity_param=None):
 
             if extracted_pid and len(str(extracted_pid)) > 5:
                 st.session_state.last_processed_qr = extracted_pid
-
                 try:
                     resident = supabase.table('participants').select("*").eq('id', extracted_pid).execute()
-
                     if resident.data:
                         resident_name = resident.data[0]['name']
                         resident_type = "🆕 New" if resident.data[0].get('is_new') else "⭐ Regular"
@@ -408,98 +417,25 @@ def show_volunteer_portal(token, activity_param=None):
                         )
 
                         if success:
-                            st.balloons()
                             st.session_state.checkin_success = True
-
-                            # ✅ Clear input and rerun
                             if qr_key in st.session_state:
                                 del st.session_state[qr_key]
                             st.session_state.qr_scan_counter += 1
-
-                            st.markdown("""
-                            <div style="background: #d4edda; border: 2px solid #28a745; padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0;">
-                                <h2 style="color: #155724; margin: 0;">✅ Check-in Successful!</h2>
-                                <p style="color: #155724; font-size: 18px; margin: 10px 0 0 0;">Auto-resetting for next resident...</p>
-                            </div>
-                            <script>
-                                setTimeout(function() {
-                                    window.location.reload();
-                                }, 3000);
-                            </script>
-                            """, unsafe_allow_html=True)
-                            st.stop()
-
+                            st.session_state.last_processed_qr = ""
+                            st.success(f"✅ Check-in successful for {resident_name}!")
+                            st.rerun()
                         else:
                             if "already" in message.lower() or "fully checked in" in message.lower():
-                                st.markdown(f"""
-                                <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                                    <div style="display: flex; align-items: center; gap: 10px;">
-                                        <span style="font-size: 24px;">ℹ️</span>
-                                        <div>
-                                            <h4 style="margin: 0 0 5px 0; color: #856404; font-size: 16px;">Already Checked In</h4>
-                                            <p style="margin: 0; color: #1a1a1a; font-size: 14px;">
-                                                <strong>{resident_name}</strong> is already checked in for <strong>{selected_activity}</strong> today.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                                """, unsafe_allow_html=True)
+                                st.warning(f"ℹ️ {resident_name} is already checked in for {selected_activity} today.")
                             else:
                                 st.error(message)
                             st.rerun()
-
                     else:
                         st.error("❌ Resident not found in database.")
                         st.rerun()
-
                 except Exception as e:
                     st.error(f"Error: {e}")
                     st.rerun()
-
-        # ✅ Manual Check-In Button
-        if qr_input and len(qr_input.strip()) > 5:
-            if st.button("✅ Check In", key="manual_checkin_button", use_container_width=True, type="primary"):
-                extracted_pid = qr_input.strip()
-                if 'pid=' in qr_input:
-                    try:
-                        parsed_url = urllib.parse.urlparse(qr_input)
-                        query_params = urllib.parse.parse_qs(parsed_url.query)
-                        extracted_pid = query_params.get('pid', [None])[0]
-                    except:
-                        pass
-
-                if extracted_pid and len(str(extracted_pid)) > 5:
-                    try:
-                        resident = supabase.table('participants').select("*").eq('id', extracted_pid).execute()
-                        if resident.data:
-                            success, message, _ = AttendanceService.process_checkin(
-                                extracted_pid, selected_date, selected_activity, s1, s2, s3, s4
-                            )
-                            if success:
-                                st.success(f"✅ {resident.data[0]['name']} checked in successfully.")
-                                st.session_state.qr_scan_counter += 1
-                                if qr_key in st.session_state:
-                                    del st.session_state[qr_key]
-                                st.rerun()
-                            else:
-                                st.markdown(f"""
-                                <div style="background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                                    <div style="display: flex; align-items: center; gap: 10px;">
-                                        <span style="font-size: 24px;">ℹ️</span>
-                                        <div>
-                                            <h4 style="margin: 0 0 5px 0; color: #856404; font-size: 16px;">Already Checked In</h4>
-                                            <p style="margin: 0; color: #1a1a1a; font-size: 14px;">
-                                                <strong>{resident.data[0]['name']}</strong> is already registered for <strong>{selected_activity}</strong> today.
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                        else:
-                            st.error("❌ Resident not found in database.")
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-                        st.rerun()
 
         # ✅ Clear & Scan Next Person
         if st.button("🔄 Clear & Scan Next Person", key="clear_qr_input", use_container_width=True):
@@ -508,21 +444,18 @@ def show_volunteer_portal(token, activity_param=None):
             st.session_state.qr_scan_counter += 1
             st.rerun()
 
-        st.divider()
-        st.caption("💡 **Tip:** The camera scanner auto-fills the field above. Click 'Clear & Scan Next Person' when ready for the next resident.")
-
     # ==========================================
-    # METHOD 3: PHONE / NAME SEARCH
+    # METHOD 2: PHONE / NAME SEARCH
     # ==========================================
     elif method == "⌨️ Phone / Name Search":
         st.markdown("""
         <div class="method-card">
             <h3>⌨️ Smart Resident Browser</h3>
-            <p style="font-size: 15px; font-weight: 500;">Search by Phone, Name, or ID. Filter by activity to find the right person.</p>
+            <p style="font-size: 15px; font-weight: 500;">Search by Phone, Name, or ID.</p>
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("**📞 Quick Phone Check-In**")
+        st.markdown("**📱 Quick Phone Check-In**")
         phone_input = st.text_input("Enter 8-digit mobile number", placeholder="e.g., 91234567", key="portal_phone")
         if phone_input and len(clean_phone_number(phone_input)) >= 8:
             clean_phone = clean_phone_number(phone_input)
@@ -534,13 +467,15 @@ def show_volunteer_portal(token, activity_param=None):
                     with st.spinner("Processing check-in..."):
                         success, message, _ = AttendanceService.process_checkin(resident['id'], selected_date, selected_activity, s1, s2, s3, s4)
                         if success:
+                            # Clear phone input after success
+                            if "portal_phone" in st.session_state:
+                                del st.session_state["portal_phone"]
                             st.rerun()
             else:
                 st.info("📱 Phone number not found. Try searching by name below.")
 
         st.divider()
         st.markdown("**🔍 Browse Residents**")
-
         browse_mode = st.radio(
             "Select mode:",
             ["🔎 Search by Name or ID", "📋 Show All (All Active Residents)"],
@@ -554,45 +489,24 @@ def show_volunteer_portal(token, activity_param=None):
             fresh_participants = []
 
         filtered_participants = []
-
         if browse_mode == "🔎 Search by Name or ID":
             name_search = st.text_input("Type Name or ID...", placeholder="e.g., AHMAD, 2026", key="portal_name_search")
             if name_search:
                 s = name_search.lower()
-                filtered_participants = [
-                    p for p in fresh_participants 
-                    if s in p['name'].lower() or s in p['id'].lower()
-                ]
-            else:
-                filtered_participants = []
+                filtered_participants = [p for p in fresh_participants if s in p['name'].lower() or s in p['id'].lower()]
         else:
             st.caption(f"Showing ALL active residents in the system.")
             filtered_participants = fresh_participants
-
-        try:
-            att_data = supabase.table('attendance').select('participant_id').eq('source', selected_activity).execute().data
-            activity_attendees = {rec['participant_id'] for rec in att_data}
-        except:
-            activity_attendees = set()
-
-        sort_az = st.checkbox("📋 Sort A–Z (Alphabetical)", value=False, key="portal_sort_az")
-
-        if sort_az:
-            filtered_participants.sort(key=lambda p: p['name'].lower())
-        else:
-            filtered_participants.sort(key=lambda p: p['id'] in activity_attendees, reverse=True)
 
         if not filtered_participants:
             st.info("No residents found matching your search.")
         else:
             st.caption(f"Showing {len(filtered_participants)} resident(s). Tap the button to check in.")
             for p in filtered_participants:
-                is_regular = p['id'] in activity_attendees
-                badge = "⭐ Regular" if is_regular else "🆕 New"
                 col1, col2 = st.columns([3, 1])
                 with col1:
                     st.markdown(f"**{p['name']}**")
-                    st.caption(f"ID: {p['id'][:8]}... | {badge}")
+                    st.caption(f"ID: {p['id'][:8]}...")
                 with col2:
                     if st.button("✅ Check In", key=f"portal_name_check_{p['id']}", use_container_width=True):
                         with st.spinner("Processing..."):
@@ -601,7 +515,7 @@ def show_volunteer_portal(token, activity_param=None):
                                 st.rerun()
 
     # ==========================================
-    # METHOD 4: REGISTER NEW RESIDENT
+    # METHOD 3: REGISTER NEW RESIDENT
     # ==========================================
     elif method == "📝 Register New Resident":
         st.markdown("""
@@ -611,145 +525,176 @@ def show_volunteer_portal(token, activity_param=None):
         </div>
         """, unsafe_allow_html=True)
 
-        name = st.text_input("Full Name *", placeholder="e.g., AHMAD BIN ISMAIL", key="portal_reg_name")
-        contact = st.text_input("Contact Number", placeholder="e.g., 91234567", key="portal_reg_contact")
-        no_phone = st.checkbox("👴 I do not have a phone", key="portal_reg_no_phone")
-        indemnity = st.checkbox("Indemnity Form Signed (Optional)", value=False, key="portal_reg_indemnity")
+        # ---------- persistent state ----------
+        if "reg_form_version" not in st.session_state:
+            st.session_state.reg_form_version = 0
+        if "reg_success_info" not in st.session_state:
+            st.session_state.reg_success_info = None
+
+        # ---------- success banner (rendered AFTER the rerun) ----------
+        if st.session_state.reg_success_info:
+            info = st.session_state.reg_success_info
+            if info["checked_in"]:
+                checkin_line = (
+                    f"✅ Checked in for <b>{info['activity']}</b> "
+                    f"on {info['date']}"
+                )
+            else:
+                checkin_line = (
+                    f"⚠️ Registration saved, but check-in failed: "
+                    f"{info['checkin_msg']}"
+                )
+
+            st.markdown(f"""
+            <div style="background:#e8f5e9; border-left:5px solid #28a745; border-radius:8px;
+                        padding:18px 20px; margin:10px 0 18px 0;">
+                <div style="font-size:22px; font-weight:800; color:#1e7e34;">
+                    ✅ Registration Successful
+                </div>
+                <div style="font-size:18px; font-weight:700; color:#1a1a1a; margin-top:6px;">
+                    {info['name']}
+                </div>
+                <div style="font-size:14px; color:#2e7d32; margin-top:6px;">
+                    {checkin_line}
+                </div>
+                <div style="font-size:13px; color:#555; margin-top:8px;">
+                    Resident ID: <code>{info['id']}</code>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            if st.button("➕ Register Another Resident",
+                         key="reg_dismiss_success",
+                         use_container_width=True):
+                st.session_state.reg_success_info = None
+                st.rerun()
+            st.divider()
+
+        # ---------- versioned keys → guarantees a clean form after success ----------
+        v = st.session_state.reg_form_version
+        name_key          = f"portal_reg_name_{v}"
+        contact_key       = f"portal_reg_contact_{v}"
+        no_phone_key      = f"portal_reg_no_phone_{v}"
+        indemnity_key     = f"portal_reg_indemnity_{v}"
+        member_type_key   = f"portal_reg_member_type_{v}"
+        block_consent_key = f"portal_reg_block_consent_{v}"
+        block_no_key      = f"portal_reg_block_no_{v}"
+        submit_key        = f"portal_reg_submit_{v}"
+
+        name = st.text_input("Full Name *",
+                             placeholder="e.g., AHMAD BIN ISMAIL",
+                             key=name_key)
+        contact = st.text_input("Contact Number",
+                                placeholder="e.g., 91234567",
+                                key=contact_key)
+        no_phone = st.checkbox("👴 I do not have a phone", key=no_phone_key)
+        indemnity = st.checkbox("Indemnity Form Signed (Optional)",
+                                value=False, key=indemnity_key)
 
         st.markdown("---")
         st.markdown("**👤 Member Type:**")
-        member_type = st.radio("Select member category:", ["Resident", "RN Member", "Volunteer Member", "Gardener"], horizontal=True, key="portal_reg_member_type")
+        member_type = st.radio(
+            "Select member category:",
+            ["Resident", "RN Member", "Volunteer Member", "Gardener"],
+            horizontal=True, key=member_type_key
+        )
 
-        block_consent = st.checkbox("🏢 I agree to share my block information (Optional)", key="portal_reg_block_consent")
+        block_consent = st.checkbox(
+            "🏢 I agree to share my block information (Optional)",
+            key=block_consent_key
+        )
         block_no = ""
         if block_consent:
-            block_no = st.text_input("Block No.", placeholder="e.g., 622, 624A", key="portal_reg_block_no").strip().upper()
+            block_no = st.text_input("Block No.",
+                                     placeholder="e.g., 622, 624A",
+                                     key=block_no_key).strip().upper()
 
-        if st.button("Register & Check In", type="primary", use_container_width=True, key="portal_reg_submit"):
+        if st.button("Register & Check In", type="primary",
+                     use_container_width=True, key=submit_key):
+
             if not name.strip():
                 st.error("❌ Name is required")
             elif not no_phone and not contact.strip():
                 st.error("❌ Contact number is required")
             else:
                 final_contact = "NO_PHONE" if no_phone else contact.strip()
-                clean_contact = clean_phone_number(final_contact) if final_contact != "NO_PHONE" else None
+                clean_contact = (
+                    clean_phone_number(final_contact)
+                    if final_contact != "NO_PHONE" else None
+                )
+
+                # ---- duplicate check (no st.stop() so the form stays intact) ----
+                duplicate_error = None
                 try:
                     if clean_contact and clean_contact != "NO_PHONE":
-                        res_phone = supabase.table('participants').select('name').eq('contact', clean_contact).eq('active', True).execute()
+                        res_phone = (
+                            supabase.table('participants')
+                            .select('name')
+                            .eq('contact', clean_contact)
+                            .eq('active', True)
+                            .execute()
+                        )
                         if res_phone.data:
-                            st.error(f"⛔ **Phone number already exists!**\n\nResident: **{res_phone.data[0]['name']}**")
-                            st.stop()
-                    res_name = supabase.table('participants').select('name', 'contact').eq('name', name.strip().upper()).eq('active', True).execute()
-                    if res_name.data:
-                        st.error(f"⛔ **Name already exists!**")
-                        st.stop()
+                            duplicate_error = (
+                                f"⛔ **Phone number already exists!** "
+                                f"Resident: **{res_phone.data[0]['name']}**"
+                            )
+                    if not duplicate_error:
+                        res_name = (
+                            supabase.table('participants')
+                            .select('name', 'contact')
+                            .eq('name', name.strip().upper())
+                            .eq('active', True)
+                            .execute()
+                        )
+                        if res_name.data:
+                            duplicate_error = "⛔ **Name already exists!**"
                 except Exception as e:
-                    st.error(f"Error checking for duplicates: {e}")
-                    st.stop()
+                    duplicate_error = f"Error checking for duplicates: {e}"
 
-                try:
-                    success, message, new_id = RegistrationService.register_resident(
-                        name=name,
-                        contact=contact,
-                        no_phone=no_phone,
-                        indemnity=indemnity,
-                        member_type=member_type,
-                        block_no=block_no
-                    )
-                    if success:
-                        success2, msg2, _ = AttendanceService.process_checkin(new_id, selected_date, selected_activity, s1, s2, s3, s4)
-                        if success2:
-                            st.success(f"✅ {name.strip().upper()} registered & checked in successfully!")
-                            st.info(f"Resident ID: `{new_id}`")
-                            st.rerun()
-                except Exception as e:
-                    st.error(f"Registration failed: {e}")
+                if duplicate_error:
+                    st.error(duplicate_error)
+                else:
+                    registered = False
+                    try:
+                        success, message, new_id = RegistrationService.register_resident(
+                            name=name,
+                            contact=contact,
+                            no_phone=no_phone,
+                            indemnity=indemnity,
+                            member_type=member_type,
+                            block_no=block_no
+                        )
+                        if success:
+                            registered = True
+                            success2, msg2, _ = AttendanceService.process_checkin(
+                                new_id, selected_date, selected_activity,
+                                s1, s2, s3, s4
+                            )
+                            # stash the banner for the NEXT run
+                            st.session_state.reg_success_info = {
+                                "name": name.strip().upper(),
+                                "id": new_id,
+                                "activity": selected_activity,
+                                "date": selected_date.strftime("%d %b %Y"),
+                                "checked_in": bool(success2),
+                                "checkin_msg": msg2 or "",
+                            }
+                        else:
+                            st.error(f"❌ Registration failed: {message}")
+                    except Exception as e:
+                        st.error(f"Registration failed: {e}")
 
-        # ==========================================
-    # 🆕 METHOD 5: SHOW QR TO SENIOR
-    # ==========================================
-    elif method == "📱 Show QR to Senior":
-        st.markdown("""
-        <div class="method-card">
-            <h3>📱 Show QR to Senior</h3>
-            <p style="font-size: 15px; font-weight: 500;">
-                Show this QR to the senior's phone — they can scan it and get their own personal QR code.
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+                    # rerun OUTSIDE the try/except
+                    if registered:
+                        # clean up old versioned keys so session_state doesn't grow
+                        for k in list(st.session_state.keys()):
+                            if k.startswith("portal_reg_") and k.endswith(f"_{v}"):
+                                del st.session_state[k]
 
-        resident_url = f"{APP_URL}/resident_qr"
-
-        # Generate QR via free API
-        qr_api_url = (
-            f"https://api.qrserver.com/v1/create-qr-code/"
-            f"?size=600x600&margin=10&ecc=M"
-            f"&data={urllib.parse.quote(resident_url)}"
-        )
-
-        # White card title
-        st.markdown("""
-        <div style="background:#ffffff; border-radius:20px; padding:25px 25px 10px 25px;
-                    margin:10px auto 0 auto; max-width:460px;
-                    box-shadow:0 10px 40px rgba(0,0,0,0.2);
-                    text-align:center;">
-            <div style="font-size:22px; font-weight:800; color:#1a1a1a;
-                        margin-bottom:15px;">
-                👴 Show this to the senior's phone
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Centered QR image
-        c_left, c_mid, c_right = st.columns([1, 3, 1])
-        with c_mid:
-            st.image(qr_api_url, width=420)   # ← FIXED: width= instead of use_container_width=
-
-        # Senior instructions
-        st.markdown("""
-        <div style="background:#e3f2fd; border-left:6px solid #2196f3;
-                    border-radius:12px; padding:20px; margin:15px 0;
-                    color:#1a1a1a;">
-            <div style="font-size:20px; font-weight:800; color:#0d47a1;
-                        margin-bottom:12px;">
-                📋 Steps for the Senior
-            </div>
-            <div style="font-size:17px; line-height:2; color:#1565c0;">
-                <b>1.</b> Open phone <b>camera</b> 📷<br>
-                <b>2.</b> Point at the QR code above<br>
-                <b>3.</b> Tap the link that pops up<br>
-                <b>4.</b> Enter their <b>8-digit phone number</b><br>
-                <b>5.</b> Their QR code appears ✅
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.divider()
-
-        st.markdown("**🔗 Direct Link** (paste into chat if senior can't scan):")
-        st.code(resident_url, language="text")
-
-        wa_msg = urllib.parse.quote(
-            f"Hi! Get your personal QR code for Woodlands Zone 6 "
-            f"Community Hub here: {resident_url}"
-        )
-        st.markdown(f"""
-        <div style='text-align:center; margin-top:18px;'>
-            <a href='https://wa.me/?text={wa_msg}' target='_blank'
-               style='background:#128C7E; color:white; padding:16px 32px;
-                      text-decoration:none; border-radius:12px; font-weight:bold;
-                      display:inline-block; font-size:18px;
-                      box-shadow:0 6px 20px rgba(18,140,126,0.35);'>
-                📲 Send Link via WhatsApp
-            </a>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown("---")
-        st.caption(
-            "💡 **Tip:** Hold your phone up so the senior can scan this QR "
-            "with their camera. Or tap the WhatsApp button to send them the link directly."
-        )
+                        st.session_state.reg_form_version += 1   # ← new empty widgets
+                        refresh_data()
+                        st.rerun()
 
     # ==========================================
     # STATISTICS
