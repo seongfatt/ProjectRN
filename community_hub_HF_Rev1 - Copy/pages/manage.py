@@ -177,94 +177,44 @@ def show_manage(selected_date):
                 update_search = st.text_input("Search resident by Name or ID", key="update_search_contact")
                 if update_search:
                     s = update_search.lower()
-                    matches = [
-                        p for p in st.session_state.participants
-                        if p.get('active', True)
-                        and (
-                            s in (p.get('name') or '').lower()
-                            or s in str(p.get('id') or '').lower()
-                        )
-                    ]
+                    matches = [p for p in st.session_state.participants if p.get('active', True) and (s in p['name'].lower() or s in str(p.get('id', '')).lower())]
                     for p in matches:
                         with st.container():
                             c1, c2, c3 = st.columns([3, 2, 1])
                             c1.write(f"**{p['name']}**")
-
-                            # ✅ FIX: Use `or` so NULL values fall back correctly
-                            current_contact = p.get('contact') or 'N/A'
-                            current_block   = p.get('block_no') or 'Not provided'
-                            current_type    = p.get('member_type') or 'Resident'
-
-                            c2.write(
-                                f"Phone: {current_contact if current_contact != 'NO_PHONE' else '📵 No Phone'} "
-                                f"| Block: {current_block} | Type: {current_type}"
-                            )
+                            current_contact = p.get('contact', 'N/A')
+                            current_block = p.get('block_no', 'Not provided')
+                            current_type = p.get('member_type', 'Resident')
+                            c2.write(f"Phone: {current_contact if current_contact != 'NO_PHONE' else '📵 No Phone'} | Block: {current_block} | Type: {current_type}")
                             with c3:
                                 if st.button("Edit", key=f"edit_btn_{p['id']}"):
                                     st.session_state[f"edit_mode_{p['id']}"] = True
-
                             if st.session_state.get(f"edit_mode_{p['id']}"):
                                 with st.form(f"update_form_{p['id']}"):
-                                    # ✅ FIX: `value` never None, `or ""` guards against Streamlit returning None
-                                    _contact_val = "" if current_contact == "NO_PHONE" else current_contact
-                                    _block_val   = "" if current_block == 'Not provided' else current_block
-
-                                    new_contact = st.text_input(
-                                        "New Phone Number",
-                                        value=_contact_val or "",
-                                        key=f"new_phone_{p['id']}"
-                                    ) or ""
-
-                                    new_block = st.text_input(
-                                        "Block No.",
-                                        value=_block_val or "",
-                                        placeholder="e.g., 622, 624A",
-                                        key=f"new_block_{p['id']}"
-                                    ) or ""
-
+                                    new_contact = st.text_input("New Phone Number", value="" if current_contact == "NO_PHONE" else current_contact, key=f"new_phone_{p['id']}")
+                                    new_block = st.text_input("Block No.", value="" if current_block == 'Not provided' else current_block, placeholder="e.g., 622, 624A", key=f"new_block_{p['id']}")
                                     member_types = ["Resident", "RN Member", "Volunteer Member", "Gardener"]
                                     default_index = member_types.index(current_type) if current_type in member_types else 0
-                                    new_member_type = st.selectbox(
-                                        "👤 Member Type",
-                                        member_types,
-                                        index=default_index,
-                                        key=f"new_member_type_{p['id']}"
-                                    )
-
+                                    new_member_type = st.selectbox("👤 Member Type", member_types, index=default_index, key=f"new_member_type_{p['id']}")
                                     col_save, col_cancel = st.columns(2)
                                     with col_save:
                                         if st.form_submit_button("💾 Save Update", type="primary"):
                                             updates = {}
-                                            _contact_clean = new_contact.strip()
-                                            _block_clean   = new_block.strip()
-
-                                            # ── Phone ──
-                                            if _contact_clean:
-                                                clean_contact = clean_phone_number(_contact_clean)
-                                                dup_check = (
-                                                    supabase.table('participants')
-                                                    .select('id, name')
-                                                    .eq('contact', clean_contact)
-                                                    .eq('active', True)
-                                                    .execute()
-                                                )
+                                            if new_contact.strip():
+                                                clean_contact = clean_phone_number(new_contact)
+                                                dup_check = supabase.table('participants').select('id, name').eq('contact', clean_contact).eq('active', True).execute()
                                                 is_dup = any(d['id'] != p['id'] for d in dup_check.data) if dup_check.data else False
                                                 if is_dup:
                                                     st.error(f"⛔ This phone number is already used by: {dup_check.data[0]['name']}")
                                                     st.stop()
                                                 else:
                                                     updates['contact'] = clean_contact
-                                            elif _contact_clean == "" and current_contact != "NO_PHONE":
+                                            elif new_contact.strip() == "" and current_contact != "NO_PHONE":
                                                 updates['contact'] = "NO_PHONE"
-
-                                            # ── Block ──
-                                            if _block_clean:
-                                                updates['block_no'] = _block_clean.upper()
-
-                                            # ── Member Type ──
+                                            if new_block.strip():
+                                                updates['block_no'] = new_block.strip().upper()
                                             if new_member_type != current_type:
                                                 updates['member_type'] = new_member_type
-
                                             if updates:
                                                 try:
                                                     supabase.table('participants').update(updates).eq('id', p['id']).execute()
