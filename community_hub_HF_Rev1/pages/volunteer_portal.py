@@ -686,36 +686,23 @@ def show_volunteer_portal(token, activity_param=None):
             f"&data={urllib.parse.quote(resident_url)}"
         )
 
-        # Center all images on this page
-        st.markdown("""
-        <style>
-            div[data-testid="stImage"] {
-                display: flex;
-                justify-content: center;
-                align-items: center;
-            }
-            div[data-testid="stImage"] > img {
-                margin: 0 auto !important;
-                display: block !important;
-            }
-        </style>
-        """, unsafe_allow_html=True)
-
-        # White card title
-        st.markdown("""
-        <div style="background:#ffffff; border-radius:20px; padding:25px 25px 10px 25px;
-                    margin:10px auto 0 auto; max-width:460px;
+        # Combined card: title + QR in one centered HTML block
+        st.markdown(f"""
+        <div style="background:#ffffff; border-radius:20px; padding:25px;
+                    margin:10px auto; max-width:460px;
                     box-shadow:0 10px 40px rgba(0,0,0,0.2);
                     text-align:center;">
             <div style="font-size:22px; font-weight:800; color:#1a1a1a;
-                        margin-bottom:15px;">
+                        margin-bottom:20px;">
                 👴 Show this to the senior's phone
             </div>
+            <img src="{qr_api_url}"
+                 alt="QR Code"
+                 style="width:100%; max-width:400px; height:auto;
+                        display:block; margin:0 auto;
+                        border-radius:12px;" />
         </div>
         """, unsafe_allow_html=True)
-
-        # QR image — auto-centered by CSS above
-        st.image(qr_api_url, width=420)
 
         # Senior instructions
         st.markdown("""
