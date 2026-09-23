@@ -680,12 +680,26 @@ def show_volunteer_portal(token, activity_param=None):
 
         resident_url = f"{APP_URL}/resident_qr"
 
-        # Generate QR via free API
         qr_api_url = (
             f"https://api.qrserver.com/v1/create-qr-code/"
             f"?size=600x600&margin=10&ecc=M"
             f"&data={urllib.parse.quote(resident_url)}"
         )
+
+        # Center all images on this page
+        st.markdown("""
+        <style>
+            div[data-testid="stImage"] {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+            div[data-testid="stImage"] > img {
+                margin: 0 auto !important;
+                display: block !important;
+            }
+        </style>
+        """, unsafe_allow_html=True)
 
         # White card title
         st.markdown("""
@@ -700,10 +714,8 @@ def show_volunteer_portal(token, activity_param=None):
         </div>
         """, unsafe_allow_html=True)
 
-        # Centered QR image
-        c_left, c_mid, c_right = st.columns([1, 3, 1])
-        with c_mid:
-            st.image(qr_api_url, width=420)   # ← FIXED: width= instead of use_container_width=
+        # QR image — auto-centered by CSS above
+        st.image(qr_api_url, width=420)
 
         # Senior instructions
         st.markdown("""
