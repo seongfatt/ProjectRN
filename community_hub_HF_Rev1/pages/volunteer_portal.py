@@ -319,7 +319,6 @@ def show_volunteer_portal(token, activity_param=None):
                      ["⌨️ Phone / Name Search",
                       "📝 Register New Resident",
                       "📱 Show QR to Senior",
-                      "📺 TV Display Mode (Full Screen)",
                       "📸 Real-Time QR Scanner (Auto-Detect)"],
                      horizontal=False, key="portal_method")
 
@@ -750,122 +749,6 @@ def show_volunteer_portal(token, activity_param=None):
             "💡 **Tip:** Hold your phone up so the senior can scan this QR "
             "with their camera. Or tap the WhatsApp button to send them the link directly."
         )
-
-    # ==========================================
-    # 🆕 METHOD 6: TV DISPLAY MODE (Full Screen)
-    # ==========================================
-    elif method == "📺 TV Display Mode (Full Screen)":
-        resident_url = f"{APP_URL}/resident_qr"
-        qr_api_url = (
-            f"https://api.qrserver.com/v1/create-qr-code/"
-            f"?size=1000x1000&margin=10&ecc=M"
-            f"&data={urllib.parse.quote(resident_url)}"
-        )
-
-        # Widen the container for TV display
-        st.markdown("""
-        <style>
-            .block-container {
-                max-width: 100% !important;
-                padding-top: 0.5rem !important;
-                padding-bottom: 0.5rem !important;
-            }
-        </style>
-        """, unsafe_allow_html=True)
-
-        # Big beautiful TV-style display
-        st.markdown(f"""
-        <div style="
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            min-height: 82vh;
-            padding: 3vmin;
-            gap: 3vmin;
-            text-align: center;
-            border-radius: 24px;
-            background: radial-gradient(ellipse at top, #1e3a8a 0%, #0f172a 60%, #020617 100%);
-            color: white;
-            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
-            overflow: hidden;
-        ">
-            <div style="
-                font-size: clamp(22px, 4.2vmin, 54px);
-                font-weight: 800;
-                letter-spacing: 0.05em;
-                color: #ffffff;
-                text-shadow: 0 0 30px rgba(96, 165, 250, 0.5);
-            ">📱 Scan to Get Your QR Code</div>
-
-            <div style="
-                background: white;
-                padding: 3vmin;
-                border-radius: 3vmin;
-                box-shadow:
-                    0 0 0 0.4vmin rgba(96, 165, 250, 0.6),
-                    0 30px 80px rgba(0, 0, 0, 0.6),
-                    0 0 100px rgba(96, 165, 250, 0.3);
-            ">
-                <img src="{qr_api_url}"
-                     alt="QR Code"
-                     style="display: block;
-                            width: clamp(220px, 50vmin, 520px);
-                            height: clamp(220px, 50vmin, 520px);
-                            image-rendering: pixelated;" />
-            </div>
-
-            <div style="
-                font-size: clamp(15px, 2.1vmin, 26px);
-                line-height: 1.9;
-                color: #cbd5e1;
-                max-width: 80vw;
-                font-weight: 500;
-            ">
-                <strong style="color: #60a5fa; font-weight: 700;">1.</strong> Open your phone camera 📷<br>
-                <strong style="color: #60a5fa; font-weight: 700;">2.</strong> Point it at the QR code<br>
-                <strong style="color: #60a5fa; font-weight: 700;">3.</strong> Tap the link that pops up<br>
-                <strong style="color: #60a5fa; font-weight: 700;">4.</strong> Enter your 8-digit phone number
-            </div>
-
-            <div style="
-                font-size: clamp(10px, 1.2vmin, 14px);
-                color: #64748b;
-                letter-spacing: 0.4em;
-                text-transform: uppercase;
-                font-weight: 600;
-                margin-top: 1vmin;
-            ">Woodlands Zone 6 Community Hub</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Helper actions below the display
-        st.markdown("---")
-        c1, c2 = st.columns([2, 1])
-        with c1:
-            st.markdown(
-                "<div style='font-size:15px; color:#cbd5e1; padding-top:8px;'>"
-                "💡 <b>Tip:</b> Press <b>F11</b> for true fullscreen on laptop, "
-                "or open the browser's menu (⋮) → <b>Fullscreen</b> on Android TV."
-                "</div>",
-                unsafe_allow_html=True
-            )
-        with c2:
-            wa_msg = urllib.parse.quote(
-                f"Get your personal QR code for Woodlands Zone 6: {resident_url}"
-            )
-            st.markdown(f"""
-            <div style="text-align:right;">
-                <a href="https://wa.me/?text={wa_msg}" target="_blank"
-                   style="background:#128C7E; color:white; padding:12px 22px;
-                          text-decoration:none; border-radius:10px; font-weight:bold;
-                          display:inline-block; font-size:15px;
-                          box-shadow:0 4px 14px rgba(18,140,126,0.35);">
-                    📲 Share via WhatsApp
-                </a>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown("**🔗 Direct Link** (copy-paste into any TV browser):")
-        st.code(resident_url, language="text")
 
     # ==========================================
     # STATISTICS

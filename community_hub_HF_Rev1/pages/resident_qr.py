@@ -618,6 +618,124 @@ def _render_self_registration_form(phone_clean):
 
 
 # ═══════════════════════════════════════════════════════════════
+#  🆕 TV DISPLAY MODE — full-screen poster for Android TV / kiosk
+# ═══════════════════════════════════════════════════════════════
+
+def render_tv_display():
+    """Full-screen TV poster showing a QR that links to /resident_qr."""
+
+    # Support ?url=... override; default to the plain resident_qr URL
+    target_url = st.query_params.get("url") or f"{APP_URL}/resident_qr"
+    title_text = st.query_params.get("title") or "📱 Scan to Get Your QR Code"
+
+    # Ensure it's a single string (Streamlit sometimes returns a list)
+    if isinstance(target_url, list):
+        target_url = target_url[0] if target_url else f"{APP_URL}/resident_qr"
+    if isinstance(title_text, list):
+        title_text = title_text[0] if title_text else "📱 Scan to Get Your QR Code"
+
+    qr_api_url = (
+        f"https://api.qrserver.com/v1/create-qr-code/"
+        f"?size=1000x1000&margin=10&ecc=M"
+        f"&data={urllib.parse.quote(str(target_url))}"
+    )
+
+    # Full-bleed TV layout
+    st.markdown("""
+    <style>
+        .block-container {
+            max-width: 100% !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+        }
+        body { overflow-x: hidden; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div style="
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        min-height: 100vh;
+        padding: 4vmin 3vmin;
+        gap: 3.5vmin;
+        text-align: center;
+        background: radial-gradient(ellipse at top, #1e3a8a 0%, #0f172a 60%, #020617 100%);
+        color: white;
+        font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+        overflow: hidden;
+    ">
+        <div style="
+            font-size: clamp(24px, 4.5vmin, 60px);
+            font-weight: 800;
+            letter-spacing: 0.05em;
+            color: #ffffff;
+            text-shadow: 0 0 30px rgba(96, 165, 250, 0.5);
+        ">{title_text}</div>
+
+        <div style="
+            background: white;
+            padding: 3vmin;
+            border-radius: 3vmin;
+            box-shadow:
+                0 0 0 0.4vmin rgba(96, 165, 250, 0.6),
+                0 30px 80px rgba(0, 0, 0, 0.6),
+                0 0 100px rgba(96, 165, 250, 0.3);
+            animation: softPulse 3s ease-in-out infinite;
+        ">
+            <img src="{qr_api_url}"
+                 alt="QR Code"
+                 style="display: block;
+                        width: clamp(240px, 55vmin, 600px);
+                        height: clamp(240px, 55vmin, 600px);
+                        image-rendering: pixelated;" />
+        </div>
+
+        <div style="
+            font-size: clamp(16px, 2.3vmin, 30px);
+            line-height: 1.9;
+            color: #cbd5e1;
+            max-width: 80vw;
+            font-weight: 500;
+        ">
+            <strong style="color: #60a5fa; font-weight: 700;">1.</strong> Open your phone camera 📷<br>
+            <strong style="color: #60a5fa; font-weight: 700;">2.</strong> Point it at the QR code<br>
+            <strong style="color: #60a5fa; font-weight: 700;">3.</strong> Tap the link that pops up<br>
+            <strong style="color: #60a5fa; font-weight: 700;">4.</strong> Enter your 8-digit phone number
+        </div>
+
+        <div style="
+            font-size: clamp(10px, 1.2vmin, 14px);
+            color: #64748b;
+            letter-spacing: 0.5em;
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-top: 1vmin;
+        ">Woodlands Zone 6 Community Hub</div>
+    </div>
+
+    <style>
+    @keyframes softPulse {{
+        0%, 100% {{
+            box-shadow:
+                0 0 0 0.4vmin rgba(96, 165, 250, 0.6),
+                0 30px 80px rgba(0, 0, 0, 0.6),
+                0 0 100px rgba(96, 165, 250, 0.3);
+        }}
+        50% {{
+            box-shadow:
+                0 0 0 0.6vmin rgba(96, 165, 250, 0.9),
+                0 30px 80px rgba(0, 0, 0, 0.6),
+                0 0 150px rgba(96, 165, 250, 0.5);
+        }}
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════
 #  QR BADGE (unchanged)
 # ═══════════════════════════════════════════════════════════════
 
@@ -772,6 +890,13 @@ def display_resident_qr_card(resident):
 # ───────────────────────────────────────────────
 # MAIN LOGIC
 # ───────────────────────────────────────────────
+
+# 🆕 TV DISPLAY MODE — check FIRST, before any other UI renders
+_tv_param = st.query_params.get("tv")
+if _tv_param and str(_tv_param).lower() not in ("0", "false", "no", ""):
+    render_tv_display()
+    st.stop()
+
 st.markdown("<h2 style='text-align:center;'>📱 Your QR Code</h2>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center; color:#666;'>Enter your 8-digit mobile number to view your personal QR code.</p>", unsafe_allow_html=True)
 
@@ -838,7 +963,17 @@ if phone_input:
 else:
     st.info("👉 Enter your phone number above to get your QR code.")
 
+# 🆕 Small TV mode hint
 st.markdown(
-    "<hr><p style='text-align:center; font-size:12px; color:#999;'>This link is personal and secure. Do not share publicly.</p>",
+    f"<hr>"
+    f"<p style='text-align:center; font-size:12px; color:#999;'>"
+    f"This link is personal and secure. Do not share publicly."
+    f"</p>"
+    f"<p style='text-align:center; font-size:12px; color:#777; margin-top:-6px;'>"
+    f"📺 Admin / TV display: "
+    f"<a href='{APP_URL}/resident_qr?tv=1' target='_blank' "
+    f"style='color:#4a6cf7; text-decoration:none; font-weight:600;'>"
+    f"open full-screen poster mode</a>"
+    f"</p>",
     unsafe_allow_html=True
 )
