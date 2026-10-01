@@ -411,9 +411,63 @@ def show_volunteer_portal(token, activity_param=None):
                                 )
 
                                 if success:
-                                    st.success(f"✅ **{resident_name}** — Checked in!")
-                                    st.balloons()
-                                    time.sleep(0.8)
+                                    # Professional success card
+                                    st.markdown(f"""
+                                    <div style="
+                                        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+                                        border-radius: 20px;
+                                        padding: 32px 24px;
+                                        margin: 20px auto;
+                                        max-width: 520px;
+                                        text-align: center;
+                                        color: white;
+                                        box-shadow: 0 12px 40px rgba(40, 167, 69, 0.4);
+                                        animation: slideIn 0.35s ease-out;
+                                    ">
+                                        <div style="font-size: 64px; line-height: 1; margin-bottom: 12px;">
+                                            ✅
+                                        </div>
+                                        <div style="
+                                            font-size: 14px;
+                                            letter-spacing: 4px;
+                                            font-weight: 600;
+                                            opacity: 0.9;
+                                            margin-bottom: 10px;
+                                        ">
+                                            CHECKED IN
+                                        </div>
+                                        <div style="
+                                            font-size: 30px;
+                                            font-weight: 800;
+                                            margin-bottom: 14px;
+                                            letter-spacing: 0.5px;
+                                            word-break: break-word;
+                                        ">
+                                            {resident_name}
+                                        </div>
+                                        <div style="
+                                            font-size: 17px;
+                                            opacity: 0.95;
+                                            font-weight: 500;
+                                        ">
+                                            {selected_activity}
+                                        </div>
+                                        <div style="
+                                            font-size: 15px;
+                                            opacity: 0.85;
+                                            margin-top: 6px;
+                                        ">
+                                            {datetime.now().strftime('%I:%M %p')} · {selected_date.strftime('%d %b %Y')}
+                                        </div>
+                                    </div>
+                                    <style>
+                                    @keyframes slideIn {{
+                                        from {{ opacity: 0; transform: translateY(-10px); }}
+                                        to   {{ opacity: 1; transform: translateY(0); }}
+                                    }}
+                                    </style>
+                                    """, unsafe_allow_html=True)
+                                    time.sleep(1.8)
                                     st.rerun()
                                 else:
                                     if 'already' in (message or '').lower():
