@@ -20,11 +20,14 @@ from utils.qr_scanner import qr_code_scanner_auto_detect, clear_scanned_qr
 
 # 🆕 Auto-firing QR scanner component (camera + USB)
 try:
-    from utils.qr_scanner_auto import qr_scanner_auto
-    QR_AUTO_AVAILABLE = True
+    from utils.qr_scanner_auto import qr_scanner_auto, is_qr_scanner_auto_ready
+    QR_AUTO_AVAILABLE = is_qr_scanner_auto_ready()
+    print(f"🔍 QR_AUTO_AVAILABLE = {QR_AUTO_AVAILABLE}")
 except Exception as _e:
     QR_AUTO_AVAILABLE = False
-    print(f"⚠️ qr_scanner_auto not available: {_e}")
+    print(f"⚠️ qr_scanner_auto import failed: {_e}")
+    def qr_scanner_auto(height=560, key=None):
+        return None
 
 # 🔥 Optional: Try to import cv2 for QR scanning (fallback)
 try:
