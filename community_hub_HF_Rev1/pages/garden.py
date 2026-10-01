@@ -267,7 +267,7 @@ def show_garden():
             st.markdown("#### Quick Assign or Swap a Plot")
             search_query = st.text_input("🔍 Search Resident (Type Name, Phone, or ID)", placeholder="e.g., 91234567 or AHMAD", key="admin_search")
             selected_participant = None
-            current_plot_num = None
+
             if search_query:
                 s = search_query.strip().lower()
                 participants = st.session_state.participants
@@ -281,53 +281,168 @@ def show_garden():
                         selected_label = st.selectbox("Select Resident", list(match_dict.keys()), key="admin_match_select")
                         if selected_label:
                             selected_participant = match_dict[selected_label]
+
             if selected_participant:
                 st.success(f"✅ Selected: **{selected_participant['name']}**")
                 pid_l = str(selected_participant['id']).lower().strip()
-                own_in_block = next((p for p in block_plots if p.get('occupied') and str(p.get('user_id', '')).lower().strip() == pid_l), None)
-                own_elsewhere = next((p for p in plots if p.get('occupied') and (p.get('block_name') or '').strip() != selected_block and str(p.get('user_id', '')).lower().strip() == pid_l), None)
-                if own_in_block:
-                    current_plot_num = own_in_block['plot_number']
-                    st.warning(f"⚠️ {selected_participant['name']} owns **Plot {current_plot_num} in {selected_block}**. Assigning below will SWAP it.")
-                if own_elsewhere:
-                    st.info(f"🏢 **Gentle reminder:** {selected_participant['name']} also owns Plot {own_elsewhere['plot_number']} in {own_elsewhere.get('block_name')}. Assigning here is an **ADDITIONAL** rental — that plot will NOT be released.")
-                available_plots = [plots_dict.get(i['plot_number']) for i in current_block_layout if not plots_dict.get(i['plot_number'], {}).get('occupied')]
+
+                # 🆕 Gather ALL plots owned by this resident (in this block + elsewhere)
+                owned_in_block = [
+                    p for p in block_plots
+                    if p.get('occupied') and str(p.get('user_id', '')).lower().strip() == pid_l
+                ]
+                owned_elsewhere = [
+                    p for p in plots
+                    if p.get('occupied')
+                    and (p.get('block_name') or '').strip() != selected_block
+                    and str(p.get('user_id', '')).lower().strip() == pid_l
+                ]
+                total_owned = len(owned_in_block) + len(owned_elsewhere)
+
+                # 🆕 Ownership summary card
+                if total_owned > 0:
+                    with st.expander(
+                        f"📋 {selected_participant['name']} currently owns **{total_owned} plot(s)**",
+                        expanded=True,
+                    ):
+                        if owned_in_block:
+                            st.markdown(f"**In {selected_block}:**")
+                            for p in owned_in_block:
+                                st.markdown(
+                                    f"&nbsp;&nbsp;&nbsp;&nbsp;🏢 **Plot {p['plot_number']}** — Type {p.get('plot_type', 'B')}"
+                                )
+                        if owned_elsewhere:
+                            st.markdown("**In other blocks:**")
+                            for p in owned_elsewhere:
+                                st.markdown(
+                                    f"&nbsp;&nbsp;&nbsp;&nbsp;🏢 **Plot {p['plot_number']}** in {p.get('block_name')} — Type {p.get('plot_type', 'B')}"
+                                )
+
+                # Available plots to assign
+                available_plots = [
+                    plots_dict.get(i['plot_number'])
+                    for i in current_block_layout
+                    if not plots_dict.get(i['plot_number'], {}).get('occupied')
+                ]
                 available_plots = [p for p in available_plots if p]
-                if current_plot_num:
-                    available_plots = [p for p in available_plots if p.get('plot_number') != current_plot_num]
+
                 if not available_plots:
                     st.error("❌ No available plots to assign in this block.")
                 else:
-                    plot_options = {f"Plot {p['plot_number']} (Type {p.get('plot_type','B')})": p['plot_number'] for p in available_plots}
-                    selected_plot_label = st.selectbox("Select Target Plot", list(plot_options.keys()), key="admin_plot_select")
+                    plot_options = {
+                        f"Plot {p['plot_number']} (Type {p.get('plot_type','B')})": p['plot_number']
+                        for p in available_plots
+                    }
+                    selected_plot_label = st.selectbox(
+                        "Select Target Plot",
+                        list(plot_options.keys()),
+                        key="admin_plot_select",
+                    )
                     selected_plot_num = plot_options[selected_plot_label]
-                    renewal_date = st.date_input("📅 Renewal Due Date (Optional)", value=None, key="admin_assign_renewal")
-                    button_label = "🔄 Swap to New Plot" if current_plot_num else "✅ Assign New Plot"
+
+                    # 🆕 Assignment Mode — Add Additional vs Swap
+                    swap_plot_num = None
+                    if owned_in_block:
+                        st.markdown("**🧩 Assignment Mode**")
+                        assign_mode = st.radio(
+                            "How should this plot be assigned?",
+                            [
+                                "➕ Add as Additional Plot",
+                                "🔄 Swap (release an existing plot in this block)",
+                            ],
+                            index=0,
+                            horizontal=False,
+                            key="admin_assign_mode",
+                            label_visibility="collapsed",
+                        )
+
+                        if assign_mode.startswith("🔄"):
+                            swap_label_map = {
+                                f"Plot {p['plot_number']} (Type {p.get('plot_type','B')})": p['plot_number']
+                                for p in owned_in_block
+                            }
+                            swap_choice = st.selectbox(
+                                "Which existing plot should be released?",
+                                list(swap_label_map.keys()),
+                                key="admin_swap_from_select",
+                            )
+                            swap_plot_num = swap_label_map[swap_choice]
+                            st.caption(
+                                f"♻️ Plot **{swap_plot_num}** will be released, then Plot **{selected_plot_num}** assigned."
+                            )
+                        else:
+                            st.caption(
+                                f"➕ {selected_participant['name']} will now own **{total_owned + 1}** plot(s) total."
+                            )
+                    else:
+                        st.caption(f"➕ This will be the first plot for {selected_participant['name']}.")
+
+                    renewal_date = st.date_input(
+                        "📅 Renewal Due Date (Optional)",
+                        value=None,
+                        key="admin_assign_renewal",
+                    )
+
+                    # Dynamic button label
+                    if swap_plot_num:
+                        button_label = f"🔄 Swap Plot {swap_plot_num} → Plot {selected_plot_num}"
+                    elif total_owned > 0:
+                        button_label = f"➕ Add Plot {selected_plot_num} to {selected_participant['name']}"
+                    else:
+                        button_label = f"✅ Assign Plot {selected_plot_num}"
+
                     if st.button(button_label, type="primary", use_container_width=True):
                         try:
-                            if current_plot_num and current_plot_num != selected_plot_num:
+                            # If swapping, release the chosen old plot first
+                            if swap_plot_num:
                                 supabase.table('garden_plots').update({
-                                    'occupied': False, 'user_id': None, 'renewal_due_date': None,
+                                    'occupied': False,
+                                    'user_id': None,
+                                    'renewal_due_date': None,
                                     'renewal_status': None,
-                                    'change_log': f"Auto-released due to swap to {selected_plot_num}",
-                                    'updated_at': datetime.now().isoformat()
-                                }).eq('block_name', selected_block).eq('plot_number', current_plot_num).execute()
+                                    'change_log': f"Auto-released due to swap to Plot {selected_plot_num}",
+                                    'updated_at': datetime.now().isoformat(),
+                                }).eq('block_name', selected_block).eq('plot_number', swap_plot_num).execute()
+
+                            # Assign the new plot
                             updates = {
                                 'user_id': selected_participant['id'],
                                 'change_log': f"Admin assigned to {selected_participant['id']}",
                                 'block_name': selected_block,
                                 'occupied': True,
-                                'updated_at': datetime.now().isoformat()
+                                'updated_at': datetime.now().isoformat(),
                             }
                             if renewal_date:
                                 updates['renewal_due_date'] = str(renewal_date)
                                 updates['renewal_status'] = 'active'
-                            supabase.table('garden_plots').update(updates).eq('block_name', selected_block).eq('plot_number', selected_plot_num).execute()
+
+                            supabase.table('garden_plots').update(updates) \
+                                .eq('block_name', selected_block) \
+                                .eq('plot_number', selected_plot_num).execute()
+
+                            # Ensure 'Gardener' tag is present (added once)
                             if 'Gardener' not in selected_participant.get('member_type', ''):
-                                new_type = (selected_participant.get('member_type', 'Resident') + ', Gardener').strip(', ')
-                                supabase.table('participants').update({'member_type': new_type}).eq('id', selected_participant['id']).execute()
-                            log_action('admin', 'ASSIGN_PLOT', f"Plot {selected_plot_num} ({selected_block}) - {selected_participant['name']}", str(selected_plot_num))
-                            st.success(f"✅ Assigned Plot {selected_plot_num} ({selected_block}) to {selected_participant['name']}!")
+                                new_type = (
+                                    selected_participant.get('member_type', 'Resident') + ', Gardener'
+                                ).strip(', ')
+                                supabase.table('participants').update({'member_type': new_type}) \
+                                    .eq('id', selected_participant['id']).execute()
+
+                            log_action(
+                                'admin',
+                                'ASSIGN_PLOT',
+                                f"Plot {selected_plot_num} ({selected_block}) - {selected_participant['name']}",
+                                str(selected_plot_num),
+                            )
+
+                            if swap_plot_num:
+                                st.success(
+                                    f"✅ Swapped: Plot {swap_plot_num} released → Plot {selected_plot_num} assigned to {selected_participant['name']}!"
+                                )
+                            else:
+                                st.success(
+                                    f"✅ Plot {selected_plot_num} assigned to {selected_participant['name']}!"
+                                )
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error during assignment: {e}")
