@@ -1,5 +1,4 @@
 import streamlit as st
-import random
 import time
 from datetime import datetime, timedelta, timezone
 from config import supabase, DB_CONNECTED, load_activities, refresh_data, APP_URL
@@ -411,6 +410,14 @@ def show_volunteer_portal(token, activity_param=None):
                                 )
 
                                 if success:
+                                    # Build session display line
+                                    _sess = []
+                                    if s1: _sess.append("Session 1")
+                                    if s2: _sess.append("Session 2")
+                                    if s3: _sess.append("Session 3")
+                                    if s4: _sess.append("Session 4")
+                                    _sess_str = " · ".join(_sess) if _sess else ""
+
                                     # Professional success card
                                     st.markdown(f"""
                                     <div style="
@@ -453,9 +460,16 @@ def show_volunteer_portal(token, activity_param=None):
                                             {selected_activity}
                                         </div>
                                         <div style="
+                                            font-size: 14px;
+                                            opacity: 0.9;
+                                            margin-top: 4px;
+                                        ">
+                                            {_sess_str}
+                                        </div>
+                                        <div style="
                                             font-size: 15px;
                                             opacity: 0.85;
-                                            margin-top: 6px;
+                                            margin-top: 8px;
                                         ">
                                             {datetime.now().strftime('%I:%M %p')} · {selected_date.strftime('%d %b %Y')}
                                         </div>

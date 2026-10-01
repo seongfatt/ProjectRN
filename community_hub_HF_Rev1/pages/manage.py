@@ -702,14 +702,15 @@ def show_manage(selected_date):
                     else: actual_price = monthly_rent
                 else:
                     actual_price = monthly_rent
+                # ✅ FIX: Explicit dark text color everywhere so nothing inherits Streamlit's white theme text
                 st.markdown(f"""
-                <div style="background-color: {bg_color}; border-left: 6px solid {border_color}; padding: 15px; border-radius: 8px; margin: 10px 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <div style="background-color: {bg_color}; color: #1a1a1a; border-left: 6px solid {border_color}; padding: 15px; border-radius: 8px; margin: 10px 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
                     <div>
-                        <strong style="font-size: 18px;">Plot {plot_num}</strong>
+                        <strong style="font-size: 18px; color: #1a1a1a;">Plot {plot_num}</strong>
                         <span style="background: #667eea; color: white; padding: 2px 10px; border-radius: 12px; font-size: 12px;">{plot_block}</span>
                         <span style="background: #333; color: white; padding: 2px 10px; border-radius: 12px; font-size: 12px;">Type {plot_type}</span>
                         <br>
-                        <span style="font-size: 14px;">👤 {owner_name}</span> <span style="color: #777; font-size: 12px;">| 📞 {contact}</span>
+                        <span style="font-size: 14px; color: #1a1a1a;">👤 {owner_name}</span> <span style="color: #666; font-size: 12px;">| 📞 {contact}</span>
                         <br><span style="font-size: 12px; color: #555;">Rent: ${actual_price:.2f}/month</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 15px;">
