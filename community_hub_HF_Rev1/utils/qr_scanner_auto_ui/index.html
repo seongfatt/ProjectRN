@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>QR Scanner</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/streamlit-component-lib@2.0.0/dist/streamlit-component-lib.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+    background: transparent;
+    color: #1a1a1a;
+    padding: 6px;
+  }
+  #status {
+    text-align: center;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    transition: background 0.2s;
+  }
+  #status.scanning { background: #e3f2fd; color: #0d47a1; }
+  #status.success  { background: #d4edda; color: #155724; }
+  #status.error    { background: #f8d7da; color: #721c24; }
+  #status.waiting  { background: #fff3cd; color: #856404; }
+
+  #camera-container {
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #000;
+    min-height: 260px;
+  }
+  #camera-container video {
+    width: 100% !important;
+    height: auto !important;
+    border-radius: 12px;
+    display: block;
+  }
+
+  #usb-input {
+    position: absolute;
+    left: -9999px;
+    top: -9999px;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+  }
+
+  #usb-hint {
+    text-align: center;
+    font-size: 13px;
+    color: #666;
+    margin-top: 10px;
+    line-height: 1.6;
+  }
+
+  #flash {
+    position: fixed;
+    inset: 0;
+    background: #28a745;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+    z-index: 9999;
+  }
+  #flash.active { opacity: 0.5; }
+</style>
+</head>
+<body>
+  <div id="flash"></div>
+  <div id="status" class="waiting">Starting camera...</div>
+  <div id="camera-container"></div>
+  <input id="usb-input" type="text" autocomplete="off" autocorrect="off"
+         autocapitalize="off" spellcheck="false" />
+  <div id="usb-hint">
+    📷 Point QR code at camera &nbsp;|&nbsp; 🔫 Or use USB scanner
+  </div>
+
+<script>
+  const statusEl = document.getElementById('status');
+  const flashEl  = document.getElementById('flash');
+  const usbInput = document.getElementById('usb-input');
+
+  let lastFired = '';
+  let lastFiredAt = 0;
+  const DUP_WINDOW_MS = 3000;
+
+  function setStatus(text, cls) {
+    statusEl.textContent = text;
+    statusEl.className = cls || 'scanning';
+  }
+
+  function fireQr(raw) {
+    const now = Date.now();
+    const value = String(raw || '').trim();
+    if (!value) return;
+
+    if (value === lastFired && (now - lastFiredAt) < DUP_WINDOW_MS) return;
+    lastFired = value;
+    lastFiredAt = now;
+
+    setStatus('✅ Scanned — processing…', 'success');
+    flashEl.classList.add('active');
+    setTimeout(() => flashEl.classList.remove('active'), 300);
+
+    try {
+      Streamlit.setComponentValue({ value: value, ts: now });
+    } catch (e) {
+      console.error('setComponentValue failed:', e);
+    }
+
+    setTimeout(() => setStatus('🟢 Scanning…', 'scanning'), 1800);
+  }
+
+  // ── USB scanner capture ────────────────────────────────────
+  let usbBuffer = '';
+  let usbTimer = null;
+
+  usbInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const v = (usbBuffer || usbInput.value).trim();
+      usbBuffer = '';
+      usbInput.value = '';
+      if (v) fireQr(v);
+      return;
+    }
+    if (e.key.length === 1) {
+      usbBuffer += e.key;
+      clearTimeout(usbTimer);
+      usbTimer = setTimeout(() => {
+        const v = usbBuffer.trim();
+        usbBuffer = '';
+        usbInput.value = '';
+        if (v && v.length > 5) fireQr(v);
+      }, 120);
+    }
+  });
+
+  usbInput.addEventListener('paste', () => {
+    setTimeout(() => {
+      const v = usbInput.value.trim();
+      if (v && v.length > 5) {
+        usbInput.value = '';
+        fireQr(v);
+      }
+    }, 40);
+  });
+
+  setInterval(() => {
+    if (document.activeElement !== usbInput) {
+      try { usbInput.focus(); } catch (e) {}
+    }
+  }, 800);
+
+  // ── Camera scanning ────────────────────────────────────────
+  let qrScanner = null;
+
+  function startCamera() {
+    try {
+      qrScanner = new Html5Qrcode("camera-container");
+      const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+      qrScanner.start(
+        { facingMode: "environment" },
+        config,
+        (decodedText) => fireQr(decodedText),
+        () => {}
+      ).then(() => {
+        setStatus('🟢 Scanning…', 'scanning');
+      }).catch((err) => {
+        console.warn('Camera unavailable:', err);
+        setStatus('⚠️ Camera unavailable — USB only', 'waiting');
+      });
+    } catch (err) {
+      console.error('Camera init failed:', err);
+      setStatus('⚠️ Camera unavailable — USB only', 'waiting');
+    }
+  }
+
+  function onRender() {
+    try { Streamlit.setFrameHeight(560); } catch (e) {}
+  }
+
+  try {
+    Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, onRender);
+    Streamlit.setComponentReady();
+    Streamlit.setFrameHeight(560);
+  } catch (e) {
+    console.error('Streamlit init failed:', e);
+  }
+
+  setTimeout(startCamera, 300);
+</script>
+</body>
+</html>

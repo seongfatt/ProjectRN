@@ -17,15 +17,6 @@ import io
 from services import AttendanceService, RegistrationService
 from utils.qr_scanner import qr_code_scanner_auto_detect, clear_scanned_qr
 
-try:
-    from utils.qr_scanner_auto import qr_scanner_auto
-    QR_AUTO_AVAILABLE = True
-except Exception as _e:
-    QR_AUTO_AVAILABLE = False
-    print(f"⚠️ qr_scanner_auto not available: {_e}")
-
-import time
-
 # 🔥 Optional: Try to import cv2 for QR scanning (fallback)
 try:
     import cv2
