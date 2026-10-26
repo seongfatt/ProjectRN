@@ -208,6 +208,14 @@ def show_manage(selected_date):
                                     # ✅ FIX: `value` never None, `or ""` guards against Streamlit returning None
                                     _contact_val = "" if current_contact == "NO_PHONE" else current_contact
                                     _block_val   = "" if current_block == 'Not provided' else current_block
+                                    _name_val    = p.get('name') or ""
+
+                                    # 🆕 NEW: Name field
+                                    new_name = st.text_input(
+                                        "Full Name",
+                                        value=_name_val,
+                                        key=f"new_name_{p['id']}"
+                                    ) or ""
 
                                     new_contact = st.text_input(
                                         "New Phone Number",
@@ -235,8 +243,26 @@ def show_manage(selected_date):
                                     with col_save:
                                         if st.form_submit_button("💾 Save Update", type="primary"):
                                             updates = {}
+                                            _name_clean    = new_name.strip().upper()
                                             _contact_clean = new_contact.strip()
                                             _block_clean   = new_block.strip()
+
+                                            # ── 🆕 Name ──
+                                            if _name_clean and _name_clean != (p.get('name') or '').strip().upper():
+                                                # Check for duplicates
+                                                dup_name = (
+                                                    supabase.table('participants')
+                                                    .select('id, name')
+                                                    .eq('name', _name_clean)
+                                                    .eq('active', True)
+                                                    .execute()
+                                                )
+                                                is_dup_name = any(d['id'] != p['id'] for d in dup_name.data) if dup_name.data else False
+                                                if is_dup_name:
+                                                    st.error(f"⛔ Name already used by: {dup_name.data[0]['name']}")
+                                                    st.stop()
+                                                else:
+                                                    updates['name'] = _name_clean
 
                                             # ── Phone ──
                                             if _contact_clean:
@@ -267,7 +293,13 @@ def show_manage(selected_date):
 
                                             if updates:
                                                 try:
+                                                    # Update Participants table
                                                     supabase.table('participants').update(updates).eq('id', p['id']).execute()
+                                                    
+                                                    # 🆕 Sync Name to Attendance Table if it changed
+                                                    if 'name' in updates:
+                                                        supabase.table('attendance').update({'name': updates['name']}).eq('participant_id', p['id']).execute()
+
                                                     st.success("✅ Resident updated successfully!")
                                                     st.session_state.participants = load_participants()
                                                     refresh_data()
