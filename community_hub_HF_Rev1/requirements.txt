@@ -13,3 +13,4 @@ toml==0.10.2
 websockets==13.0
 protobuf==4.25.3
 pyzbar==0.1.9
+pyarrow==15.0.2
