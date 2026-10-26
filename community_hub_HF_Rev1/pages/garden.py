@@ -10,7 +10,6 @@ from utils import (mask_phone, get_plot, update_plot, get_user_plot,
 def get_setting(key, default=None):
     if not DB_CONNECTED: return default
     try:
-        # 🔥 FIX: Use maybe_single() to prevent PGRST116 error
         r = supabase.table('system_settings').select('setting_value').eq('setting_key', key).maybe_single().execute()
         return r.data['setting_value'] if r.data else default
     except Exception:
@@ -191,7 +190,6 @@ def show_garden():
         price = float(get_setting('garden_monthly_rent', '15.00'))
         sections = _group_sections(layout_data)
         
-        # Build the "Intact Grid Map" with Axis for each section
         for sec_name, sec_items in sections.items():
             st.subheader(f"{sec_name} ({len(sec_items)} plots)")
             max_row = max([i['grid_row'] for i in sec_items]) + 1
@@ -202,27 +200,22 @@ def show_garden():
 
             html = '<div style="overflow-x: auto; border: 2px solid #333; border-radius: 8px; background: #1e1e1e; display: inline-block;">'
             
-            # Header Row (Column Numbers)
             html += '<div style="display: flex; margin-left: 30px;">'
             html += '<div style="width: 30px;"></div>'
             for c in range(max_col):
                 html += f'<div style="width: 100px; font-size: 10px; color: #aaa; text-align: center;">{c}</div>'
             html += '</div>'
 
-            # Grid Rows
             for r in range(max_row):
                 html += '<div style="display: flex;">'
-                # Row Number on the left
                 html += f'<div style="width: 30px; font-size: 10px; color: #aaa; display: flex; align-items: center; justify-content: center;">{r}</div>'
                 
                 for col_idx, plot_num in enumerate(grid[r]):
                     if plot_num is None:
-                        # Empty Cell (Dotted Grid Line, Intact)
                         html += '<div style="width: 100px; height: 85px; background: #2a2a2a; border: 1px dashed #555; display: flex; flex-direction: column; align-items: center; justify-content: center;">'
                         html += '<div style="font-size: 12px; color: #777;">🌱</div>'
                         html += '<div style="font-size: 9px; color: #777;">Empty</div></div>'
                     else:
-                        # ORIGINAL PLOT LOGIC (Icons, Labels, Colors)
                         layout_item = next((item for item in layout_data if item['plot_number'] == plot_num), None)
                         plot_type = layout_item['plot_type'] if layout_item and 'plot_type' in layout_item else 'B'
                         pd_item = plots_dict.get(plot_num, {'occupied': False, 'user_id': None})
@@ -230,7 +223,6 @@ def show_garden():
                         is_paid = pd_item.get('paid', False)
                         color = get_plot_type_color(plot_type)
                         
-                        # Build the icon
                         icon_html = ''
                         if occ and is_paid:
                             icon_html = '<div style="position:absolute; top:4px; right:6px; font-size:14px;">💲</div>'
@@ -249,7 +241,6 @@ def show_garden():
                 html += '</div>'
             html += '</div>'
 
-            # Render the entire section as one HTML block
             st.markdown(html, unsafe_allow_html=True)
             
     st.divider()
@@ -260,7 +251,6 @@ def show_garden():
         if 'admin_garden_tab' not in st.session_state:
             st.session_state.admin_garden_tab = "🗺️ Edit Garden Map"
 
-        # 🆕 SAFE CALLBACK: Prevents Streamlit crash when removing plots
         def _remove_plot_cb(block_name, plot_num_to_remove):
             if remove_garden_layout(block_name, plot_num_to_remove):
                 st.session_state.new_plot_dropdown = f"{plot_num_to_remove} (Unassigned)"
@@ -291,7 +281,6 @@ def show_garden():
                 st.success(f"✅ Selected: **{selected_participant['name']}**")
                 pid_l = str(selected_participant['id']).lower().strip()
 
-                # Gather ALL plots owned by this resident (in this block + elsewhere)
                 owned_in_block = [
                     p for p in block_plots
                     if p.get('occupied') and str(p.get('user_id', '')).lower().strip() == pid_l
@@ -304,7 +293,6 @@ def show_garden():
                 ]
                 total_owned = len(owned_in_block) + len(owned_elsewhere)
 
-                # Ownership summary card
                 if total_owned > 0:
                     with st.expander(
                         f"📋 {selected_participant['name']} currently owns **{total_owned} plot(s)**",
@@ -323,28 +311,43 @@ def show_garden():
                                     f"&nbsp;&nbsp;&nbsp;&nbsp;🏢 **Plot {p['plot_number']}** in {p.get('block_name')} — Type {p.get('plot_type', 'B')}"
                                 )
 
-                # 🆕 FIX: Include ghost plots (in layout but missing from DB) as available
+                # 🆕 FIX: Include ghost/orphaned plots as available
                 available_plots = []
                 for i in current_block_layout:
                     p_num = i['plot_number']
                     p_data = plots_dict.get(p_num)
                     if not p_data:
+                        # Missing from DB entirely
                         available_plots.append({
                             'plot_number': p_num,
                             'block_name': selected_block,
                             'plot_type': i.get('plot_type', 'B'),
-                            'occupied': False
+                            'occupied': False,
+                            'is_ghost': True
                         })
                     elif not p_data.get('occupied'):
+                        # Empty
                         available_plots.append(p_data)
+                    elif p_data.get('occupied') and not p_data.get('user_id'):
+                        # Orphaned (occupied but no user)
+                        available_plots.append({
+                            'plot_number': p_num,
+                            'block_name': selected_block,
+                            'plot_type': p_data.get('plot_type', i.get('plot_type', 'B')),
+                            'occupied': True,
+                            'is_ghost': True
+                        })
 
                 if not available_plots:
                     st.error("❌ No available plots to assign in this block.")
                 else:
-                    plot_options = {
-                        f"Plot {p['plot_number']} (Type {p.get('plot_type','B')})": p['plot_number']
-                        for p in available_plots
-                    }
+                    plot_options = {}
+                    for p in available_plots:
+                        label = f"Plot {p['plot_number']} (Type {p.get('plot_type','B')})"
+                        if p.get('is_ghost'):
+                            label += " - 🚨 Orphaned/Ghost"
+                        plot_options[label] = p['plot_number']
+                        
                     selected_plot_label = st.selectbox(
                         "Select Target Plot",
                         list(plot_options.keys()),
@@ -352,7 +355,6 @@ def show_garden():
                     )
                     selected_plot_num = plot_options[selected_plot_label]
 
-                    # Assignment Mode — Add Additional vs Swap
                     swap_plot_num = None
                     if owned_in_block:
                         st.markdown("**🧩 Assignment Mode**")
@@ -395,7 +397,6 @@ def show_garden():
                         key="admin_assign_renewal",
                     )
 
-                    # Dynamic button label
                     if swap_plot_num:
                         button_label = f"🔄 Swap Plot {swap_plot_num} → Plot {selected_plot_num}"
                     elif total_owned > 0:
@@ -405,7 +406,6 @@ def show_garden():
 
                     if st.button(button_label, type="primary", use_container_width=True):
                         try:
-                            # If swapping, release the chosen old plot first
                             if swap_plot_num:
                                 supabase.table('garden_plots').update({
                                     'occupied': False,
@@ -416,7 +416,6 @@ def show_garden():
                                     'updated_at': datetime.now().isoformat(),
                                 }).eq('block_name', selected_block).eq('plot_number', swap_plot_num).execute()
 
-                            # Assign the new plot
                             updates = {
                                 'block_name': selected_block,
                                 'plot_number': selected_plot_num,
@@ -429,10 +428,8 @@ def show_garden():
                                 updates['renewal_due_date'] = str(renewal_date)
                                 updates['renewal_status'] = 'active'
 
-                            # 🆕 UPSERT FIX: Fixes ghost plots (creates row if missing, updates if exists)
                             supabase.table('garden_plots').upsert(updates, on_conflict='block_name,plot_number').execute()
 
-                            # Ensure 'Gardener' tag is present (added once)
                             if 'Gardener' not in selected_participant.get('member_type', ''):
                                 new_type = (
                                     selected_participant.get('member_type', 'Resident') + ', Gardener'
@@ -470,11 +467,10 @@ def show_garden():
             found_layout = next((l for l in layout_data if l['plot_number'] == plot_edit_num), None)
             
             if not found_layout:
-                # 🚨 RECOVERY TOOL: Plot is occupied but missing from the map
+                # Plot is in DB but missing from map
                 if found_plot and found_plot.get('occupied'):
                     st.error(f"🚨 **Orphaned Plot Found:** Plot {plot_edit_num} is occupied in the database but is missing from the visual layout map.")
                     if st.button("🔧 Auto-Fix: Add this plot to the map", type="primary"):
-                        # Add it to a fallback section so it shows up
                         save_garden_layout(selected_block, plot_edit_num, 0, 0, found_plot.get('plot_type', 'B'), "Recovered Plots")
                         st.success(f"✅ Plot {plot_edit_num} recovered! You can now see it in the 'Recovered Plots' section.")
                         st.rerun()
@@ -485,16 +481,28 @@ def show_garden():
                 is_occupied = found_plot.get('occupied', False) if found_plot else False
                 owner_id = found_plot.get('user_id') if found_plot else None
                 owner_data = find_participant_by_id(owner_id) if owner_id else None
-                owner_name = owner_data['name'] if owner_data else "Unoccupied"
+                
+                # 🆕 FIX: Detect Orphaned plots (Occupied but no owner in DB)
+                is_orphaned = is_occupied and not owner_data
+                
+                if is_orphaned:
+                    owner_name = "⚠️ Unknown (Orphaned)"
+                    st.error(f"🚨 **Data Conflict Detected:** Plot {plot_edit_num} is marked as Occupied in the database, but the Owner ID is missing or deleted.")
+                    st.info("👉 Click **Force Release Plot** below to clear this broken state, then use Smart Assignment.")
+                else:
+                    owner_name = owner_data['name'] if owner_data else "Unoccupied"
+
                 is_paid = found_plot.get('paid', False) if found_plot else False
                 current_plot_type = found_layout.get('plot_type', 'B')
                 plot_color = get_plot_type_color(current_plot_type)
+                
                 st.markdown(f"""
                 <div style="border-left: 6px solid {plot_color}; padding: 15px; border-radius: 8px; margin: 10px 0; background: #1e1e1e;">
                     <h4 style="margin:0;">Plot {plot_edit_num} (Type {current_plot_type}) — {selected_block}</h4>
                     <div style="font-size:14px; color:#aaa;">Owner: {owner_name}</div>
                     <div style="font-size:14px; color:#aaa;">Status: {'✅ Occupied' if is_occupied else '🟩 Available (Community Stewarded)'}</div>
                 </div>""", unsafe_allow_html=True)
+                
                 c1, c2 = st.columns(2)
                 with c1:
                     st.markdown("**📐 Manage Plot Size**")
@@ -723,7 +731,6 @@ def show_garden():
                 )
                 st.divider()
                 
-                # 🔥 SAFE CLEAR ALL PLOTS
                 st.markdown("**🗑️ Clear All Plots**")
                 st.caption("⚠️ Removes only the MAP LAYOUT of this block. Owners & payments are safe.")
                 confirm_clear = st.checkbox(f"I understand this clears the {selected_block} layout", key=f"confirm_clear_{selected_block}")
@@ -753,7 +760,6 @@ def show_garden():
                 </style>
                 """, unsafe_allow_html=True)
 
-                # 🔥 Build the matrix STRICTLY from Editor Rows × Editor Columns
                 n_rows = int(editor_rows)
                 n_cols = int(editor_cols)
                 editor_grid = [[None for _ in range(n_cols)] for _ in range(n_rows)]
@@ -769,7 +775,6 @@ def show_garden():
                         with cols_ui[c]:
                             plot_num = editor_grid[r][c]
                             if plot_num is None:
-                                # ── EMPTY CELL → Add button ──
                                 if st.button("+", key=f"add_{r}_{c}_{selected_block}_{selected_section}", use_container_width=True):
                                     existing_spot = next((item for item in layout_data if item['plot_number'] == selected_new_plot), None)
                                     if existing_spot:
@@ -784,11 +789,9 @@ def show_garden():
                                     if save_garden_layout(selected_block, selected_new_plot, r, c, final_type):
                                         st.rerun()
                             else:
-                                # ── PLOT CELL → colored remove button ──
                                 layout_item = next((item for item in layout_data if item['plot_number'] == plot_num), None)
                                 plot_type = layout_item['plot_type'] if layout_item and 'plot_type' in layout_item else 'B'
                                 color = get_plot_type_color(plot_type)
-                                # 🆕 FIX: Use on_click callback to prevent StreamlitAPIException
                                 if st.button(
                                     label=str(plot_num), 
                                     key=f"remove_{plot_num}_{selected_block}_{r}_{c}", 
