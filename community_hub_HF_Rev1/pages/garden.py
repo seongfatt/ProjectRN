@@ -72,9 +72,22 @@ def seed_block_plots(block_name, layout_items):
     try:
         existing = supabase.table('garden_plots').select('plot_number').eq('block_name', block_name).execute().data or []
         have = {e['plot_number'] for e in existing}
-        rows = [{'block_name': block_name, 'plot_number': it['plot_number'],
-                 'plot_type': it.get('plot_type', 'B'), 'occupied': False, 'paid': False}
-                for it in layout_items if it['plot_number'] not in have]
+        
+        # 🆕 FIX: Added 'area' to the seed dictionary
+        rows = []
+        for it in layout_items:
+            if it['plot_number'] not in have:
+                ptype = it.get('plot_type', 'B')
+                area = PLOT_TYPES.get(ptype, PLOT_TYPES['B']).get('area', 2.5)
+                rows.append({
+                    'block_name': block_name, 
+                    'plot_number': it['plot_number'],
+                    'plot_type': ptype, 
+                    'area': area,
+                    'occupied': False, 
+                    'paid': False
+                })
+                
         if rows:
             supabase.table('garden_plots').insert(rows).execute()
         return len(rows)
@@ -430,14 +443,16 @@ def show_garden():
                                     'updated_at': datetime.now().isoformat(),
                                 }).eq('block_name', selected_block).eq('plot_number', swap_plot_num).execute()
 
-                            # 🆕 FIX: Grab the plot_type from the layout map so the INSERT doesn't fail
+                            # 🆕 FIX: Grab the plot_type and area from the layout map
                             layout_item = next((item for item in current_block_layout if item['plot_number'] == selected_plot_num), None)
                             fallback_type = layout_item.get('plot_type', 'B') if layout_item else 'B'
+                            fallback_area = PLOT_TYPES.get(fallback_type, PLOT_TYPES['B']).get('area', 2.5)
 
                             updates = {
                                 'block_name': selected_block,
                                 'plot_number': selected_plot_num,
-                                'plot_type': fallback_type, # Required for ghost plot inserts
+                                'plot_type': fallback_type, 
+                                'area': fallback_area, # 🆕 Required for ghost plot inserts
                                 'user_id': selected_participant['id'],
                                 'change_log': f"Admin assigned to {selected_participant['id']}",
                                 'occupied': True,
@@ -538,7 +553,8 @@ def show_garden():
                             try:
                                 supabase.table('garden_layout').update({'plot_type': new_plot_type}).eq('block_name', selected_block).eq('plot_number', plot_edit_num).execute()
                                 if found_plot:
-                                    supabase.table('garden_plots').update({'plot_type': new_plot_type}).eq('block_name', selected_block).eq('plot_number', plot_edit_num).execute()
+                                    new_area = PLOT_TYPES.get(new_plot_type, PLOT_TYPES['B']).get('area', 2.5)
+                                    supabase.table('garden_plots').update({'plot_type': new_plot_type, 'area': new_area}).eq('block_name', selected_block).eq('plot_number', plot_edit_num).execute()
                                 log_action(st.session_state.user_role, "CHANGE_PLOT_SIZE", f"Plot {plot_edit_num} ({selected_block}) {current_plot_type}→{new_plot_type}", str(plot_edit_num))
                                 st.success(f"✅ Plot {plot_edit_num} size updated to Type {new_plot_type}!")
                                 st.rerun()
