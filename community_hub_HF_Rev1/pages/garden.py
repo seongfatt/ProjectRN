@@ -311,7 +311,7 @@ def show_garden():
                                     f"&nbsp;&nbsp;&nbsp;&nbsp;🏢 **Plot {p['plot_number']}** in {p.get('block_name')} — Type {p.get('plot_type', 'B')}"
                                 )
 
-                # 🆕 FIX: Include ghost/orphaned plots as available
+                # 🆕 FIX: Cross-reference the user_id with actual residents to catch ghost plots
                 available_plots = []
                 for i in current_block_layout:
                     p_num = i['plot_number']
@@ -328,15 +328,29 @@ def show_garden():
                     elif not p_data.get('occupied'):
                         # Empty
                         available_plots.append(p_data)
-                    elif p_data.get('occupied') and not p_data.get('user_id'):
-                        # Orphaned (occupied but no user)
-                        available_plots.append({
-                            'plot_number': p_num,
-                            'block_name': selected_block,
-                            'plot_type': p_data.get('plot_type', i.get('plot_type', 'B')),
-                            'occupied': True,
-                            'is_ghost': True
-                        })
+                    elif p_data.get('occupied'):
+                        uid = p_data.get('user_id')
+                        if not uid:
+                            # Occupied but no user ID
+                            available_plots.append({
+                                'plot_number': p_num,
+                                'block_name': selected_block,
+                                'plot_type': p_data.get('plot_type', i.get('plot_type', 'B')),
+                                'occupied': True,
+                                'is_ghost': True
+                            })
+                        else:
+                            # Has a user_id, check if the user actually exists in the system
+                            user_exists = any(str(p['id']) == str(uid) for p in st.session_state.participants)
+                            if not user_exists:
+                                # 🚨 Orphaned: user_id points to someone deleted
+                                available_plots.append({
+                                    'plot_number': p_num,
+                                    'block_name': selected_block,
+                                    'plot_type': p_data.get('plot_type', i.get('plot_type', 'B')),
+                                    'occupied': True,
+                                    'is_ghost': True
+                                })
 
                 if not available_plots:
                     st.error("❌ No available plots to assign in this block.")
@@ -416,9 +430,14 @@ def show_garden():
                                     'updated_at': datetime.now().isoformat(),
                                 }).eq('block_name', selected_block).eq('plot_number', swap_plot_num).execute()
 
+                            # 🆕 FIX: Grab the plot_type from the layout map so the INSERT doesn't fail
+                            layout_item = next((item for item in current_block_layout if item['plot_number'] == selected_plot_num), None)
+                            fallback_type = layout_item.get('plot_type', 'B') if layout_item else 'B'
+
                             updates = {
                                 'block_name': selected_block,
                                 'plot_number': selected_plot_num,
+                                'plot_type': fallback_type, # Required for ghost plot inserts
                                 'user_id': selected_participant['id'],
                                 'change_log': f"Admin assigned to {selected_participant['id']}",
                                 'occupied': True,
@@ -466,8 +485,14 @@ def show_garden():
             found_plot = next((p for p in block_plots if p['plot_number'] == plot_edit_num), None)
             found_layout = next((l for l in layout_data if l['plot_number'] == plot_edit_num), None)
             
+            with st.expander("🛠️ Database Inspector (For debugging)", expanded=False):
+                if found_plot:
+                    st.write("**Raw `garden_plots` data:**")
+                    st.json(found_plot)
+                else:
+                    st.warning("Not found in `garden_plots` table.")
+                    
             if not found_layout:
-                # Plot is in DB but missing from map
                 if found_plot and found_plot.get('occupied'):
                     st.error(f"🚨 **Orphaned Plot Found:** Plot {plot_edit_num} is occupied in the database but is missing from the visual layout map.")
                     if st.button("🔧 Auto-Fix: Add this plot to the map", type="primary"):
@@ -482,13 +507,12 @@ def show_garden():
                 owner_id = found_plot.get('user_id') if found_plot else None
                 owner_data = find_participant_by_id(owner_id) if owner_id else None
                 
-                # 🆕 FIX: Detect Orphaned plots (Occupied but no owner in DB)
                 is_orphaned = is_occupied and not owner_data
                 
                 if is_orphaned:
                     owner_name = "⚠️ Unknown (Orphaned)"
                     st.error(f"🚨 **Data Conflict Detected:** Plot {plot_edit_num} is marked as Occupied in the database, but the Owner ID is missing or deleted.")
-                    st.info("👉 Click **Force Release Plot** below to clear this broken state, then use Smart Assignment.")
+                    st.info("👉 Click **Force Wipe** below to clear this broken state, then use Smart Assignment.")
                 else:
                     owner_name = owner_data['name'] if owner_data else "Unoccupied"
 
@@ -546,9 +570,10 @@ def show_garden():
                             st.rerun()
                         else:
                             st.warning("Renewal dates are only applicable for occupied plots.")
+                    
                     if is_occupied:
                         st.divider()
-                        if st.button("❌ Force Release Plot", type="secondary", key=f"release_{plot_edit_num}", use_container_width=True):
+                        if st.button("❌ Force Release Plot (Normal)", type="secondary", key=f"release_{plot_edit_num}", use_container_width=True):
                             other_plots = [p for p in plots if p.get('user_id') == owner_id and not (p.get('block_name') == selected_block and p.get('plot_number') == plot_edit_num)]
                             if owner_data and not other_plots:
                                 updated_types = [t.strip() for t in owner_data.get('member_type', '').split(',') if t.strip() != 'Gardener']
@@ -558,12 +583,26 @@ def show_garden():
                             log_action('admin', 'RELEASE_PLOT', f"Plot {plot_edit_num} ({selected_block}) force released", str(plot_edit_num))
                             st.success(f"Plot {plot_edit_num} released!")
                             st.rerun()
+                            
+                        st.markdown("---")
+                        st.markdown("**🚨 Data Recovery**")
+                        if st.button("🚨 Force Wipe (Fixes Ghost Conflicts)", type="primary", key=f"wipe_{plot_edit_num}", use_container_width=True):
+                            supabase.table('garden_plots').update({
+                                'occupied': False, 
+                                'user_id': None, 
+                                'renewal_due_date': None, 
+                                'renewal_status': None, 
+                                'change_log': "Force wiped by admin to fix DB conflict", 
+                                'updated_at': datetime.now().isoformat()
+                            }).eq('block_name', selected_block).eq('plot_number', plot_edit_num).execute()
+                            log_action('admin', 'FORCE_WIPE_PLOT', f"Plot {plot_edit_num} ({selected_block}) force wiped", str(plot_edit_num))
+                            st.success(f"Plot {plot_edit_num} data wiped! You can now assign it in Smart Assignment.")
+                            st.rerun()
 
         elif admin_panel == "🗺️ Edit Garden Map":
             st.markdown("#### Design Your Garden Map")
             st.caption("💡 Create, rename or delete blocks, build custom sections, or fine-tune with the interactive grid.")
 
-            # ══════════ 🧩 SECTION BUILDER (full-width card) ══════════
             st.markdown("""
             <style>
                 .sb-card {background:#161616;border:1px solid #2e2e2e;border-radius:12px;padding:18px 18px 10px 18px;margin:10px 0 16px 0;}
@@ -583,7 +622,6 @@ def show_garden():
                 st.session_state[sb_key] = [{"name": "Section 1", "rows": 2, "cols": 7, "ptype": "B"}]
             sb_rows = st.session_state[sb_key]
 
-            # Header row
             hd = st.columns([3, 1, 1, 1, 1, 0.6])
             hd[0].markdown('<span class="sb-head">Section Name</span>', unsafe_allow_html=True)
             hd[1].markdown('<span class="sb-head">Rows</span>', unsafe_allow_html=True)
@@ -635,7 +673,6 @@ def show_garden():
 
             st.divider()
 
-            # ══════════ BLOCK OPS + INTERACTIVE EDITOR ══════════
             col_left, col_right = st.columns([1, 2])
             with col_left:
                 with st.expander("➕ Create New Block", expanded=False):
