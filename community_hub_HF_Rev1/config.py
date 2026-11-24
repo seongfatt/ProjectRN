@@ -3,6 +3,26 @@ import streamlit as st
 from supabase import create_client
 from datetime import timezone, timedelta, datetime
 
+def try_reconnect():
+    """Re-attempt the Supabase connection. Safe to call many times."""
+    global supabase, DB_CONNECTED, DB_ERROR_MSG
+    if DB_CONNECTED and supabase is not None:
+        return True
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        DB_ERROR_MSG = "Missing SUPABASE_URL or SUPABASE_KEY"
+        return False
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        supabase.table("participants").select("id").limit(1).execute()
+        DB_CONNECTED = True
+        DB_ERROR_MSG = None
+        print("✅ Supabase (re)connected successfully!")
+    except Exception as e:
+        DB_CONNECTED = False
+        DB_ERROR_MSG = str(e)
+        print(f"❌ Supabase reconnect failed: {e}")
+    return DB_CONNECTED
+
 # ========== READ SECRETS FROM MULTIPLE SOURCES ==========
 def get_secret(key, default=None):
     """Get secret from st.secrets (Streamlit Cloud) or environment variables (Render)."""

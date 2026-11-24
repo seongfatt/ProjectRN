@@ -3,6 +3,100 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 import urllib.parse
 import time
+import config  # ← NEW: lets us call try_reconnect() and read live globals
+
+# ── 1. Page config (must be the first st command) ──
+st.set_page_config(
+    page_title="Community Hub",
+    page_icon="logo.png",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ── 2. Your existing hide-sidebar CSS (keep as-is) ──
+st.markdown("""
+<style>
+[data-testid="stSidebar"] { display: none !important; }
+[data-testid="stSidebarCollapseButton"] { display: none !important; }
+[data-testid="collapsedControl"] { display: none !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# ── 3. COLD-START / CONNECTION WARMUP GATE ──
+#    Runs BEFORE importing utils/pages/services so they bind a LIVE client.
+if not config.DB_CONNECTED:
+    config.try_reconnect()
+
+if not config.DB_CONNECTED:
+    st.markdown("""
+    <div style="background:#fff3cd;border-left:5px solid #ffc107;padding:30px;
+                margin:50px auto;max-width:600px;border-radius:10px;text-align:center;
+                color:#1a1a1a;">
+        <h2 style="color:#856404;margin-top:0;">⏳ System is Starting</h2>
+        <p style="font-size:16px;">
+            <strong>This page will reload automatically in a few seconds.</strong><br>
+            Our server is waking up — please wait 30–60 seconds.<br>
+            No need to refresh manually!
+        </p>
+        <div style="font-size:48px;margin:20px 0;">🌱</div>
+        <p style="color:#666;font-size:13px;">
+            If this persists for more than 2 minutes, contact the administrator.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    # Auto-reload the whole page every 6s until the connection succeeds
+    from streamlit.components.v1 import html
+    html("<script>setTimeout(function(){window.parent.location.reload();},6000);</script>", height=0)
+    st.stop()
+
+# ── 4. Connection is GOOD → now bind app-level names ──
+from config import (
+    CHAIRMAN_PASSWORD, supabase, DB_CONNECTED, MOBILE_CSS,
+    ADMIN_PASSWORD, CHECKER_PASSWORD, APP_URL, load_activities,
+    PLOT_TYPES, TOTAL_PLOTS, TYPE_MAP, refresh_data,
+)
+
+# ── 5. Face availability (MOVED to AFTER the gate) ──
+FACE_AVAILABLE = False
+try:
+    import face_recognition
+    import cv2
+    if hasattr(face_recognition, 'face_encodings'):
+        FACE_AVAILABLE = True
+except (ImportError, AttributeError):
+    FACE_AVAILABLE = False
+
+show_face_checkin = None
+if FACE_AVAILABLE:
+    try:
+        from pages.face_checkin import show_face_checkin
+    except ImportError:
+        FACE_AVAILABLE = False
+
+# ── 6. ONLY NOW import utils / pages / services ──
+from utils import (
+    mask_phone, get_attendance_count, check_and_convert_status,
+    generate_token, verify_token, load_participants, load_plots,
+    get_plot, update_plot, get_user_plot, create_request,
+    get_pending_requests, update_request_status, get_occupied_count,
+    clean_phone_number, find_participant_by_phone, check_returning_guest,
+)
+from pages.checkin import show_checkin
+from pages.reports import show_reports
+from pages.manage import show_manage
+from pages.garden import show_garden
+from pages.residents import show_residents
+from pages.meeting import show_meeting
+from pages.volunteer import show_volunteer
+from pages.volunteer_access import show_volunteer_access
+from pages.sessions import show_sessions
+from pages.chairman import show_chairman
+from pages.dashboard import show_dashboard
+from pages.settings import show_settings
+from pages.volunteer_portal import show_volunteer_portal
+
+# ── 7. Everything below (MOBILE_CSS, inject_responsive_css, session_state,
+#       URL routing, MAIN APP, etc.) stays EXACTLY as it is now. ──
 
 # Add error handling for cold starts
 try:
