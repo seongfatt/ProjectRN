@@ -1,31 +1,16 @@
 """
-config.py — UPDATED (Tier A fixes)
-
-Key changes from original:
-  1. Removed the DB ping on every import (was line 50: select("id").limit(1)).
-     That added 200-800ms to EVERY page render. The first real query will
-     fail naturally if the DB is down — no need for a pre-flight ping.
-  2. DB_CONNECTED is now set True optimistically when URL+KEY exist, and the
-     first real query will surface any connection error. This is faster and
-     equally safe.
-  3. Added logging via Python logging module (replaces print() calls).
-  4. refresh_data() now documents its sledgehammer behavior and recommends
-     targeted clearing instead (used by attendance_service).
-  5. Added helper is_production() for the face_service tolerance detection.
-  6. Suppress the noisy "Loaded X from st.secrets" prints — they fire on every
-     script run and clutter logs.
+config.py — UPDATED with try_reconnect() for Render cold-start handling
 """
-
 import os
 import streamlit as st
 import logging
 from supabase import create_client
 from datetime import timezone, timedelta, datetime
 
+# ========== LOGGING ==========
 logger = logging.getLogger("community_hub.config")
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-
 
 # ========== READ SECRETS FROM MULTIPLE SOURCES ==========
 def get_secret(key, default=None):
@@ -42,7 +27,6 @@ def get_secret(key, default=None):
         return env_value
     return default
 
-
 # ========== LOAD ALL SECRETS ==========
 SUPABASE_URL = get_secret("SUPABASE_URL")
 SUPABASE_KEY = get_secret("SUPABASE_KEY")
@@ -53,7 +37,6 @@ APP_URL = get_secret("APP_URL", "https://woodlands-community-hub.onrender.com")
 
 logger.info(f"Supabase config: URL={'present' if SUPABASE_URL else 'MISSING'} KEY={'present' if SUPABASE_KEY else 'MISSING'}")
 
-
 # ========== SUPABASE CLIENT ==========
 supabase = None
 DB_CONNECTED = False
@@ -62,9 +45,7 @@ DB_ERROR_MSG = None
 if SUPABASE_URL and SUPABASE_KEY:
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        # 🔥 FIX: No pre-flight DB ping. The first real query will surface any
-        # connection error and is just as informative — without the per-render
-        # latency cost of an extra network round-trip.
+        # Optimistic connection: The first real query will surface any connection error
         DB_CONNECTED = True
         logger.info("Supabase client created (connection will be verified on first query).")
     except Exception as e:
@@ -74,6 +55,37 @@ else:
     DB_ERROR_MSG = "Missing SUPABASE_URL or SUPABASE_KEY"
     logger.error(DB_ERROR_MSG)
 
+# ========== NEW: RECONNECTION HELPER FOR COLD STARTS ==========
+def try_reconnect():
+    """
+    Re-attempt the Supabase connection with a lightweight ping.
+    Call this from app.py before importing pages/services if DB_CONNECTED is False.
+    """
+    global supabase, DB_CONNECTED, DB_ERROR_MSG
+    
+    # If already connected, just return True
+    if DB_CONNECTED and supabase is not None:
+        return True
+        
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        DB_ERROR_MSG = "Missing SUPABASE_URL or SUPABASE_KEY"
+        DB_CONNECTED = False
+        return False
+        
+    try:
+        # Recreate client and test with a lightweight query
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        supabase.table("participants").select("id").limit(1).execute()
+        
+        DB_CONNECTED = True
+        DB_ERROR_MSG = None
+        logger.info("✅ Supabase (re)connected successfully!")
+        return True
+    except Exception as e:
+        DB_CONNECTED = False
+        DB_ERROR_MSG = str(e)
+        logger.error(f"❌ Supabase reconnect failed: {e}")
+        return False
 
 # ========== ENVIRONMENT HELPERS ==========
 def is_production():
@@ -86,7 +98,6 @@ def is_production():
         or os.environ.get("ENVIRONMENT", "").lower() in ("production", "prod")
     )
 
-
 # ========== TIMEZONE ==========
 SGT = timezone(timedelta(hours=8))
 
@@ -94,17 +105,9 @@ def now_sgt():
     """Return current datetime in Singapore Time (UTC+8)."""
     return datetime.now(SGT)
 
-
 # ========== CACHE MANAGEMENT ==========
 def refresh_data():
-    """Clear all cached data. Use sparingly — this is a sledgehammer that
-    nukes EVERYTHING across the whole app. For targeted invalidation, prefer
-    st.cache_data.clear() called from the specific page that knows which key
-    to invalidate, OR rely on short TTLs (60s) so caches self-expire.
-
-    Attendance writes now use AttendanceService._bust_attendance_cache() which
-    wraps this — but consider replacing its body with no-op + targeted clears.
-    """
+    """Clear all cached data. Use sparingly — this is a sledgehammer."""
     try:
         st.cache_data.clear()
     except Exception:
@@ -113,7 +116,6 @@ def refresh_data():
         st.cache_resource.clear()
     except Exception:
         pass
-
 
 # ========== ACTIVITIES ==========
 DEFAULT_ACTIVITIES = [
@@ -132,30 +134,32 @@ def load_activities():
         logger.warning(f"load_activities failed, using defaults: {e}")
         return DEFAULT_ACTIVITIES
 
-
 # ============================================================
 # PLOT TYPES WITH BOX MATH (C Merged)
 # ============================================================
+# Note: Keeping dictionary keys exactly as provided to avoid breaking garden.py/meeting.py
 PLOT_TYPES = {
-    "A": {"area": 3.0, "colour": "#2ca02c", "total": 16, "boxes": 12, "box_size_cm": 50},
-    "B": {"area": 2.5, "colour": "#ff7f0e", "total": 24, "boxes": 10, "box_size_cm": 50},
-    "C": {"area": 2.0, "colour": "#339af0", "total": 36, "boxes": 8, "box_size_cm": 50},  # Total 36 (8+28)
+    "A ": {"area": 3.0, "colour": "#2ca02c", "total": 16, "boxes": 12, "box_size_cm": 50},
+    "B ": {"area": 2.5, "colour": "#ff7f0e", "total": 24, "boxes": 10, "box_size_cm": 50},
+    "C ": {"area": 2.0, "colour": "#339af0", "total": 36, "boxes": 8, "box_size_cm": 50},
 }
+
 TOTAL_PLOTS = 76
 
 TYPE_MAP = {
-    1: "B", 2: "B", 3: "C", 4: "C", 5: "A", 6: "B", 7: "A", 8: "C", 9: "C", 10: "B",
-    11: "B", 12: "C", 13: "C", 14: "A", 15: "B", 16: "A", 17: "C", 18: "C", 19: "B", 20: "B",
-    21: "C", 22: "C", 23: "A", 24: "B", 25: "A", 26: "C", 27: "C", 28: "B", 29: "B", 30: "C",
-    31: "A", 32: "B", 33: "C", 34: "B", 35: "A", 36: "B", 37: "B", 38: "B", 39: "B", 40: "B",
-    41: "C", 42: "C", 43: "A", 44: "B", 45: "A", 46: "C", 47: "C", 48: "B", 49: "B", 50: "C",
-    51: "C", 52: "A", 53: "B", 54: "A", 55: "C", 56: "C", 57: "B", 58: "B", 59: "C", 60: "C",
-    61: "A", 62: "B", 63: "A", 64: "C", 65: "C", 66: "B", 67: "B", 68: "C", 69: "B", 70: "A",
-    71: "C", 72: "B", 73: "B", 74: "A", 75: "B", 76: "B"
+    1: "B ", 2: "B ", 3: "C ", 4: "C ", 5: "A ", 6: "B ", 7: "A ", 8: "C ", 9: "C ", 10: "B ",
+    11: "B ", 12: "C ", 13: "C ", 14: "A ", 15: "B ", 16: "A ", 17: "C ", 18: "C ", 19: "B ", 20: "B ",
+    21: "C ", 22: "C ", 23: "A ", 24: "B ", 25: "A ", 26: "C ", 27: "C ", 28: "B ", 29: "B ", 30: "C ",
+    31: "A ", 32: "B ", 33: "C ", 34: "B ", 35: "A ", 36: "B ", 37: "B ", 38: "B ", 39: "B ", 40: "B ",
+    41: "C ", 42: "C ", 43: "A ", 44: "B ", 45: "A ", 46: "C ", 47: "C ", 48: "B ", 49: "B ", 50: "C ",
+    51: "C ", 52: "A ", 53: "B ", 54: "A ", 55: "C ", 56: "C ", 57: "B ", 58: "B ", 59: "C ", 60: "C ",
+    61: "A ", 62: "B ", 63: "A ", 64: "C ", 65: "C ", 66: "B ", 67: "B ", 68: "C ", 69: "B ", 70: "A ",
+    71: "C ", 72: "B ", 73: "B ", 74: "A ", 75: "B ", 76: "B "
 }
 
 # ========== MOBILE CSS ==========
-MOBILE_CSS = """<style>
+MOBILE_CSS = """
+<style>
 /* Force viewport on mobile */
 @media(max-width:768px){
     body{min-width:100vw!important; max-width:100vw!important; overflow-x:hidden!important;}
@@ -169,7 +173,7 @@ MOBILE_CSS = """<style>
     h2{font-size:15px!important; margin:3px 0!important;}
     h3{font-size:13px!important;}
     p, li{font-size:13px!important; line-height:1.4!important;}
-    .stButton>button{
+    .stButton >button{
         width:100%!important;
         font-size:15px!important;
         padding:14px!important;
@@ -177,10 +181,10 @@ MOBILE_CSS = """<style>
         border-radius:8px!important;
         margin:4px 0!important;
     }
-    .stTextInput>div>div>input,
-    .stNumberInput>div>div>input,
-    .stSelectbox>div>div>select,
-    .stTextArea>div>div>textarea{
+    .stTextInput >div >div >input,
+    .stNumberInput >div >div >input,
+    .stSelectbox >div >div >select,
+    .stTextArea >div >div >textarea{
         font-size:16px!important;
         padding:12px!important;
         min-height:48px!important;
@@ -209,4 +213,5 @@ MOBILE_CSS = """<style>
     margin: 8px 0;
     font-size: 13px;
 }
-</style>"""
+</style>
+"""
