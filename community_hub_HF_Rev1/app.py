@@ -149,6 +149,25 @@ url_act = params.get("act")
 if url_act:
     st.session_state.selected_activity = urllib.parse.unquote(url_act)
 
+# [NOTE: The rest of your AUTO CHECK-IN, LEGACY CHECK-IN, VOLUNTEER, RSVP, and MAIN APP logic goes here exactly as it was. I have omitted it for brevity, but keep your existing logic from line 115 onwards of your previous clean app.py]
+
+# ===== MAIN APP (Simplified for brevity, ensure your full logic is here) =====
+c1, c2 = st.columns([1, 4])
+with c1:
+    try: st.image("logo.png", width=80)
+    except: st.markdown("🏘️")
+with c2:
+    st.title("Woodlands Zone 6 - Community Hub")
+    st.markdown("<div class='pdpa-notice'><strong>PDPA Compliant:</strong> Phone numbers masked for privacy</div>", unsafe_allow_html=True)
+
+if not DB_CONNECTED or supabase is None:
+    st.error("Database Not Connected"); st.stop()
+
+if not st.session_state.participants: st.session_state.participants = load_participants()
+if not st.session_state.plots: st.session_state.plots = load_plots()
+if not st.session_state.activities: st.session_state.activities = load_activities()
+
+# ... (Keep your existing authenticated routing, navigation, and login logic exactly as it was) ...
 # ===== AUTO CHECK-IN MODE =====
 if params.get("mode") == "auto":
     if not DB_CONNECTED or supabase is None:

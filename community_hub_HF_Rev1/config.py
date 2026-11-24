@@ -1,33 +1,24 @@
-"""
-config.py — UPDATED with try_reconnect() for Render cold-start handling
-"""
 import os
 import streamlit as st
 import logging
 from supabase import create_client
 from datetime import timezone, timedelta, datetime
 
-# ========== LOGGING ==========
 logger = logging.getLogger("community_hub.config")
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-# ========== READ SECRETS FROM MULTIPLE SOURCES ==========
 def get_secret(key, default=None):
-    """Get secret from st.secrets (Streamlit Cloud) or env vars (Render / local)."""
-    # FIRST: st.secrets (Streamlit Cloud / HF Spaces)
     try:
         if hasattr(st, "secrets") and key in st.secrets:
             return st.secrets[key]
     except Exception:
         pass
-    # SECOND: env vars (Render / local)
     env_value = os.environ.get(key)
     if env_value is not None:
         return env_value
     return default
 
-# ========== LOAD ALL SECRETS ==========
 SUPABASE_URL = get_secret("SUPABASE_URL")
 SUPABASE_KEY = get_secret("SUPABASE_KEY")
 ADMIN_PASSWORD = get_secret("ADMIN_PASSWORD")
@@ -35,9 +26,6 @@ CHECKER_PASSWORD = get_secret("CHECKER_PASSWORD")
 CHAIRMAN_PASSWORD = get_secret("CHAIRMAN_PASSWORD")
 APP_URL = get_secret("APP_URL", "https://woodlands-community-hub.onrender.com")
 
-logger.info(f"Supabase config: URL={'present' if SUPABASE_URL else 'MISSING'} KEY={'present' if SUPABASE_KEY else 'MISSING'}")
-
-# ========== SUPABASE CLIENT ==========
 supabase = None
 DB_CONNECTED = False
 DB_ERROR_MSG = None
@@ -45,7 +33,6 @@ DB_ERROR_MSG = None
 if SUPABASE_URL and SUPABASE_KEY:
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        # Optimistic connection: The first real query will surface any connection error
         DB_CONNECTED = True
         logger.info("Supabase client created (connection will be verified on first query).")
     except Exception as e:
@@ -55,28 +42,17 @@ else:
     DB_ERROR_MSG = "Missing SUPABASE_URL or SUPABASE_KEY"
     logger.error(DB_ERROR_MSG)
 
-# ========== NEW: RECONNECTION HELPER FOR COLD STARTS ==========
 def try_reconnect():
-    """
-    Re-attempt the Supabase connection with a lightweight ping.
-    Call this from app.py before importing pages/services if DB_CONNECTED is False.
-    """
     global supabase, DB_CONNECTED, DB_ERROR_MSG
-    
-    # If already connected, just return True
     if DB_CONNECTED and supabase is not None:
         return True
-        
     if not SUPABASE_URL or not SUPABASE_KEY:
         DB_ERROR_MSG = "Missing SUPABASE_URL or SUPABASE_KEY"
         DB_CONNECTED = False
         return False
-        
     try:
-        # Recreate client and test with a lightweight query
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
         supabase.table("participants").select("id").limit(1).execute()
-        
         DB_CONNECTED = True
         DB_ERROR_MSG = None
         logger.info("✅ Supabase (re)connected successfully!")
@@ -86,6 +62,8 @@ def try_reconnect():
         DB_ERROR_MSG = str(e)
         logger.error(f"❌ Supabase reconnect failed: {e}")
         return False
+
+# ... (Keep your existing MOBILE_CSS, PLOT_TYPES, load_activities, etc. here) ...
 
 # ========== ENVIRONMENT HELPERS ==========
 def is_production():
