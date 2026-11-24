@@ -642,22 +642,6 @@ if params.get("mode") == "rsvp":
     st.caption("Woodlands Zone 6 Community Hub | RSVP System")
     st.stop()
 
-# ===== MAIN APP =====
-c1, c2 = st.columns([1, 4])
-with c1:
-    try: st.image("logo.png", width=80)
-    except: st.markdown("🏘️")
-with c2:
-    st.title("Woodlands Zone 6 - Community Hub")
-    st.markdown("<div class='pdpa-notice'><strong>PDPA Compliant:</strong> Phone numbers masked for privacy</div>", unsafe_allow_html=True)
-
-if not DB_CONNECTED or supabase is None:
-    st.error("Database Not Connected"); st.stop()
-
-if not st.session_state.participants: st.session_state.participants = load_participants()
-if not st.session_state.plots: st.session_state.plots = load_plots()
-if not st.session_state.activities: st.session_state.activities = load_activities()
-
 # ── PERSISTENT LOGIN ACROSS BROWSER REFRESH ──────────────
 _st_token = params.get("st")
 if _st_token:

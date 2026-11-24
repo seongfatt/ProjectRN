@@ -13,17 +13,17 @@ if not logger.handlers:
 
 # ========== READ SECRETS FROM MULTIPLE SOURCES ==========
 def get_secret(key, default=None):
-    """Get secret from st.secrets (Streamlit Cloud) or env vars (Render / local)."""
-    # FIRST: st.secrets (Streamlit Cloud / HF Spaces)
-    try:
-        if hasattr(st, "secrets") and key in st.secrets:
-            return st.secrets[key]
-    except Exception:
-        pass
-    # SECOND: env vars (Render / local)
+    # 1) Environment variables first (Render / local) — no st.secrets access at all
     env_value = os.environ.get(key)
     if env_value is not None:
         return env_value
+    # 2) Only then try st.secrets (Streamlit Cloud / HF Spaces), guarded so a
+    #    missing secrets.toml can NEVER surface as a red error box.
+    try:
+        if key in st.secrets:
+            return st.secrets[key]
+    except Exception:
+        pass
     return default
 
 # ========== LOAD ALL SECRETS ==========
