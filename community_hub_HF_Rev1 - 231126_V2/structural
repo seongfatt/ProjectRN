@@ -1,0 +1,52 @@
+community_hub_HF_Rev1/
+│
+├── .streamlit/
+│   └── secrets.toml                # Streamlit secrets (Supabase URL/Key, Passwords, APP_URL)
+│
+├── pages/                          # Streamlit multi-page app modules
+│   ├── __init__.py
+│   ├── chairman.py
+│   ├── checkin.py
+│   ├── dashboard.py
+│   ├── face_checkin.py
+│   ├── face_enrollment.py
+│   ├── floorplan_designer.py
+│   ├── floorplan_view.py
+│   ├── garden.py                   # Active garden management module
+│   ├── garden_origin.py            # Legacy/backup file (can be safely deleted if garden.py is final)
+│   ├── manage.py
+│   ├── meeting.py
+│   ├── reports.py
+│   ├── resident_qr.py
+│   ├── residents.py                # ✅ Moved from root to pages/ where it belongs
+│   ├── sessions.py
+│   ├── settings.py
+│   ├── volunteer.py
+│   ├── volunteer_access.py
+│   └── volunteer_portal.py
+│
+├── services/                       # Business logic layer (isolated from UI)
+│   ├── __init__.py
+│   ├── analytics_service.py
+│   ├── attendance_service.py
+│   ├── face_service.py
+│   └── registration_service.py
+│
+├── utils/                          # Helper functions and utilities
+│   ├── qr_scanner_auto_ui/
+│   │   └── index.html              # HTML/JS for the auto-firing QR scanner component
+│   ├── __init__.py
+│   ├── helpers.py
+│   ├── qr_scanner.py
+│   ├── qr_scanner_auto.py
+│   └── utils.py
+│
+├── .env                            # Local environment variables (must be in .gitignore)
+├── .gitignore                      # Git ignore rules (ensure .env and __pycache__ are here)
+├── .python-version                 # Python version pinning (e.g., "3.10.12" for Render/HF)
+├── app.py                          # Main entry point (Will contain the Render warmup/loading logic)
+├── config.py                       # Database connection, caching, constants, and mobile CSS
+├── keep_alive.py                   # ✅ NEW: Script to ping your Render URL every 10 mins to prevent cold starts
+├── logo.png                        # App logo
+├── packages.txt                    # System-level dependencies for Render/Hugging Face (e.g., cmake, libgl1)
+└── requirements.txt                # Python dependencies (streamlit, supabase, face-recognition, etc.)

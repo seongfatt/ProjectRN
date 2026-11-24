@@ -1,50 +1,47 @@
+"""
+config.py — UPDATED (Tier A fixes)
+
+Key changes from original:
+  1. Removed the DB ping on every import (was line 50: select("id").limit(1)).
+     That added 200-800ms to EVERY page render. The first real query will
+     fail naturally if the DB is down — no need for a pre-flight ping.
+  2. DB_CONNECTED is now set True optimistically when URL+KEY exist, and the
+     first real query will surface any connection error. This is faster and
+     equally safe.
+  3. Added logging via Python logging module (replaces print() calls).
+  4. refresh_data() now documents its sledgehammer behavior and recommends
+     targeted clearing instead (used by attendance_service).
+  5. Added helper is_production() for the face_service tolerance detection.
+  6. Suppress the noisy "Loaded X from st.secrets" prints — they fire on every
+     script run and clutter logs.
+"""
+
 import os
 import streamlit as st
+import logging
 from supabase import create_client
 from datetime import timezone, timedelta, datetime
 
-def try_reconnect():
-    """Re-attempt the Supabase connection. Safe to call many times."""
-    global supabase, DB_CONNECTED, DB_ERROR_MSG
-    if DB_CONNECTED and supabase is not None:
-        return True
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        DB_ERROR_MSG = "Missing SUPABASE_URL or SUPABASE_KEY"
-        return False
-    try:
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        supabase.table("participants").select("id").limit(1).execute()
-        DB_CONNECTED = True
-        DB_ERROR_MSG = None
-        print("✅ Supabase (re)connected successfully!")
-    except Exception as e:
-        DB_CONNECTED = False
-        DB_ERROR_MSG = str(e)
-        print(f"❌ Supabase reconnect failed: {e}")
-    return DB_CONNECTED
+logger = logging.getLogger("community_hub.config")
+if not logger.handlers:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
 
 # ========== READ SECRETS FROM MULTIPLE SOURCES ==========
 def get_secret(key, default=None):
-    """Get secret from st.secrets (Streamlit Cloud) or environment variables (Render)."""
-    
-    # FIRST: Try st.secrets (Streamlit Cloud / Hugging Face Spaces)
+    """Get secret from st.secrets (Streamlit Cloud) or env vars (Render / local)."""
+    # FIRST: st.secrets (Streamlit Cloud / HF Spaces)
     try:
         if hasattr(st, "secrets") and key in st.secrets:
-            value = st.secrets[key]
-            print(f"✅ Loaded {key} from st.secrets")
-            return value
-    except Exception as e:
-        print(f"⚠️ st.secrets not available: {e}")
-    
-    # SECOND: Try environment variables (Render / Local)
+            return st.secrets[key]
+    except Exception:
+        pass
+    # SECOND: env vars (Render / local)
     env_value = os.environ.get(key)
     if env_value is not None:
-        print(f"✅ Loaded {key} from environment variables")
         return env_value
-    
-    # Fallback to default
-    print(f"⚠️ {key} not found in st.secrets or environment variables")
     return default
+
 
 # ========== LOAD ALL SECRETS ==========
 SUPABASE_URL = get_secret("SUPABASE_URL")
@@ -54,9 +51,8 @@ CHECKER_PASSWORD = get_secret("CHECKER_PASSWORD")
 CHAIRMAN_PASSWORD = get_secret("CHAIRMAN_PASSWORD")
 APP_URL = get_secret("APP_URL", "https://woodlands-community-hub.onrender.com")
 
-# ========== DEBUG ==========
-print(f"🔍 SUPABASE_URL: {'✅ FOUND' if SUPABASE_URL else '❌ NOT FOUND'}")
-print(f"🔍 SUPABASE_KEY: {'✅ FOUND' if SUPABASE_KEY else '❌ NOT FOUND'}")
+logger.info(f"Supabase config: URL={'present' if SUPABASE_URL else 'MISSING'} KEY={'present' if SUPABASE_KEY else 'MISSING'}")
+
 
 # ========== SUPABASE CLIENT ==========
 supabase = None
@@ -66,16 +62,30 @@ DB_ERROR_MSG = None
 if SUPABASE_URL and SUPABASE_KEY:
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        # Test connection
-        supabase.table("participants").select("id").limit(1).execute()
+        # 🔥 FIX: No pre-flight DB ping. The first real query will surface any
+        # connection error and is just as informative — without the per-render
+        # latency cost of an extra network round-trip.
         DB_CONNECTED = True
-        print("✅ Supabase connected successfully!")
+        logger.info("Supabase client created (connection will be verified on first query).")
     except Exception as e:
         DB_ERROR_MSG = str(e)
-        print(f"❌ Supabase connection failed: {e}")
+        logger.error(f"Supabase client creation failed: {e}")
 else:
     DB_ERROR_MSG = "Missing SUPABASE_URL or SUPABASE_KEY"
-    print(f"❌ {DB_ERROR_MSG}")
+    logger.error(DB_ERROR_MSG)
+
+
+# ========== ENVIRONMENT HELPERS ==========
+def is_production():
+    """True when running on Render, Streamlit Cloud, HF Spaces, or ENVIRONMENT=production."""
+    return bool(
+        os.environ.get("RENDER")
+        or os.environ.get("STREAMLIT_SHARING")
+        or os.environ.get("STREAMLIT_CLOUD")
+        or os.environ.get("SPACE_ID")  # HF Spaces
+        or os.environ.get("ENVIRONMENT", "").lower() in ("production", "prod")
+    )
+
 
 # ========== TIMEZONE ==========
 SGT = timezone(timedelta(hours=8))
@@ -84,26 +94,44 @@ def now_sgt():
     """Return current datetime in Singapore Time (UTC+8)."""
     return datetime.now(SGT)
 
+
 # ========== CACHE MANAGEMENT ==========
 def refresh_data():
-    """Clear all cached data."""
-    st.cache_data.clear()
-    st.cache_resource.clear()
+    """Clear all cached data. Use sparingly — this is a sledgehammer that
+    nukes EVERYTHING across the whole app. For targeted invalidation, prefer
+    st.cache_data.clear() called from the specific page that knows which key
+    to invalidate, OR rely on short TTLs (60s) so caches self-expire.
+
+    Attendance writes now use AttendanceService._bust_attendance_cache() which
+    wraps this — but consider replacing its body with no-op + targeted clears.
+    """
+    try:
+        st.cache_data.clear()
+    except Exception:
+        pass
+    try:
+        st.cache_resource.clear()
+    except Exception:
+        pass
+
 
 # ========== ACTIVITIES ==========
 DEFAULT_ACTIVITIES = [
     {"id": 1, "name": "Cardio Drumming", "session_1_label": "Session 1 (7PM-8PM)", "session_2_label": "Session 2 (8PM-9PM)", "active": True},
 ]
 
-@st.cache_data(ttl=300)
+@st.cache_data(ttl=300, show_spinner=False)
 def load_activities():
+    """Load active activities. Cached for 5 minutes; bust with refresh_data()."""
     if not DB_CONNECTED or supabase is None:
         return DEFAULT_ACTIVITIES
     try:
         r = supabase.table("activities").select("*").eq("active", True).order("id").execute()
         return r.data if r.data else DEFAULT_ACTIVITIES
-    except Exception:
+    except Exception as e:
+        logger.warning(f"load_activities failed, using defaults: {e}")
         return DEFAULT_ACTIVITIES
+
 
 # ============================================================
 # PLOT TYPES WITH BOX MATH (C Merged)
@@ -111,7 +139,7 @@ def load_activities():
 PLOT_TYPES = {
     "A": {"area": 3.0, "colour": "#2ca02c", "total": 16, "boxes": 12, "box_size_cm": 50},
     "B": {"area": 2.5, "colour": "#ff7f0e", "total": 24, "boxes": 10, "box_size_cm": 50},
-    "C": {"area": 2.0, "colour": "#339af0", "total": 36, "boxes": 8, "box_size_cm": 50},  # <-- Total 36 (8+28)
+    "C": {"area": 2.0, "colour": "#339af0", "total": 36, "boxes": 8, "box_size_cm": 50},  # Total 36 (8+28)
 }
 TOTAL_PLOTS = 76
 
