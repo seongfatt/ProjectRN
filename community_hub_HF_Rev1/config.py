@@ -1,56 +1,33 @@
+"""
+config.py — FINAL CORRECTED VERSION
+"""
 import os
 import streamlit as st
 import logging
 from supabase import create_client
 from datetime import timezone, timedelta, datetime
-import time
-import hmac
-import hashlib
-import base64
 
-# Add SESSION_SECRET to Render env vars AND .streamlit/secrets.toml
-# (the fallback keeps it working out-of-the-box, but set a real one in prod)
-SESSION_SECRET = get_secret("SESSION_SECRET", "woodlands-hub-dev-secret-change-me")
-
-def make_session_token(role: str, ttl_hours: int = 12) -> str:
-    """Create a signed, expiring login token for the URL."""
-    payload = f"{role}|{int(time.time()) + ttl_hours * 3600}"
-    sig = hmac.new(SESSION_SECRET.encode(), payload.encode(),
-                   hashlib.sha256).hexdigest()[:32]
-    return base64.urlsafe_b64encode(f"{payload}|{sig}".encode()).decode()
-
-def read_session_token(token: str):
-    """Return the role if the token is valid & unexpired, else None."""
-    if not token:
-        return None
-    try:
-        raw = base64.urlsafe_b64decode(token.encode()).decode()
-        role, exp, sig = raw.split("|")
-        expected = hmac.new(SESSION_SECRET.encode(), f"{role}|{exp}".encode(),
-                            hashlib.sha256).hexdigest()[:32]
-        if not hmac.compare_digest(sig, expected):
-            return None
-        if int(exp) < int(time.time()):
-            return None
-        return role
-    except Exception:
-        return None
-    
 logger = logging.getLogger("community_hub.config")
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
+# ========== READ SECRETS FROM MULTIPLE SOURCES ==========
 def get_secret(key, default=None):
+    """Get secret from st.secrets (Streamlit Cloud) or env vars (Render / local)."""
+    # FIRST: st.secrets (Streamlit Cloud / HF Spaces)
     try:
         if hasattr(st, "secrets") and key in st.secrets:
             return st.secrets[key]
     except Exception:
         pass
+    # SECOND: env vars (Render / local)
     env_value = os.environ.get(key)
     if env_value is not None:
         return env_value
     return default
 
+# ========== LOAD ALL SECRETS ==========
+# (Now get_secret is defined, so these calls will work perfectly)
 SUPABASE_URL = get_secret("SUPABASE_URL")
 SUPABASE_KEY = get_secret("SUPABASE_KEY")
 ADMIN_PASSWORD = get_secret("ADMIN_PASSWORD")
@@ -58,6 +35,12 @@ CHECKER_PASSWORD = get_secret("CHECKER_PASSWORD")
 CHAIRMAN_PASSWORD = get_secret("CHAIRMAN_PASSWORD")
 APP_URL = get_secret("APP_URL", "https://woodlands-community-hub.onrender.com")
 
+# 🔥 NEW: Session secret for persistent login across refreshes
+SESSION_SECRET = get_secret("SESSION_SECRET", "woodlands-hub-dev-secret-change-me")
+
+logger.info(f"Supabase config: URL={'present' if SUPABASE_URL else 'MISSING'} KEY={'present' if SUPABASE_KEY else 'MISSING'}")
+
+# ========== SUPABASE CLIENT ==========
 supabase = None
 DB_CONNECTED = False
 DB_ERROR_MSG = None
@@ -74,28 +57,33 @@ else:
     DB_ERROR_MSG = "Missing SUPABASE_URL or SUPABASE_KEY"
     logger.error(DB_ERROR_MSG)
 
-def try_reconnect():
-    global supabase, DB_CONNECTED, DB_ERROR_MSG
-    if DB_CONNECTED and supabase is not None:
-        return True
-    if not SUPABASE_URL or not SUPABASE_KEY:
-        DB_ERROR_MSG = "Missing SUPABASE_URL or SUPABASE_KEY"
-        DB_CONNECTED = False
-        return False
-    try:
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        supabase.table("participants").select("id").limit(1).execute()
-        DB_CONNECTED = True
-        DB_ERROR_MSG = None
-        logger.info("✅ Supabase (re)connected successfully!")
-        return True
-    except Exception as e:
-        DB_CONNECTED = False
-        DB_ERROR_MSG = str(e)
-        logger.error(f"❌ Supabase reconnect failed: {e}")
-        return False
+# ========== PERSISTENT LOGIN HELPERS ==========
+import time
+import hmac
+import hashlib
+import base64
 
-# ... (Keep your existing MOBILE_CSS, PLOT_TYPES, load_activities, etc. here) ...
+def make_session_token(role: str, ttl_hours: int = 12) -> str:
+    """Create a signed, expiring login token for the URL."""
+    payload = f"{role}|{int(time.time()) + ttl_hours * 3600}"
+    sig = hmac.new(SESSION_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:32]
+    return base64.urlsafe_b64encode(f"{payload}|{sig}".encode()).decode()
+
+def read_session_token(token: str):
+    """Return the role if the token is valid & unexpired, else None."""
+    if not token:
+        return None
+    try:
+        raw = base64.urlsafe_b64decode(token.encode()).decode()
+        role, exp, sig = raw.split("|")
+        expected = hmac.new(SESSION_SECRET.encode(), f"{role}|{exp}".encode(), hashlib.sha256).hexdigest()[:32]
+        if not hmac.compare_digest(sig, expected):
+            return None
+        if int(exp) < int(time.time()):
+            return None
+        return role
+    except Exception:
+        return None
 
 # ========== ENVIRONMENT HELPERS ==========
 def is_production():
@@ -104,7 +92,7 @@ def is_production():
         os.environ.get("RENDER")
         or os.environ.get("STREAMLIT_SHARING")
         or os.environ.get("STREAMLIT_CLOUD")
-        or os.environ.get("SPACE_ID")  # HF Spaces
+        or os.environ.get("SPACE_ID")
         or os.environ.get("ENVIRONMENT", "").lower() in ("production", "prod")
     )
 
@@ -117,7 +105,7 @@ def now_sgt():
 
 # ========== CACHE MANAGEMENT ==========
 def refresh_data():
-    """Clear all cached data. Use sparingly — this is a sledgehammer."""
+    """Clear all cached data."""
     try:
         st.cache_data.clear()
     except Exception:
@@ -145,9 +133,8 @@ def load_activities():
         return DEFAULT_ACTIVITIES
 
 # ============================================================
-# PLOT TYPES WITH BOX MATH (C Merged)
+# PLOT TYPES WITH BOX MATH
 # ============================================================
-# Note: Keeping dictionary keys exactly as provided to avoid breaking garden.py/meeting.py
 PLOT_TYPES = {
     "A ": {"area": 3.0, "colour": "#2ca02c", "total": 16, "boxes": 12, "box_size_cm": 50},
     "B ": {"area": 2.5, "colour": "#ff7f0e", "total": 24, "boxes": 10, "box_size_cm": 50},
@@ -170,7 +157,6 @@ TYPE_MAP = {
 # ========== MOBILE CSS ==========
 MOBILE_CSS = """
 <style>
-/* Force viewport on mobile */
 @media(max-width:768px){
     body{min-width:100vw!important; max-width:100vw!important; overflow-x:hidden!important;}
     .main .block-container{padding:0.3rem!important; max-width:100vw!important; width:100vw!important;}
@@ -183,22 +169,8 @@ MOBILE_CSS = """
     h2{font-size:15px!important; margin:3px 0!important;}
     h3{font-size:13px!important;}
     p, li{font-size:13px!important; line-height:1.4!important;}
-    .stButton >button{
-        width:100%!important;
-        font-size:15px!important;
-        padding:14px!important;
-        min-height:48px!important;
-        border-radius:8px!important;
-        margin:4px 0!important;
-    }
-    .stTextInput >div >div >input,
-    .stNumberInput >div >div >input,
-    .stSelectbox >div >div >select,
-    .stTextArea >div >div >textarea{
-        font-size:16px!important;
-        padding:12px!important;
-        min-height:48px!important;
-    }
+    .stButton >button{width:100%!important; font-size:15px!important; padding:14px!important; min-height:48px!important; border-radius:8px!important; margin:4px 0!important;}
+    .stTextInput >div >div >input, .stNumberInput >div >div >input, .stSelectbox >div >div >select, .stTextArea >div >div >textarea{font-size:16px!important; padding:12px!important; min-height:48px!important;}
     .stRadio [role="radiogroup"]{flex-direction:column!important;}
     .stRadio [role="radiogroup"] label{margin:3px 0!important; padding:6px!important;}
     .stTabs [data-baseweb="tab-list"]{overflow-x:auto!important; flex-wrap:nowrap!important;}
@@ -214,14 +186,6 @@ MOBILE_CSS = """
     .streamlit-expanderHeader{font-size:13px!important; padding:10px!important;}
     .main > div{padding-left:0!important; padding-right:0!important;}
 }
-.pdpa-notice{
-    background: #1a1a2e;
-    border-left: 4px solid #ffc107;
-    color: #ffffff;
-    padding: 10px;
-    border-radius: 4px;
-    margin: 8px 0;
-    font-size: 13px;
-}
+.pdpa-notice{background: #1a1a2e; border-left: 4px solid #ffc107; color: #ffffff; padding: 10px; border-radius: 4px; margin: 8px 0; font-size: 13px;}
 </style>
 """
