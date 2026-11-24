@@ -3,7 +3,39 @@ import streamlit as st
 import logging
 from supabase import create_client
 from datetime import timezone, timedelta, datetime
+import time
+import hmac
+import hashlib
+import base64
 
+# Add SESSION_SECRET to Render env vars AND .streamlit/secrets.toml
+# (the fallback keeps it working out-of-the-box, but set a real one in prod)
+SESSION_SECRET = get_secret("SESSION_SECRET", "woodlands-hub-dev-secret-change-me")
+
+def make_session_token(role: str, ttl_hours: int = 12) -> str:
+    """Create a signed, expiring login token for the URL."""
+    payload = f"{role}|{int(time.time()) + ttl_hours * 3600}"
+    sig = hmac.new(SESSION_SECRET.encode(), payload.encode(),
+                   hashlib.sha256).hexdigest()[:32]
+    return base64.urlsafe_b64encode(f"{payload}|{sig}".encode()).decode()
+
+def read_session_token(token: str):
+    """Return the role if the token is valid & unexpired, else None."""
+    if not token:
+        return None
+    try:
+        raw = base64.urlsafe_b64decode(token.encode()).decode()
+        role, exp, sig = raw.split("|")
+        expected = hmac.new(SESSION_SECRET.encode(), f"{role}|{exp}".encode(),
+                            hashlib.sha256).hexdigest()[:32]
+        if not hmac.compare_digest(sig, expected):
+            return None
+        if int(exp) < int(time.time()):
+            return None
+        return role
+    except Exception:
+        return None
+    
 logger = logging.getLogger("community_hub.config")
 if not logger.handlers:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")

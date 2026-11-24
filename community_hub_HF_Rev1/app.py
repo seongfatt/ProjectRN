@@ -60,6 +60,7 @@ from config import (
     CHAIRMAN_PASSWORD, supabase, DB_CONNECTED, MOBILE_CSS,
     ADMIN_PASSWORD, CHECKER_PASSWORD, APP_URL, load_activities,
     PLOT_TYPES, TOTAL_PLOTS, TYPE_MAP, refresh_data,
+    make_session_token, read_session_token,   # ← ADD THESE TWO
 )
 
 # 6. Face availability check
@@ -657,6 +658,16 @@ if not st.session_state.participants: st.session_state.participants = load_parti
 if not st.session_state.plots: st.session_state.plots = load_plots()
 if not st.session_state.activities: st.session_state.activities = load_activities()
 
+# ── PERSISTENT LOGIN ACROSS BROWSER REFRESH ──────────────
+_st_token = params.get("st")
+if _st_token:
+    _restored = read_session_token(_st_token)
+    if _restored and not st.session_state.get("is_authenticated"):
+        st.session_state.is_authenticated = True
+        st.session_state.user_role = _restored
+        st.session_state.show_login = False
+# ──────────────────────────────────────────────────────────
+
 if st.session_state.is_authenticated:
     col1, col2 = st.columns([3, 1])
     with col1: st.subheader("Admin Dashboard")
@@ -669,7 +680,7 @@ if st.session_state.is_authenticated:
             st.session_state.show_login = False
             st.session_state.active_page = None
             st.session_state.selected_activity = None
-            st.query_params.clear()
+            st.query_params.clear()          # ← this wipes ?st=... too
             st.rerun()
 
     if st.session_state.user_role == "chairman" and not st.session_state.get("chairman_tc_accepted"):
@@ -769,12 +780,22 @@ else:
         with c2:
             st.write(" "); st.write(" ")
             if st.button("Login", type="primary", use_container_width=True):
-                if verify_password(pwd, "admin"): st.session_state.is_authenticated = True; st.session_state.user_role = "admin"
-                elif verify_password(pwd, "chairman"): st.session_state.is_authenticated = True; st.session_state.user_role = "chairman"
-                elif verify_password(pwd, "checker"): st.session_state.is_authenticated = True; st.session_state.user_role = "checker"
-                else: st.error("Invalid password")
-                if st.session_state.is_authenticated: st.session_state.show_login = False; st.rerun()
-            if st.button("Cancel", use_container_width=True): st.session_state.show_login = False; st.rerun()
+                if verify_password(pwd, "admin"):
+                    st.session_state.is_authenticated = True
+                    st.session_state.user_role = "admin"
+                elif verify_password(pwd, "chairman"):
+                    st.session_state.is_authenticated = True
+                    st.session_state.user_role = "chairman"
+                elif verify_password(pwd, "checker"):
+                    st.session_state.is_authenticated = True
+                    st.session_state.user_role = "checker"
+                else:
+                    st.error("Invalid password")
+
+                if st.session_state.is_authenticated:
+                    st.session_state.show_login = False
+                    st.query_params["st"] = make_session_token(st.session_state.user_role)  # ← ADD
+                    st.rerun()
     else:
         st.info("Please login to access admin features")
         if st.button("Login", type="primary", use_container_width=True): st.session_state.show_login = True; st.rerun()
