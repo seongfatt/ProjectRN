@@ -4,6 +4,30 @@ from datetime import datetime, timedelta, timezone
 import urllib.parse
 import time
 
+# Add error handling for cold starts
+try:
+    # Try to connect to database
+    if not DB_CONNECTED:
+        raise Exception("Database not connected - server warming up")
+except Exception as e:
+    st.markdown("""
+    <div style="background: #fff3cd; border-left: 5px solid #ffc107; 
+                padding: 30px; margin: 50px auto; max-width: 600px; 
+                border-radius: 10px; text-align: center;">
+        <h2 style="color: #856404; margin-top: 0;">⏳ System is Starting</h2>
+        <p style="color: #856404; font-size: 16px; margin: 20px 0;">
+            <strong>Please wait 30-60 seconds and refresh the page.</strong><br><br>
+            This is normal - our server wakes up after periods of inactivity.<br>
+            The system works perfectly once loaded!
+        </p>
+        <div style="font-size: 48px; margin: 20px 0;">🌱</div>
+        <p style="color: #666; font-size: 14px;">
+            If this message persists, please contact the administrator.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()  # Stop execution
+    
 # ===== CHECK IF FACE RECOGNITION IS AVAILABLE =====
 FACE_AVAILABLE = False
 try:

@@ -1,0 +1,54 @@
+community_hub_HF_Rev1/
+│
+├── .streamlit/
+│   └── secrets.toml
+│
+├── pages/
+│   ├── __init__.py
+│   ├── chairman.py
+│   ├── checkin.py
+│   ├── dashboard.py
+│   ├── face_checkin.py
+│   ├── face_enrollment.py
+│   ├── floorplan_designer.py
+│   ├── floorplan_view.py
+│   ├── garden_origin.py
+│   ├── garden.py
+│   ├── manage.py
+│   ├── meeting.py
+│   ├── reports.py
+│   ├── resident_qr.py
+│   ├── residents.py
+│   ├── sessions.py
+│   ├── settings.py
+│   ├── volunteer_access.py
+│   ├── volunteer_portal.py
+│   └── volunteer.py
+│
+├── services/
+│   ├── __init__.py
+│   ├── analytics_service.py
+│   ├── attendance_service.py
+│   ├── face_service.py
+│   └── registration_service.py
+│
+├── utils/
+│   ├── qr_scanner_auto_ui/
+│   │   └── index.html
+│   ├── __init__.py
+│   ├── helpers.py
+│   ├── qr_scanner_auto.py
+│   ├── qr_scanner.py
+│   └── utils.py
+│
+├── .env
+├── .gitignore
+├── .python-version
+├── app.py
+├── config.py
+├── logo.png
+├── packages.txt
+├── PC_requirements.txt
+├── requirements.txt
+├── residents.py
+└── secrets.toml
